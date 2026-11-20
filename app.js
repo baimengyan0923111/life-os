@@ -161,6 +161,7 @@
       seeded: false,
       current: 'overview',
       settings: { name: '' },
+      lines: {},
       life8: LIFE8.map(function (d) {
         return { id: d.id, name: d.name, icon: d.icon, color: d.color, score: 0, note: '' };
       }),
@@ -184,6 +185,7 @@
     var base = initialState();
     s.v = 1;
     s.settings = s.settings || { name: '' };
+    s.lines = (s.lines && typeof s.lines === 'object' && !Array.isArray(s.lines)) ? s.lines : {};
     if (typeof s.current !== 'string') s.current = 'overview';
     if (!Array.isArray(s.life8) || s.life8.length !== 8) {
       s.life8 = base.life8.map(function (d) {
@@ -287,6 +289,66 @@
   }
 
   /* ---------------------------------------------------------
+     首页：今日一句话
+     --------------------------------------------------------- */
+  var MOODS = ['平静', '专注', '不错', '有点累', '紧绷'];
+
+  function todayLineBlock() {
+    var key = today();
+    state.lines = state.lines || {};
+    var rec = state.lines[key] || (state.lines[key] = { text: '', mood: '' });
+    var now = new Date();
+
+    var sec = document.createElement('section');
+    sec.className = 'today-line reveal';
+    sec.innerHTML =
+      '<div class="ol-top">' +
+      '<span class="ol-badge">今日一句话</span>' +
+      '<span class="ol-date">' + cnDate(now) + ' · 周' + WEEK[now.getDay()] + '</span>' +
+      '<span class="ol-state">点击句子即可改写 · 自动保存</span>' +
+      '</div>' +
+      '<div class="ol-quote" contenteditable="true" role="textbox" spellcheck="false" data-ph="今天，用一句话给自己定个调…">' +
+      '</div>' +
+      '<div class="ol-mood"><span class="ol-mood-label">心情</span>' +
+      MOODS.map(function (x) {
+        return '<button class="mood-chip' + (rec.mood === x ? ' active' : '') + '" type="button" data-mood="' + x + '">' + x + '</button>';
+      }).join('') +
+      '</div>';
+
+    var quote = $('.ol-quote', sec);
+    quote.textContent = rec.text || '';
+
+    var commit = function () {
+      rec.text = (quote.innerText || '').replace(/\u00a0/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+      state.lines[key] = rec;
+      save();
+      var st = $('.ol-state', sec);
+      if (st) st.textContent = '已保存 · ' + cnShort(now);
+    };
+    var commitLazy = debounce(commit, 500);
+    quote.addEventListener('input', function () {
+      var st = $('.ol-state', sec);
+      if (st) st.textContent = '保存中…';
+      commitLazy();
+    });
+    quote.addEventListener('blur', commit);
+    quote.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); quote.blur(); }
+    });
+
+    $$('[data-mood]', sec).forEach(function (b) {
+      b.addEventListener('click', function () {
+        rec.mood = rec.mood === b.dataset.mood ? '' : b.dataset.mood;
+        state.lines[key] = rec;
+        save();
+        $$('[data-mood]', sec).forEach(function (x) { x.classList.toggle('active', x.dataset.mood === rec.mood); });
+      });
+    });
+
+    return sec;
+  }
+
+  /* ---------------------------------------------------------
      渲染：页面骨架
      --------------------------------------------------------- */
   function renderPage() {
@@ -294,6 +356,8 @@
     var canvas = $('#canvas');
     $('#page-title').textContent = page.name;
     canvas.innerHTML = '';
+
+    if (page.builtin === 'overview') canvas.appendChild(todayLineBlock());
 
     // Hero
     var intro = pageIntro(page);
@@ -313,7 +377,8 @@
     // 模块区
     var head = document.createElement('div');
     head.className = 'section-head reveal';
-    head.innerHTML = '<h2>模块画布</h2><p>' + page.modules.length + ' 个模块 · 拖拽右侧手柄可排序</p>';
+    head.innerHTML = '<div><h2>模块画布</h2><p>' + page.modules.length + ' 个模块 · 拖拽右侧手柄可排序</p></div>' +
+      '<button class="solid-btn head-add" type="button" data-act="add">＋ 添加模块</button>';
     canvas.appendChild(head);
 
     var grid = document.createElement('div');
@@ -554,6 +619,7 @@
       '<span class="card-type">' + (TYPE_NAME[m.type] || '') + '</span>' +
       '<span class="card-tools">' +
       '<button class="drag-handle" type="button" title="拖拽排序" aria-label="拖拽排序">' + icon('grip') + '</button>' +
+      '<button class="card-del" type="button" title="删除模块" aria-label="删除模块">' + icon('trash') + '</button>' +
       '<button class="card-menu-btn" type="button" aria-label="模块菜单">' + icon('more') + '</button>' +
       '</span>' +
       '</div>' +
@@ -567,6 +633,11 @@
     $('.card-menu-btn', el).addEventListener('click', function (e) {
       e.stopPropagation();
       openCardMenu(el, m);
+    });
+
+    $('.card-del', el).addEventListener('click', function (e) {
+      e.stopPropagation();
+      dialogDelete(m);
     });
 
     el.querySelector('.drag-handle').addEventListener('mousedown', function () {
@@ -736,21 +807,42 @@
       var now = new Date();
       var tKey = today();
 
+      /* 按自然周对齐：月初前的空位用上月日期补齐，月末后的空位用下月日期补齐（淡化且不可点） */
+      var lead = new Date(y, mo - 1, 1).getDay();
+      var trail = (7 - (lead + days) % 7) % 7;
+      var cols = lead + days + trail;
+
+      function dayInfo(offset) {
+        var dt = new Date(y, mo - 1, 1 - lead + offset);
+        return {
+          dt: dt,
+          key: iso(dt),
+          num: dt.getDate(),
+          inMonth: dt.getMonth() === mo - 1
+        };
+      }
+
       var cellsHead = '';
-      for (var i = 1; i <= days; i++) {
-        var wd = new Date(y, mo - 1, i).getDay();
-        cellsHead += '<span class="habit-wd">' + WEEK[wd] + '</span>';
+      for (var c = 0; c < cols; c++) {
+        var info = dayInfo(c);
+        cellsHead += '<span class="habit-wd' + (info.inMonth ? '' : ' out') + '">' + WEEK[info.dt.getDay()] + '</span>';
       }
 
       var rows = (d.habits || []).map(function (h) {
         var cells = '';
         var count = 0;
-        for (var day = 1; day <= days; day++) {
-          var key = y + '-' + pad(mo) + '-' + pad(day);
+        for (var c2 = 0; c2 < cols; c2++) {
+          var info2 = dayInfo(c2);
+          if (!info2.inMonth) {
+            cells += '<span class="cell filler" title="' + esc(info2.key) + '">' + info2.num + '</span>';
+            continue;
+          }
+          var key = info2.key;
           var on = !!(h.checks && h.checks[key]);
           if (on) count++;
           cells += '<button class="cell' + (on ? ' on' : '') + (key === tKey ? ' today' : '') +
-            '" type="button" data-h="' + h.id + '" data-d="' + key + '" title="' + esc(key) + '"></button>';
+            '" type="button" data-h="' + h.id + '" data-d="' + key + '" title="' + esc(key) + '">' +
+            '<span class="cell-d">' + info2.num + '</span></button>';
         }
         return '<div class="habit-name" data-h="' + h.id + '"><b title="' + esc(h.name) + '">' + esc(h.name) + '</b>' +
           '<span>' + count + '</span></div>' + cells;
@@ -770,7 +862,7 @@
         '<span style="font-size:11.5px;color:var(--faint)">共 ' + total + ' 次</span>' +
         '</div>' +
         (d.habits && d.habits.length
-          ? '<div class="habit-scroll"><div class="habit-table" style="grid-template-columns:var(--hname-w) repeat(' + days + ',var(--cell-w))">' +
+          ? '<div class="habit-scroll"><div class="habit-table" style="grid-template-columns:minmax(var(--hname-min),var(--hname-max)) repeat(' + cols + ',var(--cell-w))">' +
           '<div class="habit-name habit-name-head" aria-hidden="true"></div>' + cellsHead + rows + '</div></div>'
           : '<p class="empty-line">还没有习惯，先加一个：</p>') +
         '<div class="habit-add">' +
@@ -1032,9 +1124,9 @@
       var d = m.data;
       var items = (d.items || []).slice().sort(function (a, b) { return (a.time || '') < (b.time || '') ? -1 : 1; });
       var dt = new Date(d.date || today());
-      return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;color:var(--muted)">' +
+      return '<div class="tl-head">' +
         icon('calendar') + '<span>' + cnShort(dt) + '</span>' +
-        '<span style="margin-left:auto;color:var(--faint)">' + items.length + ' 项安排</span></div>' +
+        '<span class="tl-count">' + items.length + ' 项安排</span></div>' +
         '<div class="tl">' +
         (items.length ? items.map(function (i, idx) {
           return '<div class="tl-item' + (idx === 0 ? ' is-now' : '') + '" data-tl="' + i.id + '">' +
