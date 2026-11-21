@@ -28,6 +28,7 @@
     brief: '<rect x="3" y="7.5" width="18" height="12.5" rx="2.5"/><path d="M9 7.5V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1.5M3 13h18"/>',
     dumbbell: '<path d="M6.5 8.5v7M3.5 10v4M17.5 8.5v7M20.5 10v4M6.5 12h11"/>',
     coffee: '<path d="M4 8h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5Z"/><path d="M17 9h1.5a2.5 2.5 0 0 1 0 5H17"/><path d="M4 21h13"/>',
+    user: '<circle cx="12" cy="8" r="3.6"/><path d="M4.6 20.5a7.4 7.4 0 0 1 14.8 0"/>',
     users: '<circle cx="9" cy="8" r="3.2"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><path d="M16 5.4a3.2 3.2 0 0 1 0 6M17 20a5.6 5.6 0 0 0-1.6-3.9"/>',
     sparkle: '<path d="M12 3.5 13.7 9l5.5 1.7-5.5 1.7L12 18l-1.7-5.6L4.8 10.7 10.3 9 12 3.5Z"/>',
     star: '<path d="m12 3.8 2.6 5.3 5.9.8-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8L3.5 9.9l5.9-.8L12 3.8Z"/>',
@@ -223,7 +224,7 @@
       v: 1,
       seeded: false,
       current: 'overview',
-      settings: { name: '' },
+      settings: { name: '', fold: { sys: false, cus: false, blocks: {} } },
       lines: {},
       life8: LIFE8.map(function (d) {
         return { id: d.id, name: d.name, icon: d.icon, color: d.color, score: 0, note: '' };
@@ -252,6 +253,13 @@
     s.settings.appName = typeof s.settings.appName === 'string' ? s.settings.appName : '';
     s.settings.tagline = typeof s.settings.tagline === 'string' ? s.settings.tagline : '';
     s.settings.actionsOpen = s.settings.actionsOpen !== false;
+    var foldSrc = (s.settings.fold && typeof s.settings.fold === 'object' && !Array.isArray(s.settings.fold))
+      ? s.settings.fold : {};
+    s.settings.fold = {
+      sys: !!foldSrc.sys,
+      cus: !!foldSrc.cus,
+      blocks: (foldSrc.blocks && typeof foldSrc.blocks === 'object' && !Array.isArray(foldSrc.blocks)) ? foldSrc.blocks : {}
+    };
     s.lines = (s.lines && typeof s.lines === 'object' && !Array.isArray(s.lines)) ? s.lines : {};
     if (typeof s.current !== 'string') s.current = 'overview';
     if (!Array.isArray(s.life8) || s.life8.length !== 8) {
@@ -277,6 +285,7 @@
       });
       return p;
     });
+    s.pages.forEach(function (pg) { normalizeOkrPage(pg); });
     s.pages = orderBuiltinPages(s.pages);
     if (!s.pages.some(function (p) { return p.id === s.current; })) s.current = s.pages[0].id;
     return s;
@@ -315,6 +324,30 @@
     var out = [];
     state.pages.forEach(function (p) { out = out.concat(p.modules); });
     return out;
+  }
+
+  /* 旧数据兼容：OKR 的目标次数可能缺失或为 0，统一补成正整数（默认 10） */
+  function normalizeOkrPage(pg) {
+    (pg.modules || []).forEach(function (m) {
+      if (!m || m.type !== 'okr') return;
+      m.data = (m.data && typeof m.data === 'object') ? m.data : {};
+      m.data.objectives = (Array.isArray(m.data.objectives) ? m.data.objectives : []).filter(Boolean).map(function (o) {
+        o.id = o.id || uid('o');
+        o.title = typeof o.title === 'string' ? o.title : '新的目标';
+        o.krs = (Array.isArray(o.krs) ? o.krs : []).filter(Boolean).map(function (k) {
+          k.id = k.id || uid('k');
+          k.text = typeof k.text === 'string' ? k.text : '关键结果';
+          k.cur = Math.max(0, Number(k.cur) || 0);
+          var t = Number(k.target);
+          k.target = (isFinite(t) && t > 0) ? Math.floor(t) : 10;
+          /* 旧数据里完成数可能大于目标，向上兼容，避免出现 12/10 这类怪值 */
+          if (k.cur > k.target) k.target = Math.ceil(k.cur);
+          k.unit = typeof k.unit === 'string' ? k.unit : '';
+          return k;
+        });
+        return o;
+      });
+    });
   }
 
   function blankData(type) {
@@ -402,6 +435,43 @@
     }
   }
 
+  var NAV_GROUPS = [
+    { group: '#group-system', btn: '#fold-system', key: 'sys', label: '系统页' },
+    { group: '#group-custom', btn: '#fold-custom', key: 'cus', label: '我的模块页' }
+  ];
+
+  function applyNavFold() {
+    var f = foldState();
+    NAV_GROUPS.forEach(function (g) {
+      var box = $(g.group), btn = $(g.btn);
+      if (!box || !btn) return;
+      var on = !!f[g.key];
+      box.classList.toggle('is-folded', on);
+      btn.setAttribute('aria-expanded', on ? 'false' : 'true');
+      btn.title = (on ? '展开' : '折叠') + '「' + g.label + '」';
+      btn.setAttribute('aria-label', (on ? '展开' : '折叠') + '「' + g.label + '」');
+    });
+  }
+
+  function bindNavFold() {
+    NAV_GROUPS.forEach(function (g) {
+      var btn = $(g.btn);
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        var f = foldState();
+        if (f[g.key]) delete f[g.key]; else f[g.key] = true;
+        save();
+        applyNavFold();
+      });
+    });
+  }
+
+  /* 折叠状态下仍可新建页签：新建成功后自动展开分组 */
+  function expandCustomGroup() {
+    var f = foldState();
+    if (f.cus) { delete f.cus; save(); applyNavFold(); }
+  }
+
   /* ---------------------------------------------------------
      通用：就地重命名
      --------------------------------------------------------- */
@@ -460,6 +530,83 @@
      --------------------------------------------------------- */
   var MOODS = ['平静', '专注', '不错', '有点累', '紧绷'];
 
+  /* ---------------------------------------------------------
+     折叠：侧栏分组 + 内容区块（状态按账号持久化到 settings.fold）
+     --------------------------------------------------------- */
+  function foldState() {
+    if (!state.settings.fold || typeof state.settings.fold !== 'object') {
+      state.settings.fold = { sys: false, cus: false, blocks: {} };
+    }
+    var f = state.settings.fold;
+    if (!f.blocks || typeof f.blocks !== 'object' || Array.isArray(f.blocks)) f.blocks = {};
+    return f;
+  }
+
+  function foldGet(key) {
+    return !!foldState().blocks[key];
+  }
+
+  function foldSet(key, on) {
+    var f = foldState();
+    if (on) f.blocks[key] = true; else delete f.blocks[key];
+    save();
+  }
+
+  /* 把 sec 内除表头外的内容包进可折叠容器，并在表头右侧放一个旋转箭头按钮 */
+  function foldSection(sec, key, headSel) {
+    if (!sec) return sec;
+    var head = $(headSel, sec);
+    if (!head) return sec;
+
+    var body = document.createElement('div');
+    body.className = 'fold-body';
+    var inner = document.createElement('div');
+    inner.className = 'fold-inner';
+    Array.prototype.slice.call(sec.children).forEach(function (c) {
+      if (c !== head) inner.appendChild(c);
+    });
+    body.appendChild(inner);
+    sec.appendChild(body);
+
+    var label = (head.querySelector('h2') || head.querySelector('.ol-badge') || {}).textContent || '区块';
+    label = String(label).trim().replace(/^＋\s*/, '');
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'fold-btn';
+    btn.innerHTML = icon('chevronDown');
+
+    if (head.classList.contains('section-head')) {
+      var tools = head.querySelector('.head-tools');
+      if (!tools) {
+        tools = document.createElement('div');
+        tools.className = 'head-tools';
+        Array.prototype.slice.call(head.children).forEach(function (c) {
+          if (c.tagName === 'BUTTON') tools.appendChild(c);
+        });
+        head.appendChild(tools);
+      }
+      tools.appendChild(btn);
+    } else {
+      head.appendChild(btn);
+    }
+
+    var on = foldGet(key);
+    function apply() {
+      sec.classList.toggle('is-folded', on);
+      btn.setAttribute('aria-expanded', on ? 'false' : 'true');
+      btn.title = (on ? '展开' : '折叠') + '「' + label + '」';
+      btn.setAttribute('aria-label', (on ? '展开' : '折叠') + '「' + label + '」');
+    }
+    btn.addEventListener('click', function () {
+      on = !on;
+      foldSet(key, on);
+      apply();
+    });
+    apply();
+    return sec;
+  }
+
   function todayLineBlock() {
     var key = today();
     state.lines = state.lines || {};
@@ -512,6 +659,7 @@
       });
     });
 
+    foldSection(sec, 'todayLine', '.ol-top');
     return sec;
   }
 
@@ -546,12 +694,15 @@
     if (page.builtin === 'life8') canvas.appendChild(boardBlock());
     if (page.builtin === 'review') canvas.appendChild(loopBlock());
 
-    // 模块区
+    // 模块区（整块可折叠）
+    var modsWrap = document.createElement('section');
+    modsWrap.className = 'modules-wrap';
+
     var head = document.createElement('div');
     head.className = 'section-head reveal';
     head.innerHTML = '<div><h2>模块画布</h2><p>' + page.modules.length + ' 个模块 · 拖拽右侧手柄可排序</p></div>' +
       '<button class="solid-btn head-add" type="button" data-act="add">＋ 添加模块</button>';
-    canvas.appendChild(head);
+    modsWrap.appendChild(head);
 
     var grid = document.createElement('div');
     grid.className = 'modules';
@@ -562,12 +713,13 @@
       card.style.animationDelay = (Math.min(i, 8) * 45) + 'ms';
       grid.appendChild(card);
     });
-    canvas.appendChild(grid);
+    modsWrap.appendChild(grid);
+    if (!page.modules.length) modsWrap.appendChild(emptyBlock(page));
+    foldSection(modsWrap, 'modules:' + page.id, '.section-head');
+    canvas.appendChild(modsWrap);
     attachDrag(grid);
 
-    if (!page.modules.length) {
-      canvas.appendChild(emptyBlock(page));
-    }
+
 
     // 底部
     var foot = document.createElement('div');
@@ -582,7 +734,7 @@
 
   function pageIntro(page) {
     var now = new Date();
-    var name = state.settings.name || '朋友';
+    var name = userName();
     var lead = state.pages.filter(function (p) { return !p.builtin; });
 
     switch (page.builtin) {
@@ -764,6 +916,7 @@
       board.appendChild(card);
     });
     sec.appendChild(board);
+    foldSection(sec, 'board', '.section-head');
     return sec;
   }
 
@@ -1230,14 +1383,18 @@
             return '<div class="kr" data-kr="' + k.id + '">' +
               '<div class="kr-wrap">' +
               '<span class="kr-text">' + esc(k.text) + '</span>' +
-              '<span class="kr-num">' + k.cur + '/' + k.target + (k.unit ? ' ' + esc(k.unit) : '') + '</span>' +
+              '<button class="kr-num" type="button" data-kr-edit="' + k.id + '" title="点击修改目标次数">' +
+              k.cur + '/' + k.target + (k.unit ? ' ' + esc(k.unit) : '') + '</button>' +
               '<button class="kr-mini" type="button" data-kr-step="-1" aria-label="减少">−</button>' +
               '<button class="kr-mini" type="button" data-kr-step="1" aria-label="增加">＋</button>' +
               '</div>' +
               '<div class="kr-bar"><i style="width:' + p + '%"></i></div>' +
               '</div>';
           }).join('') : '<p class="empty-line" style="margin:0 0 8px">给这个目标配 2 – 3 个可量化的关键结果。</p>') +
-          '<div class="inline-add"><input class="field" data-kr-input="' + o.id + '" placeholder="添加关键结果，用 /数字 结尾，例如：跑步 800 km">' +
+          '<div class="inline-add">' +
+          '<input class="field" data-kr-input="' + o.id + '" placeholder="添加关键结果，例如：跑步 800 km">' +
+          '<input class="field kr-target-field" type="number" inputmode="numeric" min="1" step="1"' +
+          ' data-kr-target="' + o.id + '" placeholder="目标 10" aria-label="目标次数" title="目标次数，默认 10">' +
           '<button class="add-btn" data-kr-add="' + o.id + '" type="button">添加</button></div>' +
           '</div>';
       }).join('') +
@@ -1279,12 +1436,26 @@
       function addKr(objId, input) {
         var raw = (input.value || '').trim();
         if (!raw) { input.focus(); return; }
+        var tField = $('[data-kr-target="' + objId + '"]', body);
         var target = 10, unit = '', text = raw;
+        /* 文本末尾的「数字 + 单位」仍可作为快捷写法 */
         var mv = raw.match(/(\d+(?:\.\d+)?)\s*([^\d\s]*)$/);
         if (mv) {
           target = Number(mv[1]);
           unit = mv[2] || '';
           text = raw.slice(0, mv.index).replace(/[／/·:：\-\s]+$/, '').trim() || raw;
+        }
+        /* 输入框里显式填写的目标次数优先 */
+        if (tField) {
+          var tv = String(tField.value || '').trim();
+          if (tv) {
+            if (!/^\d+$/.test(tv) || Number(tv) < 1) {
+              tField.focus(); tField.select();
+              toast('目标次数需为正整数');
+              return;
+            }
+            target = Number(tv);
+          }
         }
         var obj = d.objectives.filter(function (o) { return o.id === objId; })[0];
         if (!obj) return;
@@ -1292,7 +1463,61 @@
         obj.krs.push({ id: uid('k'), text: text, cur: 0, target: target, unit: unit });
         save();
         refreshCard(m);
+        toast('已添加，目标 ' + target);
       }
+
+      /* 点击「完成/目标」数字：修改目标次数 */
+      $$('[data-kr-edit]', body).forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var krId = btn.dataset.krEdit;
+          var obj = null, kr = null;
+          d.objectives.forEach(function (o) {
+            (o.krs || []).forEach(function (k) { if (k.id === krId) { obj = o; kr = k; } });
+          });
+          if (!kr) return;
+          openDialog(
+            '<h3>修改目标次数</h3>' +
+            '<p class="sub">「' + esc(kr.text) + '」当前完成 <b>' + kr.cur + '</b> 次。目标次数需为正整数，且不能小于当前完成次数。</p>' +
+            '<input class="field" id="kr-target-edit" type="number" inputmode="numeric" min="1" step="1"' +
+            ' value="' + (Number(kr.target) || 10) + '" style="width:100%;margin-top:4px">' +
+            '<p class="sub" id="kr-target-err" style="margin:8px 0 0;color:var(--danger)" hidden></p>' +
+            '<div class="sheet-actions"><button class="ghost-btn" data-close>取消</button>' +
+            '<button class="solid-btn" data-ok>保存</button></div>',
+            function (sheet, close) {
+              var inp = $('#kr-target-edit', sheet);
+              var err = $('#kr-target-err', sheet);
+              inp.focus();
+              inp.select();
+              $('[data-close]', sheet).addEventListener('click', close);
+              function submit() {
+                var v = String(inp.value || '').trim();
+                if (!/^\d+$/.test(v) || Number(v) < 1) {
+                  err.textContent = '请填写正整数，例如 10。';
+                  err.hidden = false;
+                  inp.focus();
+                  return;
+                }
+                var n = Number(v);
+                if (n < Number(kr.cur || 0)) {
+                  err.textContent = '目标次数不能小于当前完成次数（' + kr.cur + '）。';
+                  err.hidden = false;
+                  inp.focus();
+                  return;
+                }
+                kr.target = n;
+                save();
+                close();
+                refreshCard(m);
+                toast('目标次数已更新为 ' + n);
+              }
+              $('[data-ok]', sheet).addEventListener('click', submit);
+              inp.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') submit();
+              });
+            }
+          );
+        });
+      });
 
       var objInput = $('[data-obj-input]', body);
       $('[data-obj-add]', body).addEventListener('click', function () {
@@ -1937,7 +2162,7 @@
   function buildSample() {
     var s = initialState();
     s.seeded = true;
-    s.settings.name = '北辰';
+    s.settings.name = emailPrefix() || '北辰';
     s.current = 'overview';
 
     var mk = monthKey(new Date());
@@ -2181,6 +2406,7 @@
     out.push({ kind: 'action', group: '操作', icon: 'plus', text: '添加模块', meta: '在当前页新建一个模块', keys: '添加 新建 模块', run: dialogAddModule });
     out.push({ kind: 'action', group: '操作', icon: 'plus', text: '新建页签', meta: '在侧栏新增自定义页', keys: '新建 页签 页面', run: dialogAddPage });
     out.push({ kind: 'action', group: '操作', icon: 'download', text: '导出备份', meta: '把当前数据导出为 JSON', keys: '导出 备份 下载 json', run: exportData });
+    out.push({ kind: 'action', group: '操作', icon: 'user', text: '修改用户名', meta: '当前：' + userName(), keys: '用户名 昵称 账户 名字 账号', run: openAccountDialog });
     out.push({ kind: 'action', group: '操作', icon: 'auto', text: '切换外观', meta: '在跟随系统 / 浅色 / 深色之间切换', keys: '主题 深浅色 外观 暗色', run: cycleTheme });
     return out;
   }
@@ -2394,7 +2620,7 @@
     });
     $('#scrim').addEventListener('click', closeSidebar);
     $('#btn-add-module').addEventListener('click', dialogAddModule);
-    $('#btn-add-page').addEventListener('click', dialogAddPage);
+    $('#btn-add-page').addEventListener('click', function () { expandCustomGroup(); dialogAddPage(); });
     $('#btn-page-menu').addEventListener('click', dialogPages);
     applyActions(actionsOpen());
     $('#btn-actions-toggle').addEventListener('click', toggleActions);
@@ -2573,6 +2799,71 @@
   function writeAccounts(a) { safeSet(AUTH_KEY, JSON.stringify(a)); }
   function currentEmail() { return normalizeEmail(safeGet(SESSION_KEY)); }
 
+  /* ---------------------------------------------------------
+     用户名：默认取邮箱 @ 前缀，可自定义，按账号隔离持久化
+     --------------------------------------------------------- */
+  function emailPrefix(email) {
+    var e = normalizeEmail(email || currentEmail());
+    var at = e.indexOf('@');
+    var p = at > 0 ? e.slice(0, at) : e;
+    return String(p || '').trim();
+  }
+
+  function userName() {
+    var n = (state && state.settings && typeof state.settings.name === 'string') ? state.settings.name.trim() : '';
+    if (n) return n;
+    return emailPrefix() || '朋友';
+  }
+
+  function setUserName(raw) {
+    var v = String(raw || '').replace(/[\u0000-\u001f\u007f]/g, '').trim();
+    if (v.length > 16) v = v.slice(0, 16);
+    state.settings.name = v || emailPrefix();
+    save();
+    renderPage();
+    return state.settings.name;
+  }
+
+  function openAccountDialog() {
+    var email = currentEmail();
+    var cur = (state.settings && state.settings.name) || '';
+    openDialog(
+      '<h3>账户设置</h3>' +
+      '<p class="sub">用户名用于首页问候语，默认取邮箱 @ 前的前缀。修改只影响当前账号（' + esc(email) + '）。</p>' +
+      '<input class="field" id="acc-name" maxlength="16" style="width:100%;margin-top:4px"' +
+      ' value="' + esc(cur) + '" placeholder="' + esc(emailPrefix(email) || '你的名字') + '"' +
+      ' aria-label="用户名">' +
+      '<p class="sub" style="margin:8px 0 0">1 – 16 个字；留空则恢复为邮箱前缀。</p>' +
+      '<p class="sub" id="acc-err" style="margin:8px 0 0;color:var(--danger)" hidden></p>' +
+      '<div class="sheet-actions"><button class="ghost-btn" data-close>取消</button>' +
+      '<button class="solid-btn" data-ok>保存</button></div>',
+      function (sheet, close) {
+        var inp = $('#acc-name', sheet);
+        var err = $('#acc-err', sheet);
+        inp.focus();
+        inp.select();
+        $('[data-close]', sheet).addEventListener('click', close);
+        function submit() {
+          var v = String(inp.value || '').replace(/[\u0000-\u001f\u007f]/g, '').trim();
+          if (v.length > 16) {
+            err.textContent = '用户名最多 16 个字。';
+            err.hidden = false;
+            inp.focus();
+            return;
+          }
+          var next = setUserName(v);
+          close();
+          $('#user-mail').title = '当前账号：' + currentEmail() + ' · 点击修改用户名（' + next + '）';
+          toast('用户名已更新为「' + next + '」');
+        }
+        $('[data-ok]', sheet).addEventListener('click', submit);
+        inp.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') submit();
+        });
+      }
+    );
+  }
+
   /* 旧版 lifeos.v1 数据在首次登录时继承给该账号（只继承一次，两份互不影响） */
   function inheritLegacy(email) {
     if (safeGet(MIGRATED_KEY)) return false;
@@ -2601,11 +2892,16 @@
     activeKey = keyFor(email);
     var inherited = inheritLegacy(email);
     state = loadState();
+    if (!String(state.settings.name || '').trim()) {
+      state.settings.name = emailPrefix(email);
+      save();
+    }
     $('#auth').hidden = true;
     document.documentElement.classList.remove('locked');
     document.documentElement.classList.add('authed');
     $('#user-mail').textContent = email;
-    $('#user-mail').title = email;
+    $('#user-mail').title = '当前账号：' + email + ' · 点击修改用户名';
+    applyNavFold();
     renderNav();
     renderPage();
     if (inherited) toast('已把原有本机数据继承到 ' + email);
@@ -2649,6 +2945,10 @@
       location.reload();
     });
 
+    $('#user-mail').addEventListener('click', function () {
+      if (currentEmail()) openAccountDialog();
+    });
+
     $('#btn-logout').addEventListener('click', function () {
       if (!confirm('退出登录？数据已按邮箱保存在本机，用同一邮箱可再次进入。')) return;
       safeDel(SESSION_KEY);
@@ -2661,6 +2961,7 @@
      --------------------------------------------------------- */
   function boot() {
     bindGlobal();
+    bindNavFold();
     bindAuth();
     var email = currentEmail();
     if (email && readAccounts()[email]) {
