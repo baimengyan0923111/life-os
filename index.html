@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#fbfbfd" id="theme-color" />
 <meta name="description" content="Life OS · 人生管理系统：把生活拆成可执行的模块，记录、推进、复盘。数据只保存在本机浏览器。" />
 <title>Life OS · 人生管理系统</title>
-<link rel="stylesheet" href="style.css?v=20261122a" />
+<link rel="stylesheet" href="style.css?v=20261122b" />
 <script>
 /* 强制 HTTPS：仅在 http 且非本地地址时跳转，file:// 与 localhost 预览不受影响 */
 (function () {
@@ -59,8 +59,12 @@
           <input id="auth-pass" type="password" name="password" autocomplete="current-password"
                  placeholder="至少 4 位，首次登录即创建本地账号" required />
         </label>
-        <p class="auth-error" id="auth-error" hidden></p>
+        <div class="auth-error-box" id="auth-error-box" hidden>
+          <p class="auth-error" id="auth-error"></p>
+          <button class="auth-link" id="auth-reset" type="button" hidden>重置这台电脑的密码</button>
+        </div>
         <button class="solid-btn auth-submit" id="auth-submit" type="submit">登录</button>
+        <p class="auth-hint">密码保存在本机浏览器；其它设备首次登录可自行设置密码，数据通过云同步恢复。</p>
       </form>
       <p class="auth-note">纯前端演示：账号只记录在本机浏览器，不做服务端校验；换浏览器或清缓存后需重新登录。</p>
       <button class="auth-alt" id="auth-clear" type="button">清除本机账号与数据</button>
@@ -166,6 +170,6 @@
   <input type="file" id="file-import" accept="application/json,.json" hidden />
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-  <script src="app.js?v=20261122a"></script>
+  <script src="app.js?v=20261122b"></script>
 </body>
 </html>
