@@ -1,9 +1,11 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#f7f5ef" />
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" content="#fbfbfd" id="theme-color" />
+<meta name="description" content="Life OS · 人生管理系统：把生活拆成可执行的模块，记录、推进、复盘。数据只保存在本机浏览器。" />
 <title>Life OS · 人生管理系统</title>
 <link rel="stylesheet" href="style.css" />
 <script>
@@ -19,6 +21,16 @@
 })();
 </script>
 <script>
+/* 主题预设：解析前先定深浅色，避免首帧闪白 / 闪黑。auto 表示跟随系统 */
+(function () {
+  var mode = 'auto';
+  try { mode = localStorage.getItem('lifeos.theme.v1') || 'auto'; } catch (e) { }
+  var dark = mode === 'dark' || (mode !== 'light' && window.matchMedia &&
+    window.matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+})();
+</script>
+<script>
 /* 登录门禁：脚本解析前即锁定界面，避免未登录时主界面闪一下 */
 (function () {
   var ok = false;
@@ -28,6 +40,8 @@
 </script>
 </head>
 <body>
+  <a class="skip-link" href="#canvas">跳到主要内容</a>
+
   <!-- 邮箱登录 -->
   <section class="auth" id="auth" hidden>
     <div class="auth-card">
@@ -55,7 +69,7 @@
 
   <div class="app" id="app">
     <!-- 左侧垂直导航 -->
-    <aside class="sidebar" id="sidebar">
+    <aside class="sidebar" id="sidebar" aria-label="主导航">
       <a class="brand" href="#" data-act="home">
         <span class="brand-mark" id="brand-mark"></span>
         <span class="brand-text">
@@ -69,15 +83,15 @@
 
       <div class="nav-label nav-label-row">
         <span>我的模块页</span>
-        <button class="mini-btn" id="btn-add-page" title="新建页签">＋</button>
+        <button class="mini-btn" id="btn-add-page" type="button" title="新建页签" aria-label="新建页签">＋</button>
       </div>
       <nav class="nav nav-scroll" id="nav-custom"></nav>
 
       <div class="sidebar-foot">
         <div class="foot-actions">
-          <button class="foot-btn" data-act="export">导出备份</button>
-          <button class="foot-btn" data-act="import">导入</button>
-          <button class="foot-btn" data-act="reset">清空</button>
+          <button class="foot-btn" type="button" data-act="export">导出备份</button>
+          <button class="foot-btn" type="button" data-act="import">导入</button>
+          <button class="foot-btn" type="button" data-act="reset">清空</button>
         </div>
         <div class="user-box">
           <span class="user-mail" id="user-mail" title="">未登录</span>
@@ -92,23 +106,54 @@
     <!-- 右侧画布 -->
     <main class="main">
       <header class="topbar" id="topbar">
-        <button class="icon-btn menu-btn" id="btn-menu" aria-label="菜单"></button>
+        <button class="icon-btn menu-btn" id="btn-menu" type="button" aria-label="打开导航"></button>
         <button class="topbar-title" id="page-title" type="button" title="点击重命名当前页">概览</button>
+
+        <div class="topbar-tools">
+          <button class="search-btn" id="btn-search" type="button" aria-label="搜索（Command 或 Control 加 K）"
+                  aria-keyshortcuts="Meta+K Control+K" title="全局搜索 ⌘K / Ctrl+K">
+            <span class="search-ico" id="search-ico"></span>
+            <span class="search-label">搜索</span>
+            <kbd class="search-kbd">⌘K</kbd>
+          </button>
+          <button class="icon-btn theme-btn" id="btn-theme" type="button"
+                  aria-label="切换外观" title="外观：跟随系统"></button>
+        </div>
+
         <div class="topbar-actions" id="topbar-actions">
-          <button class="ghost-btn" id="btn-page-menu">页签设置</button>
-          <button class="solid-btn" id="btn-add-module">添加模块</button>
+          <button class="ghost-btn" id="btn-page-menu" type="button">页签设置</button>
+          <button class="solid-btn" id="btn-add-module" type="button">添加模块</button>
         </div>
         <button class="icon-btn actions-toggle" id="btn-actions-toggle" type="button"
                 aria-expanded="true" aria-controls="topbar-actions" title="隐藏操作区"></button>
       </header>
 
-      <div class="canvas" id="canvas"></div>
+      <div class="canvas" id="canvas" tabindex="-1"></div>
     </main>
+  </div>
+
+  <!-- 全局搜索 -->
+  <div class="cmdk" id="cmdk" hidden>
+    <div class="cmdk-panel" role="dialog" aria-modal="true" aria-label="全局搜索">
+      <div class="cmdk-bar">
+        <span class="cmdk-ico" id="cmdk-ico"></span>
+        <input class="cmdk-input" id="cmdk-input" type="text" autocomplete="off" spellcheck="false"
+               role="combobox" aria-expanded="true" aria-controls="cmdk-list" aria-autocomplete="list"
+               placeholder="搜索页签、模块、待办、习惯、目标、决定…" />
+        <button class="cmdk-close" id="cmdk-close" type="button" aria-label="关闭搜索">ESC</button>
+      </div>
+      <div class="cmdk-list" id="cmdk-list" role="listbox" aria-label="搜索结果"></div>
+      <div class="cmdk-foot">
+        <span><kbd>↑</kbd><kbd>↓</kbd> 选择</span>
+        <span><kbd>↵</kbd> 跳转</span>
+        <span><kbd>esc</kbd> 关闭</span>
+      </div>
+    </div>
   </div>
 
   <div class="overlay" id="overlay" hidden></div>
   <input type="file" id="file-import" accept="application/json,.json" hidden />
-  <div class="toast" id="toast" hidden></div>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
   <script src="app.js"></script>
 </body>
