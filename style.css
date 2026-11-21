@@ -531,10 +531,28 @@ html.locked .auth:not([hidden]) { display: flex; }
 .is-folded > .section-head .fold-btn svg,
 .is-folded > .ol-top .fold-btn svg { transform: rotate(-90deg); }
 
-.fold-body { display: grid; grid-template-rows: 1fr;
-  transition: grid-template-rows var(--dur-2) var(--ease-soft), opacity var(--dur-2); }
-.fold-inner { overflow: hidden; min-height: 0; }
-.is-folded > .fold-body { grid-template-rows: 0fr; opacity: 0; }
+/* 折叠只作用于整块层级：用 display 切换，不用 grid 0fr + overflow:hidden，
+   避免内部卡片正文 / 输入框被裁成 0 高。展开态默认可见。 */
+.fold-body { display: block; }
+.fold-body:not([hidden]) { animation: fold-in var(--dur-2) var(--ease-soft) both; }
+.fold-body[hidden] { display: none !important; }
+.fold-inner { min-height: 0; }
+@keyframes fold-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+/* 收起后给一条明确提示，避免用户以为内容丢失 */
+.fold-hint {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-top: var(--s-3); padding: 7px 13px;
+  border: 1px dashed var(--line-2); border-radius: var(--r-pill);
+  background: var(--elev-2); color: var(--muted);
+  font-size: var(--t-12); line-height: 1.3; cursor: pointer;
+  transition: color var(--dur-1), border-color var(--dur-1), background-color var(--dur-1);
+}
+.fold-hint:hover { color: var(--ink); border-color: var(--accent); }
+.fold-hint:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); }
+.fold-hint[hidden] { display: none !important; }
 .is-folded > .section-head { margin-bottom: var(--s-3); }
 
 /* ---------- 9. 首页：今日一句话 ---------- */
@@ -968,8 +986,8 @@ html.locked .auth:not([hidden]) { display: flex; }
 
 /* ---------- 20. 笔记 ---------- */
 .note-area {
-  width: 100%; min-height: 120px; padding: 2px;
-  border: 0; background: transparent; color: var(--ink);
+  width: 100%; min-height: 120px; padding: 4px 6px;
+  border: 0; border-radius: var(--r-xs); background: transparent; color: var(--ink);
   font-size: var(--t-13); line-height: 1.75; resize: vertical;
   outline: none;
 }
@@ -1000,7 +1018,7 @@ html.locked .auth:not([hidden]) { display: flex; }
 .rev-field textarea {
   width: 100%; padding: 7px 9px; border: 1px solid transparent; border-radius: var(--r-xs);
   background: var(--elev); color: var(--ink); font-size: var(--t-12); line-height: 1.6;
-  resize: none; overflow: hidden; transition: border-color var(--dur-1);
+  min-height: 36px; resize: none; overflow-y: hidden; transition: border-color var(--dur-1);
 }
 .rev-field textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
 
