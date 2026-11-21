@@ -57,7 +57,10 @@
     auto: '<circle cx="12" cy="12" r="8.6"/><path d="M12 3.4a8.6 8.6 0 0 1 0 17.2Z" fill="currentColor" stroke="none"/>',
     folder: '<path d="M3.5 7.5A2 2 0 0 1 5.5 5.5h3.2l1.8 2.2h8A2 2 0 0 1 20.5 9.7v7.8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2Z"/>',
     cmd: '<path d="M8 4.5A2.5 2.5 0 1 1 10.5 7v10A2.5 2.5 0 1 1 8 14.5h8A2.5 2.5 0 1 1 13.5 17V7A2.5 2.5 0 1 1 16 9.5H8"/>',
-    cornerDown: '<path d="M4 5v6a3 3 0 0 0 3 3h13"/><path d="m15.5 9 4.5 5-4.5 5"/>'
+    cornerDown: '<path d="M4 5v6a3 3 0 0 0 3 3h13"/><path d="m15.5 9 4.5 5-4.5 5"/>',
+    cloud: '<path d="M7 18.5a4 4 0 0 1-.4-7.98A5.5 5.5 0 0 1 17.3 9.9a3.9 3.9 0 0 1 .1 8.6H7Z"/>',
+    eye: '<path d="M2.6 12S6.1 6.6 12 6.6 21.4 12 21.4 12 17.9 17.4 12 17.4 2.6 12 2.6 12Z"/><circle cx="12" cy="12" r="2.7"/>',
+    eyeOff: '<path d="M4 4.2 20 20"/><path d="M9.9 6a9.9 9.9 0 0 1 2.1-.2c5.9 0 9.4 6.2 9.4 6.2a17.4 17.4 0 0 1-3.2 3.9"/><path d="M6.5 7.7A16.8 16.8 0 0 0 2.6 12s3.5 5.4 9.4 5.4a9.8 9.8 0 0 0 3.3-.6"/><path d="M9.7 10a3 3 0 0 0 4.2 4.2"/>'
   };
 
   function icon(name, cls) {
@@ -321,6 +324,9 @@
   function normalize(s) {
     var base = initialState();
     s.v = 1;
+    /* 云端凭据永远不进 state：导入外部备份时顺手清理 */
+    delete s.cloud;
+    delete s.cloudSync;
     s.settings = s.settings || {};
     s.settings.name = typeof s.settings.name === 'string' ? s.settings.name : '';
     s.settings.appName = typeof s.settings.appName === 'string' ? s.settings.appName : '';
@@ -403,6 +409,7 @@
         toast('浏览器不允许本地存储，本次修改不会被保留');
       }
     }
+    cloudAfterSave();
   }
   var saveFailed = false;
 
@@ -2264,6 +2271,13 @@
   var overlay = $('#overlay');
   var lastDialogFocus = null;
 
+  /* 云同步面板在窄屏是底部抽屉：关闭后清掉类名，避免影响其它弹窗 */
+  if (overlay && window.MutationObserver) {
+    new MutationObserver(function () {
+      if (overlay.hidden) overlay.classList.remove('cloud-open');
+    }).observe(overlay, { attributes: true, attributeFilter: ['hidden'] });
+  }
+
   function dialogFocusables(sheet) {
     return $$('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])', sheet)
       .filter(function (el) { return !el.disabled && el.offsetParent !== null; });
@@ -2471,8 +2485,25 @@
   /* ---------------------------------------------------------
      导入 / 导出 / 重置
      --------------------------------------------------------- */
+  /* 导出前剔除云同步凭据：token 只留在本机，绝不进备份文件 */
+  function sanitizeExport(obj) {
+    var clone;
+    try { clone = JSON.parse(JSON.stringify(obj)); } catch (e) { return obj; }
+    if (!clone || typeof clone !== 'object') return clone;
+    ['cloud', 'cloudSync', 'token', 'gistToken', 'githubToken'].forEach(function (k) { delete clone[k]; });
+    function scrub(o) {
+      if (!o || typeof o !== 'object') return;
+      Object.keys(o).forEach(function (k) {
+        if (/token|gistId/i.test(k)) { delete o[k]; return; }
+        scrub(o[k]);
+      });
+    }
+    scrub(clone);
+    return clone;
+  }
+
   function exportData() {
-    var data = JSON.stringify(state, null, 2);
+    var data = JSON.stringify(sanitizeExport(state), null, 2);
     var blob = new Blob([data], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
@@ -2947,6 +2978,865 @@
   }
 
   /* ---------------------------------------------------------
+     云同步（GitHub Gist）
+     浏览器直连 GitHub REST API，数据只在本机与自己的私有 Gist 之间流动
+     --------------------------------------------------------- */
+  var CLOUD_KEY = 'lifeos.cloud.v1';                /* 每账号一份：lifeos.cloud.v1::邮箱 */
+  var CLOUD_ROLLBACK_KEY = 'lifeos.cloud.rollback'; /* 覆盖前快照：lifeos.cloud.rollback::邮箱 */
+  var CLOUD_MOCK_DB = 'lifeos.mockcloud.v1';        /* 模拟后端的本机存储（真 token 不会用到） */
+  var GIST_MARK = 'lifeos-sync';
+  var GIST_FILE = 'lifeos-data.json';
+  var GIST_API = 'https://api.github.com';
+
+  var cloudSuppress = false;    /* 程序化改写 state 期间：不打页面时间戳、不触发自动同步 */
+  var cloudBusy = 0;            /* 进行中的请求数，用于状态显示 */
+  var cloudAutoTimer = null;    /* 自动同步防抖定时器 */
+  var cloudPageStamps = null;   /* 页面指纹缓存，用于给改动过的页面打时间戳 */
+  var cloudPending = null;      /* 双向同步暂存的云端数据 */
+  var cloudUi = { view: 'main', msg: null };
+  var cloudDraft = { token: '', reveal: false };
+
+  /* ---------- 账号隔离的存储 ---------- */
+  function cloudOwner() { return currentEmail() || 'local'; }
+  function cloudStoreKey() { return CLOUD_KEY + '::' + cloudOwner(); }
+  function cloudSnapKey() { return CLOUD_ROLLBACK_KEY + '::' + cloudOwner(); }
+
+  function readCloud() {
+    try {
+      var c = JSON.parse(safeGet(cloudStoreKey()) || 'null');
+      if (!c || typeof c !== 'object') return null;
+      if (!c.token || !c.gistId) return null;
+      return c;
+    } catch (e) { return null; }
+  }
+  function writeCloud(cfg) {
+    if (!cfg || !cfg.token || !cfg.gistId) { safeDel(cloudStoreKey()); return; }
+    safeSet(cloudStoreKey(), JSON.stringify(cfg));
+  }
+  function cloudSnapRead() {
+    try {
+      var o = JSON.parse(safeGet(cloudSnapKey()) || 'null');
+      return o && o.data ? o : null;
+    } catch (e) { return null; }
+  }
+  function cloudSnapWrite() {
+    try { safeSet(cloudSnapKey(), JSON.stringify({ at: Date.now(), data: state })); } catch (e) { }
+  }
+  function cloudSnapClear() { safeDel(cloudSnapKey()); }
+
+  /* ---------- 指纹：稳定序列化 + 哈希，用于判断两端是否改动 ---------- */
+  function cloudStable(v) {
+    if (v === null || typeof v !== 'object') return JSON.stringify(v === undefined ? null : v);
+    if (Array.isArray(v)) {
+      return '[' + v.map(cloudStable).join(',') + ']';
+    }
+    return '{' + Object.keys(v).sort().map(function (k) {
+      return JSON.stringify(k) + ':' + cloudStable(v[k]);
+    }).join(',') + '}';
+  }
+  function cloudFp(obj) {
+    var s = cloudStable(obj);
+    var h = 5381;
+    for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+    return h.toString(36) + '.' + s.length;
+  }
+
+  /* ---------- 页面时间戳：让「逐页取较新」有依据 ---------- */
+  function cloudStampPages() {
+    if (!state || !Array.isArray(state.pages)) return;
+    var now = Date.now();
+    var map = {};
+    state.pages.forEach(function (p) {
+      var sig = cloudStable(p);
+      var prev = cloudPageStamps && cloudPageStamps[p.id];
+      if (!prev || prev.sig !== sig) {
+        p.up = now;
+        map[p.id] = { sig: cloudStable(p) };
+      } else {
+        map[p.id] = prev;
+      }
+    });
+    cloudPageStamps = map;
+  }
+  function cloudResetStamps(s) {
+    cloudPageStamps = {};
+    ((s && s.pages) || []).forEach(function (p) {
+      cloudPageStamps[p.id] = { sig: cloudStable(p) };
+    });
+  }
+
+  /* ---------- 云同步失败对象 ---------- */
+  function cloudErr(code, msg) { var e = new Error(msg); e.code = code; return e; }
+
+  /* ---------- 模拟后端：没有真 token 时保证界面可用 ---------- */
+  function cloudIsMock(token) { return /^mock/i.test(String(token || '')); }
+  function cloudMockDb() {
+    try { return JSON.parse(safeGet(CLOUD_MOCK_DB) || '{}') || {}; } catch (e) { return {}; }
+  }
+  function cloudMockSave(db) { safeSet(CLOUD_MOCK_DB, JSON.stringify(db)); }
+  function cloudMockGists(token) {
+    var db = cloudMockDb();
+    if (!db[token]) db[token] = { gists: {}, seq: 1 };
+    return { db: db, bucket: db[token] };
+  }
+  function cloudMockRequest(token, method, path, body) {
+    return new Promise(function (resolve) { setTimeout(resolve, 240); }).then(function () {
+      var t = String(token || '').toLowerCase();
+      if (t.indexOf('invalid') >= 0) throw cloudErr('TOKEN', '模拟：token 无效');
+      if (t.indexOf('rate') >= 0) throw cloudErr('RATE', '模拟：触发限流');
+      if (t.indexOf('offline') >= 0) throw cloudErr('NETWORK', '模拟：网络失败');
+      var box = cloudMockGists(token);
+      var bucket = box.bucket;
+      if (method === 'GET' && path.indexOf('/gists?') === 0) {
+        var list = Object.keys(bucket.gists).map(function (id) { return bucket.gists[id]; });
+        cloudMockSave(box.db);
+        return list;
+      }
+      if (method === 'POST' && path === '/gists') {
+        var id = 'mock' + (1000 + bucket.seq++) + 'abcdef012345';
+        bucket.gists[id] = {
+          id: id,
+          description: (body && body.description) || '',
+          public: false,
+          files: (body && body.files) || {},
+          updated_at: new Date().toISOString()
+        };
+        cloudMockSave(box.db);
+        return bucket.gists[id];
+      }
+      var m = path.match(/^\/gists\/([^/?]+)$/);
+      if (m) {
+        var g = bucket.gists[m[1]];
+        if (!g) throw cloudErr('MISSING', '模拟：gist 已被删除');
+        if (method === 'PATCH') {
+          if (body && body.files && body.files[GIST_FILE]) g.files[GIST_FILE] = body.files[GIST_FILE];
+          if (body && typeof body.description === 'string') g.description = body.description;
+          g.updated_at = new Date().toISOString();
+          cloudMockSave(box.db);
+        }
+        return g;
+      }
+      throw cloudErr('HTTP', '模拟：接口异常');
+    });
+  }
+
+  /* ---------- 真实 API 封装 ---------- */
+  function cloudRequest(token, method, path, body) {
+    var opt = {
+      method: method,
+      headers: {
+        'Authorization': 'token ' + token,
+        'Accept': 'application/vnd.github+json'
+      }
+    };
+    if (body) {
+      opt.headers['Content-Type'] = 'application/json';
+      opt.body = JSON.stringify(body);
+    }
+    return fetch(GIST_API + path, opt).then(function (res) {
+      return res.text().then(function (txt) {
+        var data = null;
+        try { data = txt ? JSON.parse(txt) : null; } catch (e) { data = null; }
+        if (res.ok) return data;
+        var remain = res.headers.get('x-ratelimit-remaining');
+        if (res.status === 401) throw cloudErr('TOKEN', 'token 无效（401）');
+        if (res.status === 403) {
+          if (remain === '0' || /rate limit/i.test(txt || '')) throw cloudErr('RATE', '触发限流（403）');
+          throw cloudErr('FORBIDDEN', '权限不足（403）');
+        }
+        if (res.status === 404) throw cloudErr('MISSING', 'gist 不存在（404）');
+        if (res.status === 422) throw cloudErr('BAD', '写入被拒绝（422）');
+        throw cloudErr('HTTP', '接口异常（' + res.status + '）');
+      });
+    }, function () {
+      throw cloudErr('NETWORK', '网络失败');
+    });
+  }
+
+  function cloudApi(token, method, path, body) {
+    return (cloudIsMock(token) ? cloudMockRequest : cloudRequest)(token, method, path, body);
+  }
+
+  function cloudFindGist(token) {
+    return cloudApi(token, 'GET', '/gists?per_page=100&page=1').then(function (list) {
+      var arr = Array.isArray(list) ? list : [];
+      for (var i = 0; i < arr.length; i++) {
+        if (String(arr[i].description || '').indexOf(GIST_MARK) >= 0) return arr[i];
+      }
+      return null;
+    });
+  }
+  function cloudCreateGist(token, payload) {
+    var files = {};
+    files[GIST_FILE] = { content: payload };
+    return cloudApi(token, 'POST', '/gists', {
+      description: GIST_MARK + ' · Life OS 云同步数据（私有，请勿删除）',
+      public: false,
+      files: files
+    });
+  }
+  function cloudFetchGist(token, id) { return cloudApi(token, 'GET', '/gists/' + id); }
+  function cloudPutGist(token, id, payload) {
+    var files = {};
+    files[GIST_FILE] = { content: payload };
+    return cloudApi(token, 'PATCH', '/gists/' + id, { files: files });
+  }
+
+  /* ---------- 云端载荷 ---------- */
+  function cloudPayload() {
+    return JSON.stringify({ app: 'life-os', v: 1, savedAt: new Date().toISOString(), data: state });
+  }
+  function cloudParse(text) {
+    var o = JSON.parse(text);
+    if (o && o.data && Array.isArray(o.data.pages) && o.data.pages.length) return o.data;
+    if (o && Array.isArray(o.pages) && o.pages.length) return o;
+    throw cloudErr('PAYLOAD', '云端数据格式不正确');
+  }
+  function cloudReadRemote(gist) {
+    var f = gist && gist.files && gist.files[GIST_FILE];
+    if (!f) throw cloudErr('NOFILE', '云端没有数据文件');
+    if (f.truncated && f.raw_url) {
+      return fetch(f.raw_url).then(function (r) { return r.text(); }, function () {
+        throw cloudErr('NETWORK', '拉取云端文件失败');
+      });
+    }
+    return Promise.resolve(String(f.content || ''));
+  }
+
+  /* ---------- 时间显示 ---------- */
+  function cloudFmtTime(ts) {
+    if (!ts) return '—';
+    var d = new Date(ts);
+    if (isNaN(d.getTime())) return '—';
+    function p(n) { return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
+      ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+
+  /* ---------- 状态 ---------- */
+  function cloudStatusInfo() {
+    var cfg = readCloud();
+    if (!cfg) return { key: 'off', text: '未绑定' };
+    if (cloudBusy > 0) return { key: 'busy', text: '同步中' };
+    if (!cfg.lastSyncRev) return { key: 'new', text: '待首次同步' };
+    if (cloudFp(state) !== cfg.lastSyncRev) return { key: 'dirty', text: cfg.auto ? '改动待同步' : '有本地改动' };
+    if (cfg.auto) return { key: 'auto', text: '已开启自动同步' };
+    return { key: 'ok', text: '已同步' };
+  }
+
+  function updateCloudEntry() {
+    var btn = $('#btn-cloud');
+    if (!btn) return;
+    var ico = $('#cloud-ico');
+    if (ico && !ico.getAttribute('data-ready')) {
+      ico.innerHTML = icon('cloud');
+      ico.setAttribute('data-ready', '1');
+    }
+    var st = cloudStatusInfo();
+    btn.setAttribute('data-state', st.key);
+    var txt = $('#cloud-state');
+    if (txt) txt.textContent = st.text;
+    btn.title = '云同步（GitHub Gist）· ' + st.text;
+    btn.setAttribute('aria-label', '云同步，当前状态：' + st.text);
+  }
+
+  /* ---------- 保存后的联动：打点 + 自动同步 ---------- */
+  function cloudAfterSave() {
+    if (cloudSuppress) return;
+    cloudStampPages();
+    updateCloudEntry();
+    if (!readCloud()) return;
+    cloudScheduleAuto();
+  }
+  function cloudScheduleAuto() {
+    var cfg = readCloud();
+    if (!cfg || !cfg.auto) return;
+    clearTimeout(cloudAutoTimer);
+    cloudAutoTimer = setTimeout(function () {
+      var c = readCloud();
+      if (!c || !c.auto) return;
+      cloudPush({ silent: true });
+    }, 3000);
+  }
+
+  /* ---------- 消息区（全部在面板内展示，不用原生 alert） ---------- */
+  var CLOUD_MSG_ACT = { recreate: '重新创建 Gist' };
+  function cloudMsg(type, text, action) {
+    if (!text) { cloudUi.msg = null; }
+    else cloudUi.msg = { type: type || 'info', text: text, action: action || '' };
+    paintCloudMsg();
+  }
+  function paintCloudMsg() {
+    var box = $('#cloud-msg');
+    if (!box) return;
+    var m = cloudUi.msg;
+    if (!m) { box.hidden = true; box.className = 'cloud-msg'; box.innerHTML = ''; return; }
+    box.hidden = false;
+    box.className = 'cloud-msg is-' + m.type;
+    box.innerHTML = '<span class="cm-text">' + esc(m.text) + '</span>' +
+      (m.action ? '<button class="cm-act" type="button" data-cloud="' + esc(m.action) + '">' +
+        esc(CLOUD_MSG_ACT[m.action] || '处理') + '</button>' : '');
+  }
+  function cloudFail(e) {
+    var code = e && e.code;
+    var map = {
+      TOKEN: ['err', 'Token 无效或已过期。请到 GitHub 重新生成一个 classic token，只勾选 gist 权限，再回到这里重新绑定。'],
+      RATE: ['warn', 'GitHub 接口调用过于频繁，已被临时限流。请等 1 小时左右再试，期间不要反复点按钮。'],
+      FORBIDDEN: ['err', 'GitHub 拒绝了这次请求（403）。多数情况是 token 没有勾选 gist 权限，请重新生成后绑定。'],
+      MISSING: ['err', '云端 Gist 不存在，可能已在 GitHub 上被删除。可以按当前数据重新创建一个。', 'recreate'],
+      NOFILE: ['warn', '云端 Gist 里还没有 lifeos-data.json。先点「上传本机」把数据写上去。'],
+      NETWORK: ['err', '网络不通，没能连上 GitHub。请检查网络或代理后稍等再试。'],
+      PAYLOAD: ['err', '云端文件内容无法解析，可能被其他程序改写过。可以用「上传本机」覆盖它。'],
+      BAD: ['err', 'GitHub 拒绝写入（422），请确认 token 具备 gist 权限。']
+    };
+    var m = map[code] || ['err', (e && e.message) || '同步失败，请稍后重试'];
+    cloudMsg(m[0], m[1], m[2]);
+  }
+
+  /* ---------- 面板 HTML ---------- */
+  function cloudHeadHtml() {
+    return '<h3 class="cloud-h3">云同步<span class="cloud-tag">GitHub Gist</span></h3>';
+  }
+
+  function cloudBindHtml() {
+    return cloudHeadHtml() +
+      '<p class="sub">换电脑、换浏览器时从一个私有 Gist 找回数据。浏览器直连 GitHub，token 只存本机，也不会写进导出备份。</p>' +
+      '<div class="cloud-field">' +
+        '<div class="cloud-field-label">GitHub Token<small>classic token · 只勾 gist 权限</small></div>' +
+        '<div class="cloud-input">' +
+          '<input id="cloud-token" class="cloud-in" type="' + (cloudDraft.reveal ? 'text' : 'password') + '"' +
+            ' placeholder="ghp_xxxxxxxxxxxx" autocomplete="off" spellcheck="false" value="' + esc(cloudDraft.token) + '">' +
+          '<button class="cloud-eye" type="button" data-cloud="eye" title="' +
+            (cloudDraft.reveal ? '隐藏 token' : '显示 token') + '" aria-label="' +
+            (cloudDraft.reveal ? '隐藏 token' : '显示 token') + '">' +
+            icon(cloudDraft.reveal ? 'eyeOff' : 'eye') + '</button>' +
+        '</div>' +
+      '</div>' +
+      '<ol class="cloud-steps">' +
+        '<li>GitHub → Settings → Developer settings → Personal access tokens → <b>Tokens (classic)</b></li>' +
+        '<li>Generate new token，<b>只勾选 gist</b>，生成后复制</li>' +
+        '<li>回到这里粘贴并绑定：会自动查找描述含 <code>' + GIST_MARK + '</code> 的私有 Gist，没有就新建一个</li>' +
+      '</ol>' +
+      '<div class="cloud-msg" id="cloud-msg" hidden></div>' +
+      '<p class="cloud-tip">还没准备 token？输入 <code>mock-demo</code> 可走本机模拟，界面与流程一致，数据不出本机。</p>' +
+      '<div class="sheet-actions">' +
+        '<button class="ghost-btn" type="button" data-close>取消</button>' +
+        '<button class="solid-btn" type="button" data-cloud="bind">绑定</button>' +
+      '</div>';
+  }
+
+  function cloudMainHtml() {
+    var cfg = readCloud();
+    var st = cloudStatusInfo();
+    var snap = cloudSnapRead();
+    var gid = String(cfg.gistId || '');
+    var shortId = gid.length > 8 ? gid.slice(0, 8) + '…' : gid;
+    return cloudHeadHtml() +
+      '<p class="sub">数据存在你自己的私有 Gist 里，只有绑定同一个 token 的设备能读到。</p>' +
+      '<div class="cloud-card">' +
+        '<div class="cc-row"><span>状态</span><b class="cc-state" data-state="' + st.key + '">' + esc(st.text) + '</b></div>' +
+        '<div class="cc-row"><span>Gist</span><b class="cc-mono" title="' + esc(gid) + '">' + esc(shortId) + '</b></div>' +
+        '<div class="cc-row"><span>最后同步</span><b>' + esc(cloudFmtTime(cfg.lastSyncAt)) + '</b></div>' +
+        '<div class="cc-row"><span>账号</span><b class="cc-mono">' + esc(currentEmail() || '本机') + '</b></div>' +
+      '</div>' +
+      '<div class="cloud-switch">' +
+        '<div class="cs-txt"><b>自动同步</b><small>开启后改动 3 秒防抖静默上传；打开页面时若云端更新且本机没动过，会自动拉取</small></div>' +
+        '<label class="cs-sw"><input type="checkbox" id="cloud-auto"' + (cfg.auto ? ' checked' : '') + '>' +
+          '<span class="cs-track"><span class="cs-dot"></span></span></label>' +
+      '</div>' +
+      '<div class="cloud-acts">' +
+        '<button class="solid-btn" type="button" data-cloud="push">上传本机</button>' +
+        '<button class="ghost-btn" type="button" data-cloud="pull">下载云端</button>' +
+        '<button class="ghost-btn" type="button" data-cloud="sync">双向同步</button>' +
+      '</div>' +
+      '<div class="cloud-msg" id="cloud-msg" hidden></div>' +
+      (snap ? '<div class="cloud-snap"><span>覆盖前快照 · ' + esc(cloudFmtTime(snap.at)) + '</span>' +
+        '<button type="button" class="cm-act" data-cloud="restore">恢复覆盖前数据</button></div>' : '') +
+      '<div class="sheet-actions">' +
+        '<button class="ghost-btn cloud-unbind" type="button" data-cloud="unbind">解除绑定</button>' +
+        '<button class="solid-btn" type="button" data-close>完成</button>' +
+      '</div>';
+  }
+
+  function cloudConfirmPullHtml() {
+    var p = cloudPending;
+    var data = p && p.data;
+    var pages = data && data.pages ? data.pages.length : 0;
+    var mods = 0;
+    (data && data.pages ? data.pages : []).forEach(function (pg) { mods += (pg.modules || []).length; });
+    var localMods = allModules().length;
+    return cloudHeadHtml() +
+      '<h4 class="cloud-h4">用云端数据覆盖本机？</h4>' +
+      '<p class="sub">云端有 ' + pages + ' 个页签 / ' + mods + ' 个模块，本机现有 ' + state.pages.length +
+        ' 个页签 / ' + localMods + ' 个模块。覆盖后本机内容会被替换，覆盖前会自动留一份快照，可一键恢复。</p>' +
+      '<div class="cloud-msg" id="cloud-msg" hidden></div>' +
+      '<div class="sheet-actions">' +
+        '<button class="ghost-btn" type="button" data-cloud="back">取消</button>' +
+        '<button class="solid-btn" type="button" data-cloud="pull-do">覆盖本机</button>' +
+      '</div>';
+  }
+
+  function cloudConflictHtml() {
+    var cfg = readCloud();
+    return cloudHeadHtml() +
+      '<h4 class="cloud-h4">两端都有新改动</h4>' +
+      '<p class="sub">本机和云端在上次同步（' + esc(cloudFmtTime(cfg && cfg.lastSyncAt)) +
+        '）之后都改过，需要你决定以哪边为准。三个选项都不会删除云端 Gist，只是决定数据版本。</p>' +
+      '<div class="cloud-conflict">' +
+        '<button type="button" data-cloud="conflict-local">' +
+          '<b>用本机覆盖云端</b><small>把当前这台电脑的数据上传，云端旧版本被替换；另一台设备下次打开需手动下载</small></button>' +
+        '<button type="button" data-cloud="conflict-remote">' +
+          '<b>用云端覆盖本机</b><small>放弃这台电脑上的改动，恢复云端版本；覆盖前会自动留本机快照，可一键恢复</small></button>' +
+        '<button type="button" data-cloud="conflict-merge">' +
+          '<b>合并（按页面取较新）</b><small>逐页比较修改时间，各自保留较新的一份，然后上传覆盖云端；其余设置以本机为准</small></button>' +
+      '</div>' +
+      '<div class="cloud-msg" id="cloud-msg" hidden></div>' +
+      '<div class="sheet-actions">' +
+        '<button class="ghost-btn" type="button" data-cloud="back">返回</button>' +
+      '</div>';
+  }
+
+  function cloudConfirmUnbindHtml() {
+    return cloudHeadHtml() +
+      '<h4 class="cloud-h4">解除绑定？</h4>' +
+      '<p class="sub">本机保存的 token 与覆盖前快照会被删除；云端 Gist 与本地数据都不动。之后重新绑定同一个 token 就能继续同步。</p>' +
+      '<div class="cloud-msg" id="cloud-msg" hidden></div>' +
+      '<div class="sheet-actions">' +
+        '<button class="ghost-btn" type="button" data-cloud="back">取消</button>' +
+        '<button class="solid-btn cloud-danger" type="button" data-cloud="unbind-do">解除绑定</button>' +
+      '</div>';
+  }
+
+  /* ---------- 面板绘制与事件 ---------- */
+  function cloudIsOpen() {
+    var ov = $('#overlay');
+    return !!(ov && !ov.hidden && ov.classList.contains('cloud-open'));
+  }
+
+  /* 后台（静默）同步时只刷新数据，不打扰用户：面板未打开就不重绘 */
+  function cloudRepaint() {
+    if (cloudIsOpen()) cloudDraw();
+    else updateCloudEntry();
+  }
+
+  function cloudDraw() {
+    var html;
+    if (!readCloud()) html = cloudBindHtml();
+    else if (cloudUi.view === 'conflict') html = cloudConflictHtml();
+    else if (cloudUi.view === 'confirm-pull') html = cloudConfirmPullHtml();
+    else if (cloudUi.view === 'confirm-unbind') html = cloudConfirmUnbindHtml();
+    else html = cloudMainHtml();
+    if (overlay) overlay.classList.add('cloud-open');
+    openDialog(html, cloudMount);
+    paintCloudMsg();
+  }
+
+  function cloudMount(sheet) {
+    var input = $('#cloud-token', sheet);
+    if (input) {
+      input.addEventListener('input', function () { cloudDraft.token = input.value; });
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); cloudBind(); }
+      });
+    }
+    var auto = $('#cloud-auto', sheet);
+    if (auto) {
+      auto.addEventListener('change', function () {
+        var cfg = readCloud();
+        if (!cfg) return;
+        cfg.auto = !!auto.checked;
+        writeCloud(cfg);
+        updateCloudEntry();
+        if (cfg.auto) {
+          cloudMsg('ok', '已开启自动同步：改动 3 秒后自动上传');
+          cloudScheduleAuto();
+        } else {
+          clearTimeout(cloudAutoTimer);
+          cloudMsg('ok', '已关闭自动同步，之后请手动点「双向同步」');
+        }
+        cloudRepaint();
+      });
+    }
+    sheet.addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('[data-cloud]') : null;
+      if (!b || !sheet.contains(b)) return;
+      cloudAction(b.getAttribute('data-cloud'));
+    });
+  }
+
+  function cloudAction(name) {
+    switch (name) {
+      case 'eye': {
+        cloudDraft.reveal = !cloudDraft.reveal;
+        var inp = $('#cloud-token');
+        var btn = $('[data-cloud="eye"]');
+        if (inp) inp.type = cloudDraft.reveal ? 'text' : 'password';
+        if (btn) {
+          btn.innerHTML = icon(cloudDraft.reveal ? 'eyeOff' : 'eye');
+          btn.title = cloudDraft.reveal ? '隐藏 token' : '显示 token';
+          btn.setAttribute('aria-label', btn.title);
+        }
+        break;
+      }
+      case 'bind': cloudBind(); break;
+      case 'push': cloudPush({ silent: false }); break;
+      case 'pull': cloudBeginPull(); break;
+      case 'sync': cloudSync(); break;
+      case 'pull-do':
+        if (cloudPending) cloudApplyRemote(cloudPending.data, cloudPending.fp, false);
+        else cloudMsg('err', '云端数据已失效，请重新点「双向同步」');
+        break;
+      case 'conflict-local': cloudResolve('local'); break;
+      case 'conflict-remote': cloudResolve('remote'); break;
+      case 'conflict-merge': cloudResolve('merge'); break;
+      case 'recreate': cloudRecreate(); break;
+      case 'restore': cloudRestore(); break;
+      case 'unbind': cloudUi.view = 'confirm-unbind'; cloudMsg(null); cloudDraw(); break;
+      case 'unbind-do': cloudDoUnbind(); break;
+      case 'back': cloudUi.view = 'main'; cloudPending = null; cloudMsg(null); cloudDraw(); break;
+    }
+  }
+
+  /* ---------- 绑定 ---------- */
+  function cloudBind() {
+    var input = $('#cloud-token');
+    if (input) cloudDraft.token = input.value;
+    var token = String(cloudDraft.token || '').trim();
+    if (!token) { cloudMsg('err', '请先粘贴 GitHub token'); return; }
+    if (!cloudIsMock(token) && !/^(ghp_|github_pat_)/.test(token)) {
+      cloudMsg('warn', '经典 token 一般以 ghp_ 开头，请确认已完整复制（首尾缺字符都会失败）');
+      return;
+    }
+    cloudBusy++;
+    cloudMsg('info', '正在验证 token 并查找云端 Gist…');
+    cloudFindGist(token).then(function (gist) {
+      if (gist) return { gist: gist, created: false };
+      return cloudCreateGist(token, cloudPayload()).then(function (g) { return { gist: g, created: true }; });
+    }).then(function (r) {
+      var g = r.gist;
+      var cfg = {
+        token: token,
+        gistId: g.id,
+        mock: cloudIsMock(token),
+        auto: false,
+        createdAt: Date.now(),
+        lastSyncAt: null,
+        lastSyncRev: null,
+        remoteRev: null
+      };
+      writeCloud(cfg);
+      var localFp = cloudFp(state);
+      return cloudReadRemote(g).then(function (text) { return text; }, function () { return ''; })
+        .then(function (text) {
+          cloudBusy--;
+          var remoteData = null, rfp = null;
+          if (text) { try { remoteData = cloudParse(text); rfp = cloudFp(remoteData); } catch (e) { rfp = null; } }
+          cloudUi.view = 'main';
+          if (r.created || (rfp && rfp === localFp)) {
+            cfg.lastSyncRev = localFp;
+            cfg.remoteRev = localFp;
+            cfg.lastSyncAt = Date.now();
+            cfg.remoteUpdatedAt = g.updated_at || null;
+            writeCloud(cfg);
+            updateCloudEntry();
+            cloudMsg('ok', r.created
+              ? '绑定成功，已创建私有 Gist（ID ' + String(g.id).slice(0, 8) + '）并写入当前数据'
+              : '绑定成功，云端已经是同一份数据');
+          } else if (rfp) {
+            cfg.remoteRev = rfp;
+            cfg.remoteUpdatedAt = g.updated_at || null;
+            writeCloud(cfg);
+            updateCloudEntry();
+            cloudMsg('warn', '绑定成功。云端已有一份其它设备的数据，请选择方向：点「下载云端」覆盖本机，或「上传本机」覆盖云端。');
+          } else {
+            writeCloud(cfg);
+            updateCloudEntry();
+            cloudMsg('warn', '绑定成功，但云端 Gist 里还没有数据文件。点「上传本机」把当前数据写上去。');
+          }
+          toast('云同步已绑定');
+          cloudRepaint();
+        });
+    }).catch(function (e) {
+      cloudBusy--;
+      cloudFail(e);
+      cloudUi.view = 'main';
+      if (!readCloud()) {
+        /* 绑定失败：留在令牌输入界面，只更新消息 */
+        paintCloudMsg();
+      } else {
+        cloudRepaint();
+      }
+    });
+  }
+
+  /* ---------- 上传 ---------- */
+  function cloudPush(opts) {
+    opts = opts || {};
+    var cfg = readCloud();
+    if (!cfg) { cloudMsg('err', '尚未绑定 token，无法上传'); return Promise.resolve(); }
+    var localFp = cloudFp(state);
+    cloudBusy++;
+    if (!opts.silent) cloudMsg('info', '正在上传到云端…');
+    updateCloudEntry();
+    return cloudPutGist(cfg.token, cfg.gistId, cloudPayload()).then(function (gist) {
+      var c = readCloud() || cfg;
+      c.lastSyncRev = localFp;
+      c.remoteRev = localFp;
+      c.lastSyncAt = Date.now();
+      c.remoteUpdatedAt = (gist && gist.updated_at) || null;
+      writeCloud(c);
+      cloudBusy--;
+      updateCloudEntry();
+      toast(opts.silent ? '已自动同步到云端' : '已上传到云端 Gist');
+      cloudMsg('ok', '已上传 · ' + cloudFmtTime(c.lastSyncAt));
+      cloudUi.view = 'main';
+      cloudRepaint();
+    }).catch(function (e) {
+      cloudBusy--;
+      cloudFail(e);
+      updateCloudEntry();
+      if (!opts.silent) cloudRepaint();
+    });
+  }
+
+  /* ---------- 下载（拉取） ---------- */
+  function cloudBeginPull() {
+    var cfg = readCloud();
+    if (!cfg) { cloudMsg('err', '尚未绑定 token，无法下载'); return; }
+    cloudBusy++;
+    cloudMsg('info', '正在读取云端数据…');
+    updateCloudEntry();
+    cloudFetchGist(cfg.token, cfg.gistId).then(function (gist) {
+      return cloudReadRemote(gist);
+    }).then(function (text) {
+      var data = cloudParse(text);
+      cloudBusy--;
+      cloudPending = { data: data, fp: cloudFp(data) };
+      cloudUi.view = 'confirm-pull';
+      updateCloudEntry();
+      cloudMsg('warn', '下载会覆盖本机数据，请确认');
+      cloudRepaint();
+    }).catch(function (e) {
+      cloudBusy--;
+      cloudFail(e);
+      updateCloudEntry();
+      cloudRepaint();
+    });
+  }
+
+  function cloudApplyRemote(data, fp, silent) {
+    cloudSnapWrite();
+    cloudSuppress = true;
+    state = normalize(JSON.parse(JSON.stringify(data)));
+    save();
+    cloudSuppress = false;
+    cloudResetStamps(state);
+    renderNav();
+    renderPage();
+    var cfg = readCloud() || {};
+    cfg.lastSyncRev = fp;
+    cfg.remoteRev = fp;
+    cfg.lastSyncAt = Date.now();
+    writeCloud(cfg);
+    cloudPending = null;
+    cloudUi.view = 'main';
+    updateCloudEntry();
+    toast(silent ? '已自动同步云端数据' : '已用云端数据覆盖本机');
+    cloudMsg('ok', silent ? '已自动同步云端数据' : '已用云端数据覆盖本机，必要时可「恢复覆盖前数据」');
+    cloudRepaint();
+  }
+
+  /* ---------- 双向同步 ---------- */
+  function cloudSync() {
+    var cfg = readCloud();
+    if (!cfg) { cloudMsg('err', '尚未绑定 token'); return; }
+    cloudBusy++;
+    cloudMsg('info', '正在比较本机与云端…');
+    updateCloudEntry();
+    cloudFetchGist(cfg.token, cfg.gistId).then(function (gist) {
+      return cloudReadRemote(gist).then(function (text) { return { gist: gist, text: text }; });
+    }).then(function (r) {
+      cloudBusy--;
+      var data = null, rfp = null;
+      try { data = cloudParse(r.text); rfp = cloudFp(data); } catch (e) { data = null; }
+      var localFp = cloudFp(state);
+      var c = readCloud() || cfg;
+      if (!rfp) { cloudPush({ silent: false }); return; }
+      if (rfp === localFp) {
+        c.lastSyncRev = localFp;
+        c.remoteRev = rfp;
+        c.lastSyncAt = Date.now();
+        c.remoteUpdatedAt = r.gist.updated_at || null;
+        writeCloud(c);
+        updateCloudEntry();
+        cloudMsg('ok', '两端数据一致，无需同步');
+        cloudRepaint();
+        return;
+      }
+      var localDirty = c.lastSyncRev ? localFp !== c.lastSyncRev : true;
+      var remoteDirty = c.remoteRev ? rfp !== c.remoteRev : true;
+      cloudPending = { data: data, fp: rfp };
+      if (localDirty && remoteDirty) {
+        cloudUi.view = 'conflict';
+        updateCloudEntry();
+        cloudMsg('warn', '两端在上次同步后都有改动，请选择保留方式');
+        cloudRepaint();
+        return;
+      }
+      if (localDirty) { cloudPush({ silent: false }); return; }
+      cloudUi.view = 'confirm-pull';
+      updateCloudEntry();
+      cloudMsg('warn', '云端有更新，覆盖本机前请确认');
+      cloudRepaint();
+    }).catch(function (e) {
+      cloudBusy--;
+      cloudFail(e);
+      updateCloudEntry();
+      cloudRepaint();
+    });
+  }
+
+  function cloudResolve(kind) {
+    var p = cloudPending;
+    if (!readCloud()) { cloudMsg('err', '尚未绑定 token'); return; }
+    if (kind === 'local') { cloudUi.view = 'main'; cloudPush({ silent: false }); return; }
+    if (!p || !p.data) { cloudMsg('err', '云端数据已失效，请重新点「双向同步」'); return; }
+    if (kind === 'remote') { cloudApplyRemote(p.data, p.fp, false); return; }
+    cloudSuppress = true;
+    state = normalize(cloudMerge(state, p.data));
+    save();
+    cloudSuppress = false;
+    cloudResetStamps(state);
+    renderNav();
+    renderPage();
+    cloudUi.view = 'main';
+    cloudMsg('info', '已按页面合并，正在上传合并结果…');
+    cloudRepaint();
+    cloudPush({ silent: false });
+  }
+
+  /* 逐页取较新：本机作骨架，同 id 页面对比 up 时间戳，云端独有页补在后面 */
+  function cloudMerge(local, remote) {
+    var out = JSON.parse(JSON.stringify(local));
+    var rmap = {};
+    (remote.pages || []).forEach(function (p) { if (p && p.id) rmap[p.id] = p; });
+    var merged = [], seen = {};
+    (local.pages || []).forEach(function (lp) {
+      var rp = rmap[lp.id];
+      seen[lp.id] = true;
+      if (!rp) { merged.push(lp); return; }
+      if (cloudStable(lp) === cloudStable(rp)) { merged.push(lp); return; }
+      merged.push((Number(rp.up) || 0) > (Number(lp.up) || 0) ? rp : lp);
+    });
+    (remote.pages || []).forEach(function (rp) {
+      if (rp && rp.id && !seen[rp.id]) merged.push(rp);
+    });
+    out.pages = merged;
+    return out;
+  }
+
+  /* ---------- 重新创建 / 恢复 / 解除绑定 ---------- */
+  function cloudRecreate() {
+    var cfg = readCloud() || {};
+    if (!cfg.token) { cloudMsg('err', '尚未绑定 token'); return; }
+    cloudBusy++;
+    cloudMsg('info', '正在创建新的私有 Gist…');
+    cloudCreateGist(cfg.token, cloudPayload()).then(function (gist) {
+      cfg.gistId = gist.id;
+      var fp = cloudFp(state);
+      cfg.lastSyncRev = fp;
+      cfg.remoteRev = fp;
+      cfg.lastSyncAt = Date.now();
+      cfg.remoteUpdatedAt = gist.updated_at || null;
+      writeCloud(cfg);
+      cloudBusy--;
+      updateCloudEntry();
+      toast('已重新创建云端 Gist');
+      cloudMsg('ok', '已创建新的私有 Gist（ID ' + String(gist.id).slice(0, 8) + '）并写入当前数据');
+      cloudUi.view = 'main';
+      cloudRepaint();
+    }).catch(function (e) {
+      cloudBusy--;
+      cloudFail(e);
+      updateCloudEntry();
+      cloudRepaint();
+    });
+  }
+
+  function cloudRestore() {
+    var snap = cloudSnapRead();
+    if (!snap) { cloudMsg('err', '没有可用的覆盖前快照'); return; }
+    cloudSuppress = true;
+    state = normalize(JSON.parse(JSON.stringify(snap.data)));
+    save();
+    cloudSuppress = false;
+    cloudResetStamps(state);
+    renderNav();
+    renderPage();
+    updateCloudEntry();
+    toast('已恢复覆盖前的本机数据');
+    cloudMsg('ok', '已恢复到覆盖前的本机数据（' + cloudFmtTime(snap.at) + '）');
+    cloudUi.view = 'main';
+    cloudRepaint();
+  }
+
+  function cloudDoUnbind() {
+    writeCloud(null);
+    cloudSnapClear();
+    clearTimeout(cloudAutoTimer);
+    cloudAutoTimer = null;
+    cloudPending = null;
+    cloudDraft = { token: '', reveal: false };
+    cloudUi.view = 'main';
+    cloudMsg(null);
+    updateCloudEntry();
+    toast('已解除云同步绑定，本地数据未受影响');
+    cloudUi.view = 'main';
+    cloudRepaint();
+  }
+
+  /* ---------- 打开面板 / 启动时对齐 ---------- */
+  function openCloudPanel() {
+    cloudUi.view = 'main';
+    cloudPending = null;
+    cloudDraft.token = '';
+    cloudDraft.reveal = false;
+    cloudMsg(null);
+    cloudDraw();
+  }
+
+  function cloudAfterEnter() {
+    updateCloudEntry();
+    var cfg = readCloud();
+    if (!cfg) return;
+    /* 打开页面：云端更新且本机自上次同步后没动过时，自动拉一次 */
+    cloudFetchGist(cfg.token, cfg.gistId).then(function (gist) {
+      return cloudReadRemote(gist).then(function (text) { return text; }, function () { return ''; });
+    }).then(function (text) {
+      var c = readCloud();
+      if (!c || !text) return;
+      var data = null, rfp = null;
+      try { data = cloudParse(text); rfp = cloudFp(data); } catch (e) { return; }
+      var localFp = cloudFp(state);
+      if (rfp === localFp) {
+        c.lastSyncRev = localFp;
+        c.remoteRev = rfp;
+        c.lastSyncAt = c.lastSyncAt || Date.now();
+        writeCloud(c);
+        updateCloudEntry();
+        return;
+      }
+      var localClean = !!c.lastSyncRev && localFp === c.lastSyncRev;
+      var remoteNew = !c.remoteRev || rfp !== c.remoteRev;
+      if (localClean && remoteNew) {
+        cloudApplyRemote(data, rfp, true);
+      } else {
+        updateCloudEntry();
+      }
+    }).catch(function () { /* 启动时静默失败，不打扰 */ });
+  }
+
+  /* ---------------------------------------------------------
      交互
      --------------------------------------------------------- */
   function toast(msg, ico) {
@@ -3095,6 +3985,14 @@
       var brand = e.target.closest('.brand');
       if (brand) e.preventDefault();
     });
+
+    var cloudBtn = $('#btn-cloud');
+    if (cloudBtn) {
+      cloudBtn.addEventListener('click', function () {
+        closeSidebar();
+        openCloudPanel();
+      });
+    }
 
     $('#file-import').addEventListener('change', function (e) {
       var f = e.target.files && e.target.files[0];
@@ -3290,6 +4188,8 @@
     applyNavFold();
     renderNav();
     renderPage();
+    cloudResetStamps(state);
+    cloudAfterEnter();
     if (inherited) toast('已把原有本机数据继承到 ' + email);
     else if (isNew) toast('已为该邮箱创建本地账号');
     else toast('欢迎回来，' + email);
