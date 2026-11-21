@@ -100,8 +100,15 @@
   function applyTheme(mode, silent) {
     var m = mode || themePref();
     var real = resolvedTheme(m);
-    document.documentElement.setAttribute('data-theme', real);
-    document.documentElement.style.colorScheme = real;
+    /* 换主题瞬间：临时开启全局颜色过渡，图标做一次旋转 */
+    var rootEl = document.documentElement;
+    if (motionOK()) {
+      rootEl.classList.add('theme-fade');
+      clearTimeout(themeFadeTimer);
+      themeFadeTimer = setTimeout(function () { rootEl.classList.remove('theme-fade'); }, 320);
+    }
+    rootEl.setAttribute('data-theme', real);
+    rootEl.style.colorScheme = real;
     var meta = document.getElementById('theme-color');
     if (meta) meta.setAttribute('content', real === 'dark' ? '#0b0b0d' : '#fbfbfd');
 
@@ -112,11 +119,19 @@
       btn.title = '外观：' + label + '（点击切换）';
       btn.setAttribute('aria-label', '外观：' + label + '，点击切换');
       btn.dataset.theme = m;
+      if (!silent && motionOK()) {
+        btn.classList.remove('turning');
+        void btn.offsetWidth;
+        btn.classList.add('turning');
+        setTimeout(function () { btn.classList.remove('turning'); }, 320);
+      }
     }
     if (!silent) {
       toast('外观已切换为「' + (m === 'auto' ? '跟随系统' : label2(m)) + '」', icon(m === 'auto' ? 'auto' : (m === 'light' ? 'sun' : 'moon')));
     }
   }
+
+  var themeFadeTimer = 0;
 
   function label2(m) { return m === 'light' ? '浅色' : '深色'; }
 
@@ -166,6 +181,36 @@
   function $(s, r) { return (r || document).querySelector(s); }
   function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
   function clamp(n, a, b) { return Math.min(b, Math.max(a, n)); }
+
+  /* 数字滚动递增：data-to 为目标值，260ms 内缓出逼近（reduced-motion 下直接落位） */
+  function animateNums(scope, sel) {
+    $$(sel, scope).forEach(function (el) {
+      var to = Number(el.dataset.to || 0);
+      if (!isFinite(to)) return;
+      if (!motionOK()) { el.textContent = to; return; }
+      var t0 = 0;
+      function step(t) {
+        if (!t0) t0 = t;
+        var p = Math.min(1, (t - t0) / 260);
+        el.textContent = Math.round(to * (1 - Math.pow(1 - p, 3)));
+        if (p < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    });
+  }
+
+  /* 进度条从 0 增长到 data-w */
+  function animateBars(scope, sel) {
+    var bars = $$(sel, scope);
+    if (!bars.length) return;
+    if (!motionOK()) {
+      bars.forEach(function (b) { b.style.width = (b.dataset.w || 0) + '%'; });
+      return;
+    }
+    requestAnimationFrame(function () {
+      bars.forEach(function (b) { b.style.width = (b.dataset.w || 0) + '%'; });
+    });
+  }
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -184,6 +229,27 @@
   var WEEK = ['日', '一', '二', '三', '四', '五', '六'];
   function cnDate(d) { return d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日'; }
   function cnShort(d) { return (d.getMonth() + 1) + '月' + d.getDate() + '日 · 周' + WEEK[d.getDay()]; }
+  /* 日期 / 月份字符串工具：日程与月度计划共用同一套 'YYYY-MM-DD'、'YYYY-MM' 口径 */
+  function isDateStr(v) { return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v); }
+  function isMonthStr(v) { return typeof v === 'string' && /^\d{4}-\d{2}$/.test(v); }
+  function parseISO(s) {
+    var p = String(s || '').split('-');
+    return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]) || 1);
+  }
+  function shiftISO(s, n) {
+    var d = isDateStr(s) ? parseISO(s) : new Date();
+    d.setDate(d.getDate() + n);
+    return iso(d);
+  }
+  function shiftMonth(s, n) {
+    var p = (isMonthStr(s) ? s : monthKey(new Date())).split('-');
+    return monthKey(new Date(Number(p[0]), Number(p[1]) - 1 + n, 1));
+  }
+  function monthLabel(m) {
+    var p = String(m || '').split('-');
+    return p[0] + ' 年 ' + Math.max(1, Number(p[1]) || 1) + ' 月';
+  }
+  function shortDate(s) { return isDateStr(s) ? cnShort(parseISO(s)) : String(s || ''); }
   function greeting() {
     var h = new Date().getHours();
     if (h < 5) return '夜深了';
@@ -208,6 +274,10 @@
      状态
      --------------------------------------------------------- */
   var state;
+  /* 非 null 时表示正在渲染「每日日程」页，值为当前查看的 'YYYY-MM-DD' */
+  var dailyView = null;
+  /* 旧数据迁移标记：加载时若给日程任务补了 id / 日期，需立即落盘，保证引用串稳定 */
+  var dailyMigrated = false;
 
   var PAGE_ORDER = ['overview', 'daily', 'monthly', 'yearly', 'life8', 'review'];
 
@@ -263,6 +333,15 @@
       cus: !!foldSrc.cus,
       blocks: (foldSrc.blocks && typeof foldSrc.blocks === 'object' && !Array.isArray(foldSrc.blocks)) ? foldSrc.blocks : {}
     };
+    /* 每日日程当前查看的日期 / 月度计划当前查看的月份（跨刷新、跨月切换都靠这两项） */
+    s.settings.dailyDate = isDateStr(s.settings.dailyDate) ? s.settings.dailyDate : today();
+    s.settings.planMonth = isMonthStr(s.settings.planMonth) ? s.settings.planMonth : monthKey(new Date());
+    /* 月度计划清单：{ 'YYYY-MM': ['pageId::moduleId::itemId', ...] }，存引用不存副本 */
+    s.plan = (s.plan && typeof s.plan === 'object' && !Array.isArray(s.plan)) ? s.plan : {};
+    Object.keys(s.plan).forEach(function (k) {
+      if (!Array.isArray(s.plan[k])) { delete s.plan[k]; return; }
+      s.plan[k] = s.plan[k].filter(function (x) { return typeof x === 'string' && x.indexOf('::') > 0; });
+    });
     s.lines = (s.lines && typeof s.lines === 'object' && !Array.isArray(s.lines)) ? s.lines : {};
     if (typeof s.current !== 'string') s.current = 'overview';
     if (!Array.isArray(s.life8) || s.life8.length !== 8) {
@@ -289,6 +368,8 @@
       return p;
     });
     s.pages.forEach(function (pg) { normalizeOkrPage(pg); });
+    /* 旧数据兼容：为每日日程里的每条任务补稳定唯一 id 与所属日期，供月度计划引用 */
+    s.pages.forEach(function (pg) { migrateDailyTasks(pg, s); });
     s.pages = orderBuiltinPages(s.pages);
     if (!s.pages.some(function (p) { return p.id === s.current; })) s.current = s.pages[0].id;
     return s;
@@ -431,7 +512,7 @@
     });
     if (!cus.children.length) {
       var hint = document.createElement('div');
-      hint.className = 'nav-item';
+      hint.className = 'nav-item nav-hint';
       hint.style.cssText = 'color:var(--faint);font-size:12px;cursor:default';
       hint.innerHTML = '<span>还没有自定义页签</span>';
       cus.appendChild(hint);
@@ -707,6 +788,8 @@
     $('#page-title').setAttribute('aria-label', '当前页：' + page.name + '，点击重命名');
     document.title = page.name + ' · ' + (state.settings.appName || 'Life OS');
     canvas.innerHTML = '';
+    /* 每日日程页：所有日程模块只渲染「当前查看日期」的任务；其它页面为 null（渲染全部） */
+    dailyView = page.builtin === 'daily' ? (isDateStr(state.settings.dailyDate) ? state.settings.dailyDate : today()) : null;
 
     if (page.builtin === 'overview') canvas.appendChild(todayLineBlock());
 
@@ -722,6 +805,8 @@
     canvas.appendChild(hero);
 
     if (page.builtin === 'overview') canvas.appendChild(kpisBlock());
+    if (page.builtin === 'daily') canvas.appendChild(dailyBarBlock());
+    if (page.builtin === 'monthly') canvas.appendChild(agendaBlock());
     if (page.builtin === 'life8') canvas.appendChild(boardBlock());
     if (page.builtin === 'review') canvas.appendChild(loopBlock());
 
@@ -741,7 +826,6 @@
     page.modules.forEach(function (m, i) {
       var card = renderCard(m);
       card.classList.add('reveal');
-      card.style.animationDelay = (Math.min(i, 8) * 45) + 'ms';
       grid.appendChild(card);
     });
     modsWrap.appendChild(grid);
@@ -762,6 +846,10 @@
     observeReveal(canvas);
     // 卡片挂载到文档后再测量文本域高度（脱离文档时测不到高度）
     requestAnimationFrame(function () { autoGrow(canvas); });
+    // 页面切换：淡入 + 轻微上移（移除后强制回流以便反复触发）
+    canvas.classList.remove('page-enter');
+    void canvas.offsetWidth;
+    canvas.classList.add('page-enter');
     clearBusy();
   }
 
@@ -788,18 +876,23 @@
           h1: '把一年，过成<em>一件作品</em>。',
           lede: '六个维度、若干关键结果。年初定方向，年尾看的是「有没有真的推进」，而不是「有没有想过」。'
         };
-      case 'monthly':
+      case 'monthly': {
+        var pm = isMonthStr(state.settings.planMonth) ? state.settings.planMonth : monthKey(now);
+        var pmm = Number(pm.slice(5, 7));
         return {
-          eyebrow: '月度 · ' + now.getFullYear() + ' 年 ' + (now.getMonth() + 1) + ' 月',
-          h1: (now.getMonth() + 1) + ' 月，拆到<em>能立刻动手</em>。',
-          lede: '年度目标落到这个月，就变成几个可量化的结果和一张打卡网格。'
+          eyebrow: '月度 · ' + pm.slice(0, 4) + ' 年 ' + pmm + ' 月',
+          h1: pmm + ' 月，拆到<em>能立刻动手</em>。',
+          lede: '年度目标落到这个月，就变成几个可量化的结果和一张打卡网格；当月日程任务也会自动汇总到这里。'
         };
-      case 'daily':
+      }
+      case 'daily': {
+        var dd = isDateStr(state.settings.dailyDate) ? parseISO(state.settings.dailyDate) : now;
         return {
-          eyebrow: cnDate(now) + ' · 周' + WEEK[now.getDay()],
-          h1: '今天的<em>时间轴</em>。',
-          lede: '一天不需要很满，只需要有几段是真正专注的。'
+          eyebrow: cnDate(dd) + ' · 周' + WEEK[dd.getDay()],
+          h1: dd.getTime() === parseISO(today()).getTime() ? '今天的<em>时间轴</em>。' : esc(cnShort(dd)) + '，<em>这一天</em>。',
+          lede: '一天不需要很满，只需要有几段是真正专注的；这一天的任务会自动出现在月度计划里。'
         };
+      }
       case 'life8':
         return {
           eyebrow: '人生系统 · 八个抽屉',
@@ -819,6 +912,310 @@
           lede: '这一页的内容完全由你决定：加什么模块、放几个、怎么排序，都随你。'
         };
     }
+  }
+
+  /* ---------------------------------------------------------
+     每日日程 ⇄ 月度计划
+     同一份数据源：任务始终存在日程模块的 data.items 里，月度计划只存
+     'pageId::moduleId::itemId' 引用串，因此改文字 / 勾完成是双向同步的。
+     --------------------------------------------------------- */
+  function dailyPage() {
+    return state ? state.pages.filter(function (p) { return p.builtin === 'daily'; })[0] : null;
+  }
+
+  /* 每日日程页只显示「当前查看日期」的任务；其它页面显示全部（历史行为不变） */
+  function visibleDailyItems(list) {
+    var all = (list || []).filter(Boolean);
+    if (!dailyView) return all;
+    return all.filter(function (i) { return (i.date || '') === dailyView; });
+  }
+
+  function migrateDailyTasks(pg, s) {
+    if (!pg || pg.builtin !== 'daily') return;
+    var fallback = (s && s.settings && isDateStr(s.settings.dailyDate)) ? s.settings.dailyDate : today();
+    /* 旧数据可能没有 id（或历史上有重复 id），这里统一补全并去重，
+       引用串 'pageId::moduleId::itemId' 才能稳定不失效 */
+    var used = {};
+    (pg.modules || []).forEach(function (m) {
+      if (!m || (m.type !== 'todo' && m.type !== 'timeline')) return;
+      m.data = (m.data && typeof m.data === 'object') ? m.data : (blankData(m.type) || {});
+      var modDate = isDateStr(m.data.date) ? m.data.date : fallback;
+      var items = Array.isArray(m.data.items) ? m.data.items.filter(Boolean) : [];
+      items.forEach(function (it) {
+        var pre = m.type === 'timeline' ? 'e' : 't';
+        if (!it.id || typeof it.id !== 'string' || used[it.id]) { it.id = uid(pre); dailyMigrated = true; }
+        while (used[it.id]) { it.id = uid(pre); dailyMigrated = true; }
+        used[it.id] = 1;
+        it.text = String(it.text == null ? '' : it.text);
+        it.done = !!it.done;
+        if (!isDateStr(it.date)) { it.date = modDate; dailyMigrated = true; }
+        if (m.type === 'timeline') {
+          it.time = it.time || '09:00';
+          it.tag = typeof it.tag === 'string' ? it.tag : '';
+        }
+      });
+      m.data.items = items;
+      if (m.type === 'timeline') m.data.date = modDate;
+    });
+  }
+
+  function taskRef(pageId, moduleId, itemId) { return pageId + '::' + moduleId + '::' + itemId; }
+
+  /* 汇总某个月份（'YYYY-MM'）全部日程任务，按日期、时间排序 */
+  function collectDayTasks(month) {
+    var pg = dailyPage();
+    var out = [];
+    if (!pg || !isMonthStr(month)) return out;
+    var seen = {};
+    (pg.modules || []).forEach(function (m) {
+      if (!m || (m.type !== 'todo' && m.type !== 'timeline')) return;
+      ((m.data && m.data.items) || []).forEach(function (it) {
+        if (!it || !isDateStr(it.date) || it.date.slice(0, 7) !== month) return;
+        var key = taskRef(pg.id, m.id, it.id);
+        if (seen[key]) return;
+        seen[key] = 1;
+        out.push({
+          key: key, date: it.date, text: it.text || '', done: !!it.done,
+          time: it.time || '', tag: it.tag || '', type: m.type,
+          pageId: pg.id, moduleId: m.id, item: it
+        });
+      });
+    });
+    out.sort(function (a, b) {
+      if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+      if (a.time !== b.time) return (a.time || '') < (b.time || '') ? -1 : 1;
+      return (a.text || '') < (b.text || '') ? -1 : 1;
+    });
+    return out;
+  }
+
+  function planPicks(month) {
+    state.plan = state.plan || {};
+    if (!Array.isArray(state.plan[month])) state.plan[month] = [];
+    return state.plan[month];
+  }
+
+  function goToDate(date) {
+    state.settings.dailyDate = isDateStr(date) ? date : today();
+    var pg = dailyPage();
+    if (pg) state.current = pg.id;
+    save();
+    renderNav();
+    renderPage();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  /* 每日日程：日期切换条 */
+  function dailyBarBlock() {
+    var d = isDateStr(state.settings.dailyDate) ? state.settings.dailyDate : today();
+    var dt = parseISO(d);
+    var isToday = d === today();
+    var total = collectDayTasks(d.slice(0, 7)).filter(function (t) { return t.date === d; }).length;
+
+    var sec = document.createElement('section');
+    sec.className = 'day-bar reveal';
+    sec.innerHTML =
+      '<div class="day-bar-main">' +
+      '<button class="icon-btn day-nav" type="button" data-day="-1" aria-label="前一天" title="前一天">' + icon('chevronLeft') + '</button>' +
+      '<div class="day-now">' +
+      '<strong>' + esc(cnDate(dt)) + '</strong>' +
+      '<span>周' + WEEK[dt.getDay()] + ' · ' + total + ' 项任务</span>' +
+      (isToday ? '<em class="day-tag">今天</em>' : '') +
+      '</div>' +
+      '<button class="icon-btn day-nav" type="button" data-day="1" aria-label="后一天" title="后一天">' + icon('chevronRight') + '</button>' +
+      '<input class="day-input" type="date" value="' + d + '" aria-label="选择日期" />' +
+      '</div>' +
+      '<div class="day-bar-side">' +
+      (isToday ? '' : '<button class="ghost-btn tiny" type="button" data-day-now>回到今天</button>') +
+      '<button class="ghost-btn tiny" type="button" data-open-month>月度计划' + icon('arrowRight') + '</button>' +
+      '</div>';
+
+    $$('[data-day]', sec).forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.settings.dailyDate = shiftISO(d, Number(b.dataset.day));
+        save();
+        renderPage();
+      });
+    });
+    var now = $('[data-day-now]', sec);
+    if (now) now.addEventListener('click', function () {
+      state.settings.dailyDate = today();
+      save();
+      renderPage();
+    });
+    var om = $('[data-open-month]', sec);
+    if (om) om.addEventListener('click', function () {
+      var mp = state.pages.filter(function (p) { return p.builtin === 'monthly'; })[0];
+      if (!mp) { toast('没有找到月度计划页'); return; }
+      state.current = mp.id;
+      save();
+      renderNav();
+      renderPage();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    var input = $('.day-input', sec);
+    input.addEventListener('change', function () {
+      if (!isDateStr(input.value)) { input.value = d; return; }
+      state.settings.dailyDate = input.value;
+      save();
+      renderPage();
+    });
+    return sec;
+  }
+
+  /* 月度计划：本月日程任务聚合 + 计划清单（引用） */
+  function agendaBlock() {
+    var sec = document.createElement('section');
+    sec.className = 'agenda reveal';
+    sec.id = 'agenda-block';
+    fillAgenda(sec);
+    return sec;
+  }
+
+  function fillAgenda(sec) {
+    var month = isMonthStr(state.settings.planMonth) ? state.settings.planMonth : monthKey(new Date());
+    var tasks = collectDayTasks(month);
+    var byKey = {};
+    tasks.forEach(function (t) { byKey[t.key] = t; });
+
+    var picks = planPicks(month);
+    var validPicks = picks.filter(function (k) { return !!byKey[k]; });
+    if (validPicks.length !== picks.length) { state.plan[month] = validPicks; save(); }
+    var pickedSet = {};
+    validPicks.forEach(function (k) { pickedSet[k] = 1; });
+
+    var groups = [];
+    var cur = null;
+    tasks.forEach(function (t) {
+      if (!cur || cur.date !== t.date) { cur = { date: t.date, items: [] }; groups.push(cur); }
+      cur.items.push(t);
+    });
+
+    var doneN = tasks.filter(function (t) { return t.done; }).length;
+
+    var html =
+      '<div class="agenda-head">' +
+      '<div class="agenda-title"><h2>本月日程任务</h2>' +
+      '<p>' + tasks.length + ' 项 · 完成 ' + doneN + ' 项 · 已加入计划 ' + validPicks.length + ' 项</p></div>' +
+      '<div class="agenda-nav">' +
+      '<button class="icon-btn" type="button" data-month="-1" aria-label="上一月" title="上一月">' + icon('chevronLeft') + '</button>' +
+      '<span class="agenda-month">' + esc(monthLabel(month)) + '</span>' +
+      '<button class="icon-btn" type="button" data-month="1" aria-label="下一月" title="下一月">' + icon('chevronRight') + '</button>' +
+      '<button class="ghost-btn tiny" type="button" data-month-now>本月</button>' +
+      '</div>' +
+      '</div>';
+
+    if (!tasks.length) {
+      html +=
+        '<div class="agenda-empty">' +
+        '<span class="agenda-empty-icon">' + icon('calendar') + '</span>' +
+        '<p>本月还没有日程任务</p>' +
+        '<span class="agenda-empty-sub">去每日日程加几条，这里会自动聚合出来，并可直接加入本月计划。</span>' +
+        '<button class="solid-btn" type="button" data-goto-daily>去每日日程添加</button>' +
+        '</div>';
+    } else {
+      html += '<div class="agenda-groups">' + groups.map(function (g) {
+        var pending = g.items.filter(function (t) { return !t.done; }).length;
+        return '<div class="agenda-group">' +
+          '<div class="agenda-day">' +
+          '<span class="agenda-date">' + esc(shortDate(g.date)) + '</span>' +
+          '<span class="agenda-day-meta">' + g.items.length + ' 项' + (pending ? ' · 待办 ' + pending : ' · 全部完成') + '</span>' +
+          '<button class="link-btn" type="button" data-jump="' + g.date + '">查看当天' + icon('arrowRight') + '</button>' +
+          '</div>' +
+          g.items.map(function (t) {
+            var inPlan = !!pickedSet[t.key];
+            return '<div class="agenda-item' + (t.done ? ' done' : '') + '" data-key="' + esc(t.key) + '">' +
+              '<button class="check' + (t.done ? ' on' : '') + '" type="button" data-check' +
+              ' aria-label="' + (t.done ? '标记为未完成' : '标记为完成') + '">' + icon('check') + '</button>' +
+              '<button class="agenda-text" type="button" data-jump="' + t.date + '" title="点击跳到当天">' + esc(t.text || '（未命名任务）') + '</button>' +
+              (t.time && t.type === 'timeline' ? '<span class="agenda-time">' + esc(t.time) + '</span>' : '') +
+              (t.tag ? '<span class="agenda-tag">' + esc(t.tag) + '</span>' : '') +
+              '<button class="pick-btn' + (inPlan ? ' on' : '') + '" type="button" data-pick title="' +
+              (inPlan ? '点击移出本月计划' : '加入本月计划（引用，不复制）') + '">' +
+              (inPlan ? '已加入' : '＋ 加入计划') + '</button>' +
+              '</div>';
+          }).join('') +
+          '</div>';
+      }).join('') + '</div>';
+    }
+
+    if (validPicks.length) {
+      html +=
+        '<div class="plan-list">' +
+        '<div class="plan-head"><h3>本月计划清单</h3><span>引用自每日日程 · 完成状态双向同步</span></div>' +
+        validPicks.map(function (k) {
+          var t = byKey[k];
+          return '<div class="plan-item' + (t.done ? ' done' : '') + '" data-key="' + esc(k) + '">' +
+            '<button class="check' + (t.done ? ' on' : '') + '" type="button" data-check>' + icon('check') + '</button>' +
+            '<span class="plan-date">' + esc(Number(t.date.slice(5, 7)) + '/' + Number(t.date.slice(8, 10))) + '</span>' +
+            '<button class="agenda-text" type="button" data-jump="' + t.date + '" title="点击跳到当天">' + esc(t.text || '（未命名任务）') + '</button>' +
+            '<button class="plan-off" type="button" data-unpick title="移出计划" aria-label="移出计划">' + icon('x') + '</button>' +
+            '</div>';
+        }).join('') +
+        '</div>';
+    }
+
+    sec.innerHTML = html;
+
+    function refresh() { fillAgenda(sec); }
+
+    $$('[data-month]', sec).forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.settings.planMonth = shiftMonth(month, Number(b.dataset.month));
+        save();
+        renderPage();   /* 整页重绘：页头月份与聚合结果一起刷新 */
+      });
+    });
+    var nowBtn = $('[data-month-now]', sec);
+    if (nowBtn) nowBtn.addEventListener('click', function () {
+      state.settings.planMonth = monthKey(new Date());
+      save();
+      renderPage();
+    });
+    var gd = $('[data-goto-daily]', sec);
+    if (gd) gd.addEventListener('click', function () { goToDate(today()); });
+
+    $$('[data-jump]', sec).forEach(function (b) {
+      b.addEventListener('click', function () { goToDate(b.dataset.jump); });
+    });
+
+    $$('[data-check]', sec).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var host = b.closest('[data-key]');
+        var t = host ? byKey[host.dataset.key] : null;
+        if (!t) { toast('这条任务已不在日程里，正在刷新'); refresh(); return; }
+        t.item.done = !t.item.done;
+        save();
+        refresh();
+      });
+    });
+
+    $$('[data-pick]', sec).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var host = b.closest('[data-key]');
+        if (!host) return;
+        var key = host.dataset.key;
+        var arr = planPicks(month);
+        var i = arr.indexOf(key);
+        if (i > -1) { arr.splice(i, 1); toast('已从本月计划移出'); }
+        else { arr.push(key); toast('已加入本月计划（引用，改动会同步）'); }
+        save();
+        refresh();
+      });
+    });
+
+    $$('[data-unpick]', sec).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var host = b.closest('[data-key]');
+        if (!host) return;
+        var arr = planPicks(month);
+        var i = arr.indexOf(host.dataset.key);
+        if (i > -1) arr.splice(i, 1);
+        save();
+        toast('已从本月计划移出');
+        refresh();
+      });
+    });
   }
 
   function kpisBlock() {
@@ -863,25 +1260,25 @@
     var cards = [
       {
         label: '今日待办', icon: 'check', tone: '#3f8f63',
-        value: todoDone + '<small>/ ' + todoTotal + '</small>',
+        num: todoDone, unit: '/ ' + todoTotal,
         note: todoTotal ? '完成度 ' + Math.round(todoDone / todoTotal * 100) + '%' : '还没有待办模块',
         bar: todoTotal ? Math.round(todoDone / todoTotal * 100) : 0
       },
       {
         label: '本月打卡', icon: 'grid', tone: '#c98b5e',
-        value: checks + '<small>次</small>',
+        num: checks, unit: '次',
         note: '平均完成率 ' + checkRate + '%',
         bar: clamp(checkRate, 0, 100)
       },
       {
         label: '目标进度', icon: 'target', tone: '#5b93bf',
-        value: avgKr + '<small>%</small>',
+        num: avgKr, unit: '%',
         note: krCount ? '共 ' + krCount + ' 个关键结果' : '先去年度目标页设定',
         bar: avgKr
       },
       {
         label: '决策复盘', icon: 'bulb', tone: '#b07cb5',
-        value: revCount + '<small>条</small>',
+        num: revCount, unit: '条',
         note: revScored ? '平均自评 ' + (revScore / revScored).toFixed(1) + ' / 5' : '记录一次真实的选择',
         bar: revScored ? Math.round((revScore / revScored) / 5 * 100) : 0
       }
@@ -896,17 +1293,20 @@
             '<span class="ov-label">' + esc(c.label) + '</span>' +
           '</div>' +
           '<div class="ov-bottom">' +
-            '<span class="ov-value">' + c.value + '</span>' +
+            '<span class="ov-value"><span class="num" data-to="' + c.num + '">0</span><small>' + esc(c.unit) + '</small></span>' +
             '<span class="ov-note">' + esc(c.note) + '</span>' +
           '</div>' +
-          '<span class="ov-bar"><i style="width:' + clamp(c.bar, 0, 100) + '%"></i></span>' +
+          '<span class="ov-bar"><i data-w="' + clamp(c.bar, 0, 100) + '" style="width:0"></i></span>' +
           '</article>';
       }).join('') +
       '</section>';
 
     var section = document.createElement('div');
     section.innerHTML = html;
-    return section.firstChild;
+    var sec = section.firstChild;
+    /* 挂载后再播放：数字滚动递增 + 进度条从 0 增长 */
+    requestAnimationFrame(function () { animateNums(sec, '.ov-value .num'); animateBars(sec, '.ov-bar i'); });
+    return sec;
   }
 
   function kpi(label, value, sub) {
@@ -931,7 +1331,7 @@
         '<span class="board-name">' + esc(d.name) + '</span>' +
         '</div>' +
         '<div class="board-score">' + d.score + '<small> / 10</small></div>' +
-        '<div class="board-bar"><i style="width:' + (d.score * 10) + '%;background:' + d.color + '"></i></div>' +
+        '<div class="board-bar"><i data-w="' + (d.score * 10) + '" style="width:0;background:' + d.color + '"></i></div>' +
         '<input class="board-range" type="range" min="0" max="10" step="1" value="' + d.score + '" aria-label="' + esc(d.name) + ' 评分">' +
         '<input class="board-note" placeholder="一句话备注" value="' + esc(d.note || '') + '">';
       var range = $('.board-range', card);
@@ -939,7 +1339,9 @@
       range.addEventListener('input', function () {
         d.score = Number(range.value);
         $('.board-score', card).innerHTML = d.score + '<small> / 10</small>';
-        $('.board-bar i', card).style.width = (d.score * 10) + '%';
+        var bar = $('.board-bar i', card);
+        bar.dataset.w = d.score * 10;
+        bar.style.width = (d.score * 10) + '%';
         save();
       });
       note.addEventListener('input', debounce(function () {
@@ -950,6 +1352,7 @@
     });
     sec.appendChild(board);
     foldSection(sec, 'board', '.section-head');
+    requestAnimationFrame(function () { animateBars(sec, '.board-bar i'); });
     return sec;
   }
 
@@ -983,6 +1386,13 @@
 
   function observeReveal(scope) {
     var items = $$('.reveal', scope);
+    /* 同一容器内逐项错峰：26ms 递增，第 9 项起封顶（每个列表各自计数，避免互相干扰） */
+    items.forEach(function (el) {
+      var parent = el.parentElement || scope;
+      var n = parent.__revN || 0;
+      parent.__revN = n + 1;
+      el.style.setProperty('--d', (Math.min(n, 8) * 26) + 'ms');
+    });
     if (!('IntersectionObserver' in window)) {
       items.forEach(function (el) { el.classList.add('in'); });
       return;
@@ -1387,6 +1797,13 @@
           else h.checks[c.dataset.d] = true;
           save();
           c.classList.toggle('on');
+          /* 打卡轻弹反馈 */
+          if (motionOK()) {
+            c.classList.remove('poped');
+            void c.offsetWidth;
+            c.classList.add('poped');
+            setTimeout(function () { c.classList.remove('poped'); }, 260);
+          }
           var wrap = c.closest('.habit-table');
           var nameEl = wrap ? $('.habit-name[data-h="' + c.dataset.h + '"] span', wrap) : null;
           if (nameEl) {
@@ -1590,19 +2007,19 @@
   /* -------- 待办 -------- */
   renderers.todo = {
     html: function (m) {
-      var items = m.data.items || [];
+      var items = visibleDailyItems(m.data.items);
       var done = items.filter(function (i) { return i.done; }).length;
       var pct = items.length ? Math.round(done / items.length * 100) : 0;
       return '<div class="todo-list">' +
         (items.length ? items.map(function (i) {
-          return '<div class="todo' + (i.done ? ' done' : '') + '" data-item="' + i.id + '">' +
+          return '<div class="todo' + (i.done ? ' done' : '') + '" data-item="' + esc(i.id) + '">' +
             '<button class="check' + (i.done ? ' on' : '') + '" type="button" aria-label="完成">' + icon('check') + '</button>' +
             '<div class="todo-text">' + esc(i.text) + (i.meta ? '<span class="todo-meta">' + esc(i.meta) + '</span>' : '') + '</div>' +
             '<button class="todo-del" type="button" aria-label="删除">' + icon('x') + '</button>' +
             '</div>';
-        }).join('') : '<p class="empty-line">清单是空的，从最小的一件事开始。</p>') +
+        }).join('') : '<p class="empty-line">' + (dailyView ? '这一天还没有待办，加一条试试。' : '清单是空的，从最小的一件事开始。') + '</p>') +
         '</div>' +
-        '<div class="inline-add"><input class="field" data-new placeholder="添加一件事，回车确认">' +
+        '<div class="inline-add"><input class="field" data-new placeholder="' + (dailyView ? '添加这一天的待办，回车确认' : '添加一件事，回车确认') + '">' +
         '<button class="add-btn" data-add type="button">添加</button></div>' +
         (items.length ? '<div class="todo-foot"><div class="mini-progress"><i style="width:' + pct + '%"></i></div><span>' + done + ' / ' + items.length + '</span></div>' : '');
     },
@@ -1613,7 +2030,10 @@
       function add() {
         var v = (input.value || '').trim();
         if (!v) { input.focus(); return; }
-        d.items.push({ id: uid('t'), text: v, done: false });
+        var item = { id: uid('t'), text: v, done: false };
+        /* 在每日日程页新增的待办，归属当前查看的那一天，月度计划才能按日期聚合 */
+        if (dailyView) item.date = dailyView;
+        d.items.push(item);
         save();
         refreshCard(m);
       }
@@ -1656,21 +2076,24 @@
   renderers.timeline = {
     html: function (m) {
       var d = m.data;
-      var items = (d.items || []).slice().sort(function (a, b) { return (a.time || '') < (b.time || '') ? -1 : 1; });
-      var dt = new Date(d.date || today());
+      var day = dailyView || (isDateStr(d.date) ? d.date : today());
+      var items = visibleDailyItems(d.items).slice().sort(function (a, b) { return (a.time || '') < (b.time || '') ? -1 : 1; });
+      var doneN = items.filter(function (i) { return i.done; }).length;
       return '<div class="tl-head">' +
-        icon('calendar') + '<span>' + cnShort(dt) + '</span>' +
-        '<span class="tl-count">' + items.length + ' 项安排</span></div>' +
+        icon('calendar') + '<span>' + esc(cnShort(parseISO(day))) + '</span>' +
+        '<span class="tl-count">' + items.length + ' 项安排' + (doneN ? ' · 完成 ' + doneN : '') + '</span></div>' +
         '<div class="tl">' +
         (items.length ? items.map(function (i, idx) {
-          return '<div class="tl-item' + (idx === 0 ? ' is-now' : '') + '" data-tl="' + i.id + '">' +
-            '<span class="tl-dot"></span>' +
+          return '<div class="tl-item' + (idx === 0 && !i.done ? ' is-now' : '') + (i.done ? ' done' : '') + '" data-tl="' + esc(i.id) + '">' +
+            (dailyView
+              ? '<button class="check tl-check' + (i.done ? ' on' : '') + '" type="button" data-tl-check aria-label="完成">' + icon('check') + '</button>'
+              : '<span class="tl-dot"></span>') +
             '<span class="tl-time">' + esc(i.time || '--:--') + '</span>' +
             '<span class="tl-body"><span class="tl-text">' + esc(i.text) +
             (i.tag ? '<span class="tl-tag">' + esc(i.tag) + '</span>' : '') + '</span></span>' +
             '<button class="todo-del" type="button" aria-label="删除">' + icon('x') + '</button>' +
             '</div>';
-        }).join('') : '<p class="empty-line">今天还没有安排。</p>') +
+        }).join('') : '<p class="empty-line">' + (dailyView ? '这一天还没有安排。' : '今天还没有安排。') + '</p>') +
         '</div>' +
         '<div class="inline-add">' +
         '<input class="field" type="time" data-time style="max-width:104px;flex:none" value="09:00">' +
@@ -1680,21 +2103,29 @@
     bind: function (body, card, m) {
       var d = m.data;
       d.items = d.items || [];
+      var day = dailyView || (isDateStr(d.date) ? d.date : today());
       function add() {
         var t = $('[data-time]', body).value || '09:00';
         var text = ($('[data-text]', body).value || '').trim();
         if (!text) { $('[data-text]', body).focus(); return; }
-        d.items.push({ id: uid('e'), time: t, text: text, tag: '' });
+        d.items.push({ id: uid('e'), time: t, text: text, tag: '', date: day, done: false });
         save();
         refreshCard(m);
       }
       $('[data-add]', body).addEventListener('click', add);
       $('[data-text]', body).addEventListener('keydown', function (e) { if (e.key === 'Enter') add(); });
       $$('[data-tl]', body).forEach(function (row) {
-        var btn = $('.todo-del', row);
-        if (!btn) return;
-        btn.addEventListener('click', function () {
+        var del = $('.todo-del', row);
+        if (del) del.addEventListener('click', function () {
           d.items = d.items.filter(function (x) { return x.id !== row.dataset.tl; });
+          save();
+          refreshCard(m);
+        });
+        var ck = $('[data-tl-check]', row);
+        if (ck) ck.addEventListener('click', function () {
+          var it = d.items.filter(function (x) { return x.id === row.dataset.tl; })[0];
+          if (!it) return;
+          it.done = !it.done;
           save();
           refreshCard(m);
         });
@@ -2920,6 +3351,8 @@
     activeKey = keyFor(email);
     var inherited = inheritLegacy(email);
     state = loadState();
+    /* 旧数据补 id 后立即落盘，避免刷新后又重新生成一批 id 导致引用失效 */
+    if (dailyMigrated) { dailyMigrated = false; save(); }
     if (!String(state.settings.name || '').trim()) {
       state.settings.name = emailPrefix(email);
       save();
