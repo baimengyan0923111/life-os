@@ -2993,6 +2993,8 @@
   var cloudAutoTimer = null;    /* 自动同步防抖定时器 */
   var cloudPageStamps = null;   /* 页面指纹缓存，用于给改动过的页面打时间戳 */
   var cloudPending = null;      /* 双向同步暂存的云端数据 */
+  var cloudEnterFromLogin = false; /* 本次进入应用是否刚在登录页登录（决定是否弹「云端有更新数据」） */
+  var cloudEnterLocalEmpty = false; /* 本次登录时这台电脑是否还没有该邮箱的本地数据 */
   var cloudUi = { view: 'main', msg: null };
   var cloudDraft = { token: '', reveal: false };
 
@@ -3805,7 +3807,38 @@
     cloudDraw();
   }
 
+  /* 刚登录时若云端数据比本机新（或本机为空），询问是否下载；下载沿用覆盖前快照 */
+  function cloudOfferRemote(data, rfp, localEmpty) {
+    var pages = (data && Array.isArray(data.pages)) ? data.pages.length : 0;
+    var cfg = readCloud() || {};
+    openDialog(
+      '<h3>云端有更新的数据</h3>' +
+      '<p class="sub">这台电脑已绑定云同步，云端数据与当前本机不一致' +
+      (localEmpty ? '（本机这台电脑还没有该邮箱的本地数据）' : '') + '。' +
+      '下载会用云端数据覆盖本机，下载前会自动保存一份覆盖前快照，可随时恢复。</p>' +
+      '<p class="sub" style="margin-top:8px">云端包含 ' + pages + ' 个页面' +
+      (cfg.lastSyncAt ? ' · 上次同步 ' + esc(cloudFmtTime(cfg.lastSyncAt)) : '') + '</p>' +
+      '<div class="sheet-actions">' +
+      '<button class="ghost-btn" data-later>稍后</button>' +
+      '<button class="solid-btn" data-dl>立即下载</button></div>',
+      function (sheet, close) {
+        $('[data-later]', sheet).addEventListener('click', function () {
+          close();
+          toast('已跳过，可随时在侧栏「云同步」里下载');
+        });
+        $('[data-dl]', sheet).addEventListener('click', function () {
+          close();
+          cloudApplyRemote(data, rfp, false);
+        });
+      }
+    );
+  }
+
   function cloudAfterEnter() {
+    var fromLogin = cloudEnterFromLogin;
+    var localEmpty = cloudEnterLocalEmpty;
+    cloudEnterFromLogin = false;
+    cloudEnterLocalEmpty = false;
     updateCloudEntry();
     var cfg = readCloud();
     if (!cfg) return;
@@ -3828,6 +3861,8 @@
       }
       var localClean = !!c.lastSyncRev && localFp === c.lastSyncRev;
       var remoteNew = !c.remoteRev || rfp !== c.remoteRev;
+      /* 刚登录：不静默覆盖，先问用户要不要把云端数据拉下来 */
+      if (fromLogin && remoteNew) { cloudOfferRemote(data, rfp, localEmpty); return; }
       if (localClean && remoteNew) {
         cloudApplyRemote(data, rfp, true);
       } else {
@@ -4060,10 +4095,54 @@
   function keyFor(email) { return STORE_KEY + '::' + email; }
   function normalizeEmail(v) { return String(v || '').trim().toLowerCase(); }
   function isValidEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v); }
+  /* 旧版哈希（无盐 djb2）：仅用于校验历史记录，保证老账号仍能登录 */
   function hashPass(s) {
     var h = 5381;
     for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
     return h.toString(36);
+  }
+  /* 新版哈希（每账号独立盐，FNV-1a + djb2 双路混合）：rec.v === 2 时使用 */
+  function newSalt() {
+    try {
+      var a = new Uint8Array(8);
+      crypto.getRandomValues(a);
+      return Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+    } catch (e) {
+      var s = '';
+      for (var i = 0; i < 16; i++) s += Math.floor(Math.random() * 16).toString(16);
+      return s;
+    }
+  }
+  function hashPass2(pass, salt) {
+    var str = salt + '\u0000' + pass + '\u0000' + salt;
+    var h1 = 0x811c9dc5, h2 = 5381;
+    for (var i = 0; i < str.length; i++) {
+      var c = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+      h2 = ((h2 << 5) + h2 + c) >>> 0;
+    }
+    return 'p2' + ('00000000' + h1.toString(16)).slice(-8) + ('00000000' + h2.toString(16)).slice(-8);
+  }
+  function makeAuthRecord(pass) {
+    var salt = newSalt();
+    return { v: 2, s: salt, h: hashPass2(pass, salt), at: Date.now() };
+  }
+  /* 校验：v2 记录走加盐哈希，无 v 的历史记录走旧哈希，两者都放行 */
+  function verifyAuthRecord(rec, pass) {
+    if (!rec || typeof rec !== 'object') return false;
+    if (rec.v === 2 && typeof rec.s === 'string' && typeof rec.h === 'string') {
+      return rec.h === hashPass2(pass, rec.s);
+    }
+    return typeof rec.h === 'string' && rec.h === hashPass(pass);
+  }
+  /* 历史记录登录成功后静默升级为 v2，不改密码、不打扰用户 */
+  function migrateAuthRecord(email, pass) {
+    var acc = readAccounts();
+    var rec = acc[email];
+    if (!rec || rec.v === 2) return false;
+    acc[email] = makeAuthRecord(pass);
+    writeAccounts(acc);
+    return true;
   }
   function readAccounts() {
     try {
@@ -4157,8 +4236,7 @@
     state = initialState();
     var auth = $('#auth');
     auth.hidden = false;
-    var err = $('#auth-error');
-    if (msg) { err.textContent = msg; err.hidden = false; } else { err.hidden = true; }
+    authFail(msg || '', false);
     $('#auth-mark').innerHTML = icon('leaf');
     setTimeout(function () { var e = $('#auth-email'); if (e) e.focus(); }, 60);
   }
@@ -4195,27 +4273,46 @@
     else toast('欢迎回来，' + email);
   }
 
+  /* 登录页错误条：带「重置这台电脑的密码」入口时一并显示 */
+  function authFail(msg, showReset) {
+    var box = $('#auth-error-box'), err = $('#auth-error'), btn = $('#auth-reset');
+    if (err) err.textContent = msg || '';
+    if (box) box.hidden = !msg;
+    if (btn) btn.hidden = !(msg && showReset);
+  }
+  function authFailClear() { authFail('', false); }
+
   function bindAuth() {
     $('#auth-form').addEventListener('submit', function (e) {
       e.preventDefault();
       var email = normalizeEmail($('#auth-email').value);
       var pass = $('#auth-pass').value || '';
-      var err = $('#auth-error');
-      function fail(m) { err.textContent = m; err.hidden = false; }
-      if (!isValidEmail(email)) return fail('请输入有效的邮箱地址');
-      if (pass.length < 4) return fail('密码至少 4 位');
+      if (!isValidEmail(email)) return authFail('请输入有效的邮箱地址', false);
+      if (pass.length < 4) return authFail('密码至少 4 位', false);
       var acc = readAccounts();
       var rec = acc[email];
       if (rec) {
-        if (rec.h !== hashPass(pass)) return fail('密码不正确，请重试');
+        if (!verifyAuthRecord(rec, pass)) {
+          /* 死路修复：明确说明密码只在本机，并当场给重置入口 */
+          return authFail('这台电脑保存的 ' + email + ' 密码与此不符。密码只保存在本机浏览器，不随云端同步。', true);
+        }
+        migrateAuthRecord(email, pass);
       } else {
-        acc[email] = { h: hashPass(pass), at: Date.now() };
+        acc[email] = makeAuthRecord(pass);
         writeAccounts(acc);
       }
-      err.hidden = true;
+      authFailClear();
       safeSet(SESSION_KEY, email);
       $('#auth-pass').value = '';
+      cloudEnterLocalEmpty = !safeGet(keyFor(email));
+      cloudEnterFromLogin = true;
       enterApp(email, !rec);
+    });
+
+    $('#auth-reset').addEventListener('click', function () {
+      var email = normalizeEmail($('#auth-email').value);
+      if (!isValidEmail(email)) return authFail('请先填写要重置密码的邮箱地址', false);
+      openResetPasswordDialog(email);
     });
 
     $('#auth-clear').addEventListener('click', function () {
@@ -4240,6 +4337,73 @@
       safeDel(SESSION_KEY);
       location.reload();
     });
+  }
+
+  /* ---------------------------------------------------------
+     重置本机密码：只改这台电脑上该邮箱的登录密码，不动任何数据
+     --------------------------------------------------------- */
+  function openResetPasswordDialog(email) {
+    var target = normalizeEmail(email);
+    openDialog(
+      '<div id="rp-step1">' +
+      '<h3>重置这台电脑的密码</h3>' +
+      '<p class="sub">密码保存在本机浏览器，不随云同步。为 <b>' + esc(target) + '</b> 设置一个新密码后可直接登录，' +
+      '该邮箱在本机的数据会完整保留。</p>' +
+      '<div class="sheet-label">新密码</div>' +
+      '<input class="field" id="rp-pass" type="password" autocomplete="new-password" ' +
+      'placeholder="至少 4 位" style="width:100%" aria-label="新密码">' +
+      '<div class="sheet-label" style="margin-top:12px">确认新密码</div>' +
+      '<input class="field" id="rp-pass2" type="password" autocomplete="new-password" ' +
+      'placeholder="再输入一次" style="width:100%" aria-label="确认新密码">' +
+      '<p class="sub" id="rp-err" style="margin:8px 0 0;color:var(--danger)" hidden></p>' +
+      '<div class="sheet-actions"><button class="ghost-btn" data-close>取消</button>' +
+      '<button class="solid-btn" data-next>下一步</button></div>' +
+      '</div>' +
+      '<div id="rp-step2" hidden>' +
+      '<h3>确认重置密码？</h3>' +
+      '<p class="sub">将把 <b>' + esc(target) + '</b> 在这台电脑上的登录密码改为新密码。' +
+      '只改登录密码，不会删除任何数据内容；该邮箱的页面、OKR、打卡、日程都会保持原样并立即可以进入。</p>' +
+      '<div class="sheet-actions"><button class="ghost-btn" data-back>返回</button>' +
+      '<button class="solid-btn" data-ok>确认重置并登录</button></div>' +
+      '</div>',
+      function (sheet, close) {
+        var s1 = $('#rp-step1', sheet), s2 = $('#rp-step2', sheet);
+        var p1 = $('#rp-pass', sheet), p2 = $('#rp-pass2', sheet), err = $('#rp-err', sheet);
+        var nextPass = '';
+        function showErr(m) { err.textContent = m; err.hidden = false; }
+        $('#rp-pass').focus();
+        $('[data-next]', sheet).addEventListener('click', function () {
+          var a = String(p1.value || ''), b = String(p2.value || '');
+          if (a.length < 4) { showErr('新密码至少 4 位'); p1.focus(); return; }
+          if (a !== b) { showErr('两次输入的密码不一致'); p2.focus(); return; }
+          nextPass = a;
+          err.hidden = true;
+          s1.hidden = true; s2.hidden = false;
+          setTimeout(function () { try { $('[data-ok]', sheet).focus(); } catch (e) { } }, 40);
+        });
+        $('[data-back]', sheet).addEventListener('click', function () {
+          s2.hidden = true; s1.hidden = false;
+          setTimeout(function () { try { (p2.value ? p2 : p1).focus(); } catch (e) { } }, 40);
+        });
+        $('[data-ok]', sheet).addEventListener('click', function () {
+          var acc = readAccounts();
+          /* 只覆盖该邮箱的密码哈希，其它键（数据、云同步配置）一律不动 */
+          acc[target] = makeAuthRecord(nextPass);
+          writeAccounts(acc);
+          safeSet(SESSION_KEY, target);
+          close();
+          authFailClear();
+          $('#auth-pass').value = '';
+          cloudEnterLocalEmpty = !safeGet(keyFor(target));
+          cloudEnterFromLogin = true;
+          enterApp(target, false);
+          toast('已重置这台电脑的密码，原有数据保持不变');
+        });
+        [p1, p2].forEach(function (inp) {
+          inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') $('[data-next]', sheet).click(); });
+        });
+      }
+    );
   }
 
   /* ---------------------------------------------------------
