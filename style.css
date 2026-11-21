@@ -2011,3 +2011,90 @@ html[data-theme="dark"] { --warn: #dfae5c; --warn-soft: rgba(223, 174, 92, .12);
   .cloud-btn[data-state="busy"] .cloud-state::before,
   .cc-state[data-state="busy"]::before { animation: none; opacity: .8; }
 }
+
+/* =========================================================
+   云端账号（Supabase）：登录页三态 + 云同步面板
+   ========================================================= */
+.auth-tabs {
+  display: flex; gap: 4px; margin-top: var(--s-4);
+  padding: 4px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--bg-soft);
+}
+.auth-tab {
+  flex: 1 1 0; min-width: 0; padding: 8px 6px; cursor: pointer;
+  font: inherit; font-size: var(--t-12); color: var(--muted);
+  border: 0; border-radius: 7px; background: transparent;
+  transition: background-color var(--dur-1), color var(--dur-1);
+}
+.auth-tab:hover { color: var(--ink); }
+.auth-tab.is-on { background: var(--elev); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.auth-tab:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); }
+.auth-error-acts { display: flex; flex-wrap: wrap; gap: 10px; }
+.auth-local {
+  margin-top: var(--s-4); padding-top: var(--s-4);
+  border-top: 1px dashed var(--line);
+}
+.auth-local[hidden] { display: none; }
+.auth-local-tip { margin: 0 0 8px; font-size: var(--t-11); line-height: 1.6; color: var(--faint); }
+.auth-clear { margin-top: var(--s-3); }
+.auth .auth-submit[disabled] { opacity: .6; cursor: default; }
+
+/* 面板：云端账号区块 */
+.sb-sec { display: grid; gap: 10px; }
+.cloud-h3 { display: flex; align-items: center; gap: 8px; }
+.cloud-tag {
+  padding: 2px 7px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--accent); background: var(--accent-soft);
+  border-radius: 999px; font-weight: 500;
+}
+.sb-rows { display: grid; gap: 2px; margin-top: var(--s-2); }
+.sb-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 8px 0; border-bottom: 1px solid var(--line); font-size: var(--t-12);
+}
+.sb-row:last-child { border-bottom: 0; }
+.sb-k { color: var(--faint); flex: none; }
+.sb-v { color: var(--ink); text-align: right; word-break: break-all; display: inline-flex; align-items: center; gap: 7px; }
+.sb-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
+.sb-dot[data-s="ok"] { background: var(--accent); }
+.sb-dot[data-s="busy"] { background: var(--accent-2); }
+.sb-dot[data-s="dirty"], .sb-dot[data-s="new"] { background: var(--warn); }
+.sb-dot[data-s="offline"], .sb-dot[data-s="off"] { background: var(--danger); }
+.sb-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: var(--s-3); }
+.sb-actions > * { flex: 0 0 auto; }
+.sb-tip { margin-top: 2px; }
+.cloud-danger { color: var(--danger); }
+.sb-backup { margin-top: var(--s-5); border-top: 1px dashed var(--line); padding-top: var(--s-4); }
+.sb-backup > summary {
+  cursor: pointer; font-size: var(--t-12); color: var(--muted);
+  list-style: none; display: flex; align-items: center; gap: 8px;
+}
+.sb-backup > summary::-webkit-details-marker { display: none; }
+.sb-backup > summary::before {
+  content: ""; width: 6px; height: 6px; flex: none;
+  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg); transition: transform var(--dur-1);
+}
+.sb-backup[open] > summary::before { transform: rotate(45deg); }
+.sb-backup > summary:hover { color: var(--ink); }
+.sb-backup-body { margin-top: var(--s-3); }
+
+/* 冲突面板 */
+.sb-conflict-list { display: grid; gap: 8px; margin-top: var(--s-3); }
+.sb-cf {
+  display: grid; gap: 3px; padding: 10px 12px;
+  border: 1px solid var(--line-2); border-radius: 10px; background: var(--elev-2);
+}
+.sb-cf b { font-size: var(--t-12); font-weight: 600; }
+.sb-cf span { font-size: var(--t-11); color: var(--muted); word-break: break-all; }
+.sheet-actions-wrap { flex-wrap: wrap; }
+
+.cloud-btn[data-state="offline"] .cloud-state { color: var(--danger); }
+.cloud-btn[data-state="offline"] .cloud-state::before { background: var(--danger); }
+
+@media (max-width: 480px) {
+  .auth-tabs { gap: 2px; }
+  .auth-tab { font-size: var(--t-11); padding: 7px 4px; }
+  .sb-row { font-size: var(--t-11); }
+  .sb-actions > * { flex: 1 1 46%; }
+}
