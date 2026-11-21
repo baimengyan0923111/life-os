@@ -248,6 +248,14 @@ html.locked .auth:not([hidden]) { display: flex; }
   margin: 0; padding: 9px 12px; border-radius: var(--r-sm);
   background: var(--danger-soft); color: var(--danger); font-size: var(--t-12);
 }
+.auth-error-box { display: grid; gap: 8px; }
+.auth-link {
+  justify-self: start; padding: 1px 0; border: 0; background: none; cursor: pointer;
+  font-size: var(--t-12); color: var(--accent); border-bottom: 1px solid currentColor;
+  transition: color var(--dur-1);
+}
+.auth-link:hover { color: var(--ink); }
+.auth-hint { margin: 0; font-size: var(--t-11); line-height: 1.6; color: var(--faint); }
 .auth-note { margin-top: var(--s-4); font-size: var(--t-11); line-height: 1.65; color: var(--faint); }
 .auth-alt {
   margin-top: var(--s-3); padding: 4px 0; border: 0; background: none; cursor: pointer;
