@@ -78,14 +78,34 @@
         </span>
       </a>
 
-      <div class="nav-label">系统页</div>
-      <nav class="nav" id="nav-system"></nav>
+      <section class="nav-group" id="group-system">
+        <div class="nav-label">
+          <button class="nav-fold" id="fold-system" type="button" aria-expanded="true" aria-controls="nav-system">
+            <span class="nav-chev" aria-hidden="true"></span>
+            <span>系统页</span>
+          </button>
+        </div>
+        <div class="nav-body" id="body-system">
+          <div class="nav-body-inner">
+            <nav class="nav" id="nav-system"></nav>
+          </div>
+        </div>
+      </section>
 
-      <div class="nav-label nav-label-row">
-        <span>我的模块页</span>
-        <button class="mini-btn" id="btn-add-page" type="button" title="新建页签" aria-label="新建页签">＋</button>
-      </div>
-      <nav class="nav nav-scroll" id="nav-custom"></nav>
+      <section class="nav-group nav-group-custom" id="group-custom">
+        <div class="nav-label nav-label-row">
+          <button class="nav-fold" id="fold-custom" type="button" aria-expanded="true" aria-controls="nav-custom">
+            <span class="nav-chev" aria-hidden="true"></span>
+            <span>我的模块页</span>
+          </button>
+          <button class="mini-btn" id="btn-add-page" type="button" title="新建页签" aria-label="新建页签">＋</button>
+        </div>
+        <div class="nav-body" id="body-custom">
+          <div class="nav-body-inner">
+            <nav class="nav nav-scroll" id="nav-custom"></nav>
+          </div>
+        </div>
+      </section>
 
       <div class="sidebar-foot">
         <div class="foot-actions">
@@ -94,7 +114,7 @@
           <button class="foot-btn" type="button" data-act="reset">清空</button>
         </div>
         <div class="user-box">
-          <span class="user-mail" id="user-mail" title="">未登录</span>
+          <button class="user-mail" id="user-mail" type="button" title="点击修改用户名">未登录</button>
           <button class="user-out" id="btn-logout" type="button">退出</button>
         </div>
         <p class="foot-hint" id="foot-hint">数据保存在本机浏览器，刷新不丢</p>
