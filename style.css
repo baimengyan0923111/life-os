@@ -46,6 +46,7 @@
   --line-2: rgba(0, 0, 0, .14);
   --accent: #2f7d55;
   --accent-2: #4a9b6e;
+  --accent-line: rgba(47, 125, 85, .34);
   --accent-soft: rgba(47, 125, 85, .10);
   --accent-strong: #1f7a4d;
   --accent-strong-hover: #17603c;
@@ -80,6 +81,7 @@ html[data-theme="dark"] {
   --line-2: rgba(255, 255, 255, .18);
   --accent: #56b184;
   --accent-2: #74c79b;
+  --accent-line: rgba(86, 177, 132, .42);
   --accent-soft: rgba(86, 177, 132, .14);
   --accent-strong: #276f4c;
   --accent-strong-hover: #1f5b3e;
@@ -301,18 +303,21 @@ html.locked .auth:not([hidden]) { display: flex; }
 .nav-group { display: flex; flex-direction: column; min-height: 0; }
 .nav-group-custom { flex: 1 1 auto; min-height: 0; }
 
+/* 侧栏分组标题：明确弱于菜单项（11px / 常规字重 / 灰 / 小字距），层级靠“更小更淡”区分 */
 .nav-label {
   display: flex; align-items: center; justify-content: space-between; gap: 6px;
-  padding: var(--s-4) 4px 6px;
-  font-size: var(--t-11); font-weight: 500; letter-spacing: .1em;
-  text-transform: uppercase; color: var(--faint);
+  padding: var(--s-4) 4px 4px;
+  font-size: 11px; font-weight: 400; letter-spacing: .04em;
+  line-height: 1.35;
+  text-transform: none; color: var(--faint);
 }
 .nav-fold {
-  display: inline-flex; align-items: center; gap: 6px;
-  min-height: 26px; min-width: 0; flex: 1 1 auto;
-  margin: 0; padding: 3px 6px;
+  display: inline-flex; align-items: center; gap: 5px;
+  min-height: 22px; min-width: 0; flex: 1 1 auto;
+  margin: 0; padding: 2px 6px;
   border: 0; border-radius: 7px; background: transparent; cursor: pointer;
-  font: inherit; letter-spacing: .1em; text-transform: uppercase; color: inherit;
+  font-size: 11px; font-weight: 400; font-family: inherit;
+  letter-spacing: .04em; text-transform: none; color: inherit;
   transition: color var(--dur-1), background-color var(--dur-1);
 }
 .nav-fold > span:last-child {
@@ -352,7 +357,7 @@ html.locked .auth:not([hidden]) { display: flex; }
 
 .nav { display: grid; gap: 2px; }
 .nav-scroll { overflow-y: auto; flex: 1 1 auto; min-height: 60px; padding-bottom: var(--s-2);
-  scrollbar-width: none; }
+  align-content: start; scrollbar-width: none; }
 .nav-scroll::-webkit-scrollbar { width: 0; }
 
 .nav-item {
@@ -382,6 +387,55 @@ html.locked .auth:not([hidden]) { display: flex; }
 .nav-pen svg { width: 13px; height: 13px; }
 .nav-item:hover .nav-pen, .nav-item:focus-within .nav-pen { opacity: 1; }
 .nav-pen:hover { background: var(--line); color: var(--ink); }
+
+/* 我的模块页（自定义页签）：紧凑 chip。
+   关键约束：宽度必须贴合内容（flex: 0 0 auto + width: auto），
+   不继承 .nav 的 grid 拉伸、不被单一/激活页签撑宽；多页签等尺寸等间距、可换行。 */
+#nav-custom.nav {
+  display: flex; flex-flow: row wrap;
+  align-items: center; align-content: flex-start; justify-content: flex-start;
+  justify-items: initial;            /* 清除潜在 grid 继承 */
+  gap: 6px;
+  padding-top: 2px;
+}
+#nav-custom .nav-item {
+  flex: 0 0 auto;                    /* 不拉伸、不放大 */
+  width: auto; min-width: 0; max-width: 100%;
+  height: 32px; min-height: 32px;      /* 保证可点热区 ≥32px */
+  padding: 0 9px; gap: 6px;
+  display: inline-flex; align-items: center; justify-content: flex-start;
+  border: 1px solid var(--line); border-radius: 9px;
+  background: var(--elev);
+  color: var(--ink-2); font-size: var(--t-12); line-height: 1;
+  letter-spacing: 0;
+}
+#nav-custom .nav-item:hover {
+  background: var(--elev-2); border-color: var(--line-2); color: var(--ink);
+  transform: translateY(-1px);
+}
+/* 激活态：只做颜色 + 淡描边区分，不用大面积色块 */
+#nav-custom .nav-item.active {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent-strong); font-weight: 500;
+}
+#nav-custom .nav-item.active::before { display: none; }
+#nav-custom .nav-item > svg { width: 12px; height: 12px; flex: none; opacity: .62; }
+#nav-custom .nav-item.active > svg { opacity: 1; }
+#nav-custom .nav-text { flex: 0 0 auto; min-width: 0; max-width: 116px; }
+/* 铅笔不占过多布局宽度，但用透明外扩伪元素把可点热区撑到 32×32 */
+#nav-custom .nav-pen {
+  position: relative; flex: none;
+  width: 18px; height: 18px; border-radius: 5px;
+}
+#nav-custom .nav-pen::before { content: ''; position: absolute; inset: -7px; }
+#nav-custom .nav-pen svg { width: 11px; height: 11px; }
+#nav-custom .nav-pen:hover { background: var(--line); color: var(--ink); }
+#nav-custom .nav-hint {
+  flex: 0 0 auto; width: auto; height: 32px; min-height: 32px; padding: 0 2px;
+  border-color: transparent; background: transparent; cursor: default;
+}
+#nav-custom .rename-input { height: 24px; width: 100px; font-size: var(--t-12); }
 
 .rename-input {
   width: 100%; min-width: 0;
@@ -1268,13 +1322,98 @@ html.dialog-open body { overflow: hidden; }
   border: 1px solid var(--line-2); border-radius: 4px; background: var(--elev);
 }
 
-/* ---------- 27. 动效 ---------- */
+/* ---------- 27. 动效体系（克制 / 统一时长 160–260ms / 统一缓动 --ease） ---------- */
+:root {
+  --dur-page: .22s;    /* 页面切换 */
+  --dur-item: .24s;    /* 卡片 / 列表入场 */
+  --dur-ui: .18s;      /* 悬停等微交互 */
+  --stagger: 26ms;     /* 错峰间隔 */
+  --lift: -2px;        /* 悬停上浮 */
+}
+
+/* 27.1 页面切换：淡入 + 轻微上移 */
+#canvas.page-enter { animation: page-in var(--dur-page) var(--ease) both; }
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 27.2 滚动进入视口渐显 + 逐项错峰（延迟由 JS 写入 --d） */
 .reveal { opacity: 0; transform: translateY(10px); }
 .reveal.in {
   opacity: 1; transform: none;
-  transition: opacity var(--dur-3) var(--ease), transform var(--dur-3) var(--ease);
+  transition: opacity var(--dur-item) var(--ease) var(--d, 0ms),
+              transform var(--dur-item) var(--ease) var(--d, 0ms);
 }
-body.ready .hero.reveal { animation: rise var(--dur-3) var(--ease) both; }
+body.ready .hero.reveal { animation: rise var(--dur-item) var(--ease) both; }
+
+/* 27.3 悬停微动：卡片上浮 / 侧栏项轻移 / 按钮提起 */
+.card:hover { transform: translateY(var(--lift)); }
+/* 拖拽中保持原位移，不被 hover 上浮覆盖 */
+.card.dragging, .card.dragging:hover { transform: scale(.995); }
+.nav-item {
+  transition: background-color var(--dur-ui) var(--ease-soft),
+              color var(--dur-ui) var(--ease-soft),
+              transform var(--dur-ui) var(--ease);
+}
+.nav-item:hover { transform: translateX(1px); }
+.nav-pen, .mini-btn, .fold-btn, .link-btn { transition-property: background-color, border-color, color, transform, opacity; transition-duration: var(--dur-ui); }
+.solid-btn:hover, .ghost-btn:hover, .foot-btn:hover { transform: translateY(-1px); }
+.solid-btn:active, .ghost-btn:active, .foot-btn:active { transform: translateY(0); }
+.ovcard:hover, .board-card:hover { transform: translateY(var(--lift)); }
+
+/* 27.4 进度条增长 + 数字滚动 */
+.ov-bar i, .board-bar i, .mini-progress i, .kr-bar i {
+  transition: width .26s var(--ease);
+}
+.ov-value .num, .pct, .board-score { font-variant-numeric: tabular-nums; }
+
+/* 27.5 习惯打卡轻弹 */
+.cell.poped { animation: cell-pop .24s var(--ease); }
+@keyframes cell-pop {
+  0% { transform: scale(1); }
+  38% { transform: scale(.88); }
+  72% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+/* 27.6 弹窗缩放淡入 / 遮罩淡入 / Toast 自下滑入 */
+.overlay { animation: fade .2s var(--ease-soft) both; }
+.sheet { animation: dialog-in var(--dur-item) var(--ease) both; }
+@keyframes dialog-in {
+  from { opacity: 0; transform: translateY(8px) scale(.97); }
+  to { opacity: 1; transform: none; }
+}
+.toast {
+  transform: translate(-50%, 10px);
+  transition: opacity .2s var(--ease-soft), transform var(--dur-page) var(--ease);
+}
+.toast.show { transform: translate(-50%, 0); }
+
+/* 27.7 折叠展开：沿用 display 切换 + 淡入（不使用 overflow 裁切） */
+.fold-body:not([hidden]) { animation: fold-in var(--dur-item) var(--ease-soft) both; }
+
+/* 27.8 主题切换：图标旋转 + 颜色平滑过渡 */
+.theme-btn svg { transition: transform .2s var(--ease); }
+.theme-btn.turning svg { animation: theme-turn .28s var(--ease); }
+@keyframes theme-turn {
+  from { transform: rotate(-90deg) scale(.86); opacity: .5; }
+  to { transform: none; opacity: 1; }
+}
+/* 换主题瞬间临时开启全局色彩过渡（仅颜色相关属性，不影响布局与位移） */
+html.theme-fade,
+html.theme-fade *:not(svg):not(path),
+html.theme-fade *::before,
+html.theme-fade *::after {
+  transition: background-color .26s var(--ease-soft),
+              border-color .26s var(--ease-soft),
+              color .26s var(--ease-soft),
+              fill .26s var(--ease-soft),
+              stroke .26s var(--ease-soft) !important;
+}
+
+/* 27.9 骨架屏微光（沿用 skel-line 的渐变扫光） */
+.skel-line { background-size: 240% 100%; }
 
 @keyframes rise {
   from { opacity: 0; transform: translateY(12px); }
@@ -1488,6 +1627,13 @@ body.is-dragging { cursor: grabbing; }
   }
   .reveal { opacity: 1; transform: none; }
   .skel-line { animation: none; background: var(--skel-1); }
+  /* 位移类动效统一降级为无位移 */
+  .card:hover, .ovcard:hover, .board-card:hover,
+  .nav-item:hover, .solid-btn:hover, .ghost-btn:hover, .foot-btn:hover,
+  #nav-custom .nav-item:hover { transform: none; }
+  .cell.poped { animation: none; }
+  .theme-btn.turning svg { animation: none; }
+  #canvas.page-enter { animation: none; }
 }
 
 /* ---------- 30. 打印 ---------- */
@@ -1496,4 +1642,178 @@ body.is-dragging { cursor: grabbing; }
   .app { grid-template-columns: 1fr; }
   .canvas { max-width: 100%; padding: 0; }
   .card { break-inside: avoid; }
+}
+
+/* =========================================================
+   31. 每日日程 ⇄ 月度计划
+   ========================================================= */
+.ghost-btn.tiny, .solid-btn.tiny {
+  height: 26px; padding: 0 9px; font-size: 11px; gap: 3px;
+}
+.ghost-btn.tiny svg, .solid-btn.tiny svg { width: 11px; height: 11px; }
+
+/* 每日日程：日期切换条 */
+.day-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: var(--elev); box-shadow: var(--shadow-1);
+}
+.day-bar-main { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.day-now { display: flex; flex-direction: column; gap: 1px; min-width: 0; padding: 0 2px; }
+.day-now strong {
+  font-size: var(--t-15); font-weight: 600; letter-spacing: -.01em; color: var(--ink);
+  white-space: nowrap;
+}
+.day-now > span { font-size: var(--t-11); color: var(--faint); }
+.day-tag {
+  align-self: flex-start; margin-top: 2px;
+  padding: 0 6px; border-radius: 5px;
+  background: var(--accent-soft); color: var(--accent);
+  font-size: 10px; font-style: normal; letter-spacing: .02em;
+}
+.day-input {
+  height: 30px; min-width: 0; padding: 0 8px;
+  border: 1px solid var(--line-2); border-radius: var(--r-xs);
+  background: var(--elev); color: var(--ink);
+  font-family: inherit; font-size: var(--t-11);
+  font-variant-numeric: tabular-nums;
+}
+.day-input:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+.day-bar-side { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.day-nav { width: 26px; height: 26px; }
+.day-nav svg { width: 13px; height: 13px; }
+
+/* 时间轴内可勾选（仅在每日日程页出现） */
+.tl-check { width: 15px; height: 15px; }
+.tl-item.done .tl-text { color: var(--faint); text-decoration: line-through; }
+.tl-item.done .tl-time, .tl-item.done .tl-tag { opacity: .7; }
+
+/* 月度计划：当月日程任务聚合 */
+.agenda {
+  padding: var(--s-4);
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  background: var(--card); box-shadow: var(--shadow-1);
+}
+.agenda-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--s-3); flex-wrap: wrap;
+  padding-bottom: var(--s-3); border-bottom: 1px solid var(--line);
+}
+.agenda-title h2 { font-size: var(--t-15); font-weight: 600; letter-spacing: -.01em; color: var(--ink); }
+.agenda-title p { margin-top: 3px; font-size: var(--t-11); color: var(--faint); }
+.agenda-nav { display: flex; align-items: center; gap: 6px; }
+.agenda-month {
+  min-width: 76px; text-align: center;
+  font-size: var(--t-12); font-weight: 500; color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.agenda-empty { display: grid; justify-items: center; gap: 6px; padding: 26px 12px 8px; text-align: center; }
+.agenda-empty-icon {
+  width: 34px; height: 34px; display: grid; place-items: center;
+  border-radius: var(--r-pill); background: var(--elev-2); color: var(--faint);
+}
+.agenda-empty-icon svg { width: 16px; height: 16px; }
+.agenda-empty-sub { max-width: 36em; font-size: var(--t-11); line-height: 1.65; color: var(--faint); }
+.agenda-empty .solid-btn { margin-top: 8px; }
+.agenda-groups { display: grid; gap: var(--s-4); margin-top: var(--s-3); }
+.agenda-group { display: grid; gap: 1px; }
+.agenda-day {
+  display: flex; align-items: center; gap: 8px;
+  padding: 2px 2px 7px; margin-bottom: 3px;
+  border-bottom: 1px dashed var(--line);
+}
+.agenda-date { font-size: var(--t-12); font-weight: 600; color: var(--ink); }
+.agenda-day-meta { font-size: var(--t-11); color: var(--faint); }
+.agenda-day .link-btn { margin-left: auto; }
+.agenda-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 8px; border-radius: var(--r-xs);
+  transition: background-color var(--dur-1);
+}
+.agenda-item:hover { background: var(--elev-2); }
+.agenda-text {
+  flex: 1 1 auto; min-width: 0;
+  border: 0; padding: 0; background: transparent;
+  font: inherit; font-size: var(--t-13); line-height: 1.5;
+  color: var(--ink-2); text-align: left; cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.agenda-text:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.agenda-item.done .agenda-text { color: var(--faint); text-decoration: line-through; }
+.agenda-time {
+  flex: none; font-family: var(--font-mono); font-size: 10.5px;
+  color: var(--faint); font-variant-numeric: tabular-nums;
+}
+.agenda-tag {
+  flex: none; padding: 1px 6px; border-radius: 5px;
+  background: var(--elev-2); color: var(--faint); font-size: 10.5px;
+}
+.pick-btn {
+  flex: none; height: 24px; padding: 0 9px;
+  border: 1px solid var(--line-2); border-radius: var(--r-pill);
+  background: transparent; color: var(--muted);
+  font: inherit; font-size: 11px; white-space: nowrap; cursor: pointer;
+  transition: color var(--dur-1), border-color var(--dur-1), background-color var(--dur-1);
+}
+.pick-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.pick-btn.on { border-color: transparent; background: var(--accent-soft); color: var(--accent); }
+
+/* 本月计划清单（引用自日程） */
+.plan-list {
+  display: grid; gap: 1px;
+  margin-top: var(--s-4); padding-top: var(--s-3);
+  border-top: 1px solid var(--line);
+}
+.plan-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; padding: 0 2px 6px; }
+.plan-head h3 { font-size: var(--t-12); font-weight: 600; color: var(--ink); }
+.plan-head span { font-size: 11px; color: var(--faint); }
+.plan-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; border-radius: var(--r-xs);
+  transition: background-color var(--dur-1);
+}
+.plan-item:hover { background: var(--elev-2); }
+.plan-date {
+  flex: none; min-width: 36px;
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.plan-item.done .agenda-text { color: var(--faint); text-decoration: line-through; }
+.plan-off {
+  width: 20px; height: 20px; flex: none; display: grid; place-items: center;
+  border: 0; border-radius: 6px; background: transparent; color: var(--faint);
+  cursor: pointer; opacity: 0;
+  transition: opacity var(--dur-1), color var(--dur-1), background-color var(--dur-1);
+}
+.plan-off svg { width: 11px; height: 11px; }
+.plan-item:hover .plan-off, .plan-off:focus-visible { opacity: 1; }
+.plan-off:hover { color: var(--danger); background: var(--danger-soft); }
+.link-btn {
+  display: inline-flex; align-items: center; gap: 3px;
+  border: 0; padding: 2px 4px; border-radius: 6px;
+  background: transparent; color: var(--accent);
+  font: inherit; font-size: 11.5px; cursor: pointer;
+  transition: background-color var(--dur-1);
+}
+.link-btn svg { width: 11px; height: 11px; }
+.link-btn:hover { background: var(--accent-soft); }
+
+@media (hover: none) {
+  .plan-off { opacity: .55; }
+}
+
+@media (max-width: 640px) {
+  .day-bar { padding: 9px 10px; gap: 8px; }
+  .day-bar-side { width: 100%; justify-content: flex-end; }
+  .day-now strong { font-size: var(--t-13); }
+  .agenda { padding: var(--s-3); }
+  .agenda-head { gap: 8px; }
+  .agenda-nav { width: 100%; justify-content: flex-start; }
+  .agenda-item { flex-wrap: wrap; row-gap: 5px; }
+  .agenda-text { order: 3; flex: 1 1 100%; }
+  .pick-btn { order: 2; margin-left: auto; }
+  .plan-item { flex-wrap: wrap; row-gap: 4px; }
+  .plan-off { opacity: .55; }
 }
