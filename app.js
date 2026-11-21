@@ -144,12 +144,14 @@
      --------------------------------------------------------- */
   var state;
 
+  var PAGE_ORDER = ['overview', 'daily', 'monthly', 'yearly', 'life8', 'review'];
+
   function basePages() {
     return [
       { id: 'overview', name: '概览', icon: 'compass', builtin: 'overview', modules: [] },
-      { id: 'yearly', name: '年度目标', icon: 'flag', builtin: 'yearly', modules: [] },
-      { id: 'monthly', name: '月度规划', icon: 'calendar', builtin: 'monthly', modules: [] },
       { id: 'daily', name: '每日日程', icon: 'sun', builtin: 'daily', modules: [] },
+      { id: 'monthly', name: '月度规划', icon: 'calendar', builtin: 'monthly', modules: [] },
+      { id: 'yearly', name: '年度目标', icon: 'flag', builtin: 'yearly', modules: [] },
       { id: 'life8', name: '八大模块', icon: 'layers', builtin: 'life8', modules: [] },
       { id: 'review', name: '决策复盘', icon: 'bulb', builtin: 'review', modules: [] }
     ];
@@ -184,7 +186,10 @@
   function normalize(s) {
     var base = initialState();
     s.v = 1;
-    s.settings = s.settings || { name: '' };
+    s.settings = s.settings || {};
+    s.settings.name = typeof s.settings.name === 'string' ? s.settings.name : '';
+    s.settings.appName = typeof s.settings.appName === 'string' ? s.settings.appName : '';
+    s.settings.tagline = typeof s.settings.tagline === 'string' ? s.settings.tagline : '';
     s.lines = (s.lines && typeof s.lines === 'object' && !Array.isArray(s.lines)) ? s.lines : {};
     if (typeof s.current !== 'string') s.current = 'overview';
     if (!Array.isArray(s.life8) || s.life8.length !== 8) {
@@ -210,8 +215,17 @@
       });
       return p;
     });
+    s.pages = orderBuiltinPages(s.pages);
     if (!s.pages.some(function (p) { return p.id === s.current; })) s.current = s.pages[0].id;
     return s;
+  }
+
+  /* 系统页固定按「概览 → 每日 → 月度 → 年度 → 八大模块 → 决策复盘」的时间粒度排序 */
+  function orderBuiltinPages(list) {
+    var rank = function (p) { return PAGE_ORDER.indexOf(p.builtin); };
+    var built = list.filter(function (p) { return p.builtin; }).sort(function (a, b) { return rank(a) - rank(b); });
+    var rest = list.filter(function (p) { return !p.builtin; });
+    return built.concat(rest);
   }
 
   function save() {
@@ -263,11 +277,28 @@
     sys.innerHTML = '';
     cus.innerHTML = '';
     state.pages.forEach(function (p) {
-      var b = document.createElement('button');
+      var b = document.createElement('div');
       b.className = 'nav-item' + (p.id === state.current ? ' active' : '');
-      b.type = 'button';
-      b.innerHTML = icon(p.icon) + '<span>' + esc(p.name) + '</span>';
-      b.addEventListener('click', function () {
+      b.setAttribute('role', 'button');
+      b.tabIndex = 0;
+      b.dataset.page = p.id;
+      b.innerHTML = icon(p.icon);
+
+      var lab = document.createElement('span');
+      lab.className = 'nav-text';
+      lab.textContent = p.name;
+      lab.title = p.name + '（双击或点右侧铅笔可重命名）';
+      b.appendChild(lab);
+
+      var pen = document.createElement('button');
+      pen.type = 'button';
+      pen.className = 'nav-pen';
+      pen.title = '重命名页签';
+      pen.setAttribute('aria-label', '重命名「' + p.name + '」');
+      pen.innerHTML = icon('edit');
+      b.appendChild(pen);
+
+      function go() {
         if (state.current !== p.id) {
           state.current = p.id;
           save();
@@ -276,7 +307,26 @@
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }
         closeSidebar();
+      }
+
+      b.addEventListener('click', function (e) {
+        if (e.target.closest('.nav-pen') || e.target.closest('.rename-input')) return;
+        go();
       });
+      b.addEventListener('keydown', function (e) {
+        if (e.target !== b) return;
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+      });
+      pen.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        startPageRename(lab, p);
+      });
+      lab.addEventListener('dblclick', function (e) {
+        e.stopPropagation();
+        startPageRename(lab, p);
+      });
+
       (p.builtin ? sys : cus).appendChild(b);
     });
     if (!cus.children.length) {
@@ -286,6 +336,59 @@
       hint.innerHTML = '<span>还没有自定义页签</span>';
       cus.appendChild(hint);
     }
+  }
+
+  /* ---------------------------------------------------------
+     通用：就地重命名
+     --------------------------------------------------------- */
+  function startRename(host, value, commit) {
+    if (!host || host.querySelector('.rename-input')) return;
+    var prev = host.innerHTML;
+    host.innerHTML = '';
+    var inp = document.createElement('input');
+    inp.className = 'rename-input';
+    inp.type = 'text';
+    inp.maxLength = 24;
+    inp.value = value;
+    host.appendChild(inp);
+    try { inp.focus(); inp.select(); } catch (e) { }
+
+    var done = false;
+    function end(ok) {
+      if (done) return;
+      done = true;
+      var v = (inp.value || '').trim();
+      if (ok && v && v !== value) {
+        commit(v);
+      } else if (host.isConnected) {
+        host.innerHTML = prev;
+      }
+    }
+    inp.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+    inp.addEventListener('click', function (e) { e.stopPropagation(); });
+    inp.addEventListener('blur', function () { end(true); });
+    inp.addEventListener('keydown', function (e) {
+      e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); end(true); }
+      if (e.key === 'Escape') { e.preventDefault(); end(false); }
+    });
+  }
+
+  function startPageRename(host, p) {
+    startRename(host, p.name, function (v) {
+      p.name = v;
+      save();
+      renderNav();
+      renderPage();
+      toast('页签已重命名为「' + v + '」');
+    });
+  }
+
+  function renderBrand() {
+    var nameEl = $('#brand-name');
+    var subEl = $('#brand-sub');
+    if (nameEl) nameEl.textContent = state.settings.appName || 'Life OS';
+    if (subEl) subEl.textContent = state.settings.tagline || '人生管理系统';
   }
 
   /* ---------------------------------------------------------
@@ -354,7 +457,9 @@
   function renderPage() {
     var page = currentPage();
     var canvas = $('#canvas');
+    renderBrand();
     $('#page-title').textContent = page.name;
+    $('#page-title').title = page.name + '（点击可重命名）';
     canvas.innerHTML = '';
 
     if (page.builtin === 'overview') canvas.appendChild(todayLineBlock());
@@ -502,12 +607,48 @@
     var avgKr = krPct.length ? Math.round(krPct.reduce(function (a, b) { return a + b; }, 0) / krPct.length) : 0;
     var checkRate = checkTotal ? Math.round((checks / checkTotal) * 100) : 0;
 
+    var cards = [
+      {
+        label: '今日待办', icon: 'check', tone: '#3f8f63',
+        value: todoDone + '<small>/ ' + todoTotal + '</small>',
+        note: todoTotal ? '完成度 ' + Math.round(todoDone / todoTotal * 100) + '%' : '还没有待办模块',
+        bar: todoTotal ? Math.round(todoDone / todoTotal * 100) : 0
+      },
+      {
+        label: '本月打卡', icon: 'grid', tone: '#c98b5e',
+        value: checks + '<small>次</small>',
+        note: '平均完成率 ' + checkRate + '%',
+        bar: clamp(checkRate, 0, 100)
+      },
+      {
+        label: '目标进度', icon: 'target', tone: '#5b93bf',
+        value: avgKr + '<small>%</small>',
+        note: krCount ? '共 ' + krCount + ' 个关键结果' : '先去年度目标页设定',
+        bar: avgKr
+      },
+      {
+        label: '决策复盘', icon: 'bulb', tone: '#b07cb5',
+        value: revCount + '<small>条</small>',
+        note: revScored ? '平均自评 ' + (revScore / revScored).toFixed(1) + ' / 5' : '记录一次真实的选择',
+        bar: revScored ? Math.round((revScore / revScored) / 5 * 100) : 0
+      }
+    ];
+
     var html =
-      '<section class="kpis reveal">' +
-      kpi('今日待办', todoDone + '<small>/ ' + todoTotal + '</small>', todoTotal ? '完成度 ' + Math.round(todoDone / todoTotal * 100) + '%' : '还没有待办模块') +
-      kpi('本月打卡', checks + '<small>次</small>', '网格平均完成率 ' + checkRate + '%') +
-      kpi('目标进度', avgKr + '<small>%</small>', krCount ? '共 ' + krCount + ' 个关键结果' : '先去年度目标页设定') +
-      kpi('决策复盘', revCount + '<small>条</small>', revScored ? '平均自评 ' + (revScore / revScored).toFixed(1) + ' / 5' : '记录一次真实的选择') +
+      '<section class="ovcards reveal">' +
+      cards.map(function (c) {
+        return '<article class="ovcard" style="--tone:' + c.tone + ';--tint:' + hexA(c.tone, 0.13) + '">' +
+          '<div class="ov-top">' +
+            '<span class="ov-ico">' + icon(c.icon) + '</span>' +
+            '<span class="ov-label">' + esc(c.label) + '</span>' +
+          '</div>' +
+          '<div class="ov-bottom">' +
+            '<span class="ov-value">' + c.value + '</span>' +
+            '<span class="ov-note">' + esc(c.note) + '</span>' +
+          '</div>' +
+          '<span class="ov-bar"><i style="width:' + clamp(c.bar, 0, 100) + '%"></i></span>' +
+          '</article>';
+      }).join('') +
       '</section>';
 
     var section = document.createElement('div');
@@ -1491,7 +1632,7 @@
   /* -------- 页签设置 -------- */
   function dialogPages() {
     openDialog(
-      '<h3>页签设置</h3><p class="sub">系统页不可删除；自定义页签可以改名或移除，页内模块会一起删除。</p>' +
+      '<h3>页签设置</h3><p class="sub">点击任意一行可改名（系统页也可以改名，改名后依然不可删除）；自定义页签可以改名或移除，页内模块会一起删除。</p>' +
       '<div class="page-list">' + state.pages.map(function (p) {
         return '<div class="page-row" data-page="' + p.id + '">' + icon(p.icon) +
           '<span>' + esc(p.name) + '</span>' +
@@ -1844,6 +1985,36 @@
     $('#btn-add-module').addEventListener('click', dialogAddModule);
     $('#btn-add-page').addEventListener('click', dialogAddPage);
     $('#btn-page-menu').addEventListener('click', dialogPages);
+
+    /* 侧栏顶部系统名称 / 副标题：点击就地重命名 */
+    $('#brand-name').addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var el = this;
+      startRename(el, state.settings.appName || 'Life OS', function (v) {
+        state.settings.appName = v;
+        save();
+        renderBrand();
+        toast('系统名称已更新');
+      });
+    });
+    $('#brand-sub').addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      startRename(this, state.settings.tagline || '人生管理系统', function (v) {
+        state.settings.tagline = v;
+        save();
+        renderBrand();
+        toast('副标题已更新');
+      });
+    });
+
+    /* 顶栏页面标题：点击改当前页名称 */
+    $('#page-title').addEventListener('click', function (e) {
+      e.stopPropagation();
+      var p = currentPage();
+      startPageRename(this, p);
+    });
 
     document.addEventListener('click', function (e) {
       var act = e.target.closest('[data-act]');
