@@ -63,7 +63,11 @@
   /* ---------------------------------------------------------
      常量
      --------------------------------------------------------- */
-  var STORE_KEY = 'lifeos.v1';
+  var STORE_KEY = 'lifeos.v1';            /* 旧版全站数据键，登录后仅作迁移来源 */
+  var AUTH_KEY = 'lifeos.auth.v1';        /* 本机账号表 */
+  var SESSION_KEY = 'lifeos.session.v1';  /* 当前登录邮箱 */
+  var MIGRATED_KEY = 'lifeos.migrated.v1';/* 旧数据是否已继承 */
+  var activeKey = STORE_KEY;              /* 当前账号的数据键 */
 
   var PALETTE = ['#3f8f63', '#6fae8b', '#5b93bf', '#c98b5e', '#b07cb5', '#d9a13d', '#6f7ba8', '#c96b6b', '#7a8b6f'];
 
@@ -173,7 +177,7 @@
 
   function loadState() {
     try {
-      var raw = localStorage.getItem(STORE_KEY);
+      var raw = localStorage.getItem(activeKey);
       if (!raw) return initialState();
       var s = JSON.parse(raw);
       if (!s || !Array.isArray(s.pages) || !s.pages.length) return initialState();
@@ -190,6 +194,7 @@
     s.settings.name = typeof s.settings.name === 'string' ? s.settings.name : '';
     s.settings.appName = typeof s.settings.appName === 'string' ? s.settings.appName : '';
     s.settings.tagline = typeof s.settings.tagline === 'string' ? s.settings.tagline : '';
+    s.settings.actionsOpen = s.settings.actionsOpen !== false;
     s.lines = (s.lines && typeof s.lines === 'object' && !Array.isArray(s.lines)) ? s.lines : {};
     if (typeof s.current !== 'string') s.current = 'overview';
     if (!Array.isArray(s.life8) || s.life8.length !== 8) {
@@ -230,7 +235,7 @@
 
   function save() {
     try {
-      localStorage.setItem(STORE_KEY, JSON.stringify(state));
+      localStorage.setItem(activeKey, JSON.stringify(state));
       saveFailed = false;
     } catch (e) {
       if (!saveFailed) {
@@ -458,6 +463,7 @@
     var page = currentPage();
     var canvas = $('#canvas');
     renderBrand();
+    applyActions(state.settings.actionsOpen !== false);
     $('#page-title').textContent = page.name;
     $('#page-title').title = page.name + '（点击可重命名）';
     canvas.innerHTML = '';
@@ -1715,7 +1721,7 @@
       '<button class="solid-btn" data-ok style="background:#b0443c">确认清空</button></div>',
       function (sheet, close) {
         $('[data-ok]', sheet).addEventListener('click', function () {
-          try { localStorage.removeItem(STORE_KEY); } catch (e) { }
+          try { localStorage.removeItem(activeKey); } catch (e) { }
           state = initialState();
           save();
           close();
@@ -1985,6 +1991,8 @@
     $('#btn-add-module').addEventListener('click', dialogAddModule);
     $('#btn-add-page').addEventListener('click', dialogAddPage);
     $('#btn-page-menu').addEventListener('click', dialogPages);
+    applyActions(actionsOpen());
+    $('#btn-actions-toggle').addEventListener('click', toggleActions);
 
     /* 侧栏顶部系统名称 / 副标题：点击就地重命名 */
     $('#brand-name').addEventListener('click', function (e) {
@@ -2059,13 +2067,149 @@
   }
 
   /* ---------------------------------------------------------
+     顶栏操作区：可折叠（状态随账号持久化）
+     --------------------------------------------------------- */
+  function applyActions(open) {
+    var box = $('#topbar-actions');
+    var btn = $('#btn-actions-toggle');
+    var bar = $('#topbar');
+    if (!box || !btn) return;
+    box.hidden = !open;
+    bar.classList.toggle('actions-hidden', !open);
+    btn.innerHTML = icon(open ? 'chevronRight' : 'chevronLeft');
+    btn.title = open ? '隐藏「页签设置 / 添加模块」' : '展开「页签设置 / 添加模块」';
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
+  function actionsOpen() { return !(state && state.settings && state.settings.actionsOpen === false); }
+
+  function toggleActions() {
+    state.settings.actionsOpen = !(state.settings.actionsOpen !== false);
+    save();
+    applyActions(state.settings.actionsOpen);
+    toast(state.settings.actionsOpen ? '操作区已展开' : '操作区已隐藏，点小箭头展开');
+  }
+
+  /* ---------------------------------------------------------
+     邮箱登录（纯前端，账号与数据都只存在本机浏览器）
+     --------------------------------------------------------- */
+  function safeGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function safeSet(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
+  function safeDel(k) { try { localStorage.removeItem(k); } catch (e) { } }
+
+  function keyFor(email) { return STORE_KEY + '::' + email; }
+  function normalizeEmail(v) { return String(v || '').trim().toLowerCase(); }
+  function isValidEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v); }
+  function hashPass(s) {
+    var h = 5381;
+    for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+    return h.toString(36);
+  }
+  function readAccounts() {
+    try {
+      var a = JSON.parse(safeGet(AUTH_KEY) || '{}');
+      return (a && typeof a === 'object' && !Array.isArray(a)) ? a : {};
+    } catch (e) { return {}; }
+  }
+  function writeAccounts(a) { safeSet(AUTH_KEY, JSON.stringify(a)); }
+  function currentEmail() { return normalizeEmail(safeGet(SESSION_KEY)); }
+
+  /* 旧版 lifeos.v1 数据在首次登录时继承给该账号（只继承一次，两份互不影响） */
+  function inheritLegacy(email) {
+    if (safeGet(MIGRATED_KEY)) return false;
+    var legacy = safeGet(STORE_KEY);
+    safeSet(MIGRATED_KEY, '1');
+    if (!legacy) return false;
+    var target = keyFor(email);
+    if (safeGet(target)) return false;
+    safeSet(target, legacy);
+    return true;
+  }
+
+  function showAuth(msg) {
+    document.documentElement.classList.add('locked');
+    document.documentElement.classList.remove('authed');
+    state = initialState();
+    var auth = $('#auth');
+    auth.hidden = false;
+    var err = $('#auth-error');
+    if (msg) { err.textContent = msg; err.hidden = false; } else { err.hidden = true; }
+    $('#auth-mark').innerHTML = icon('leaf');
+    setTimeout(function () { var e = $('#auth-email'); if (e) e.focus(); }, 60);
+  }
+
+  function enterApp(email, isNew) {
+    activeKey = keyFor(email);
+    var inherited = inheritLegacy(email);
+    state = loadState();
+    $('#auth').hidden = true;
+    document.documentElement.classList.remove('locked');
+    document.documentElement.classList.add('authed');
+    $('#user-mail').textContent = email;
+    $('#user-mail').title = email;
+    renderNav();
+    renderPage();
+    if (inherited) toast('已把原有本机数据继承到 ' + email);
+    else if (isNew) toast('已为该邮箱创建本地账号');
+    else toast('欢迎回来，' + email);
+  }
+
+  function bindAuth() {
+    $('#auth-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var email = normalizeEmail($('#auth-email').value);
+      var pass = $('#auth-pass').value || '';
+      var err = $('#auth-error');
+      function fail(m) { err.textContent = m; err.hidden = false; }
+      if (!isValidEmail(email)) return fail('请输入有效的邮箱地址');
+      if (pass.length < 4) return fail('密码至少 4 位');
+      var acc = readAccounts();
+      var rec = acc[email];
+      if (rec) {
+        if (rec.h !== hashPass(pass)) return fail('密码不正确，请重试');
+      } else {
+        acc[email] = { h: hashPass(pass), at: Date.now() };
+        writeAccounts(acc);
+      }
+      err.hidden = true;
+      safeSet(SESSION_KEY, email);
+      $('#auth-pass').value = '';
+      enterApp(email, !rec);
+    });
+
+    $('#auth-clear').addEventListener('click', function () {
+      if (!confirm('这会清除本机保存的全部账号与数据，且不可恢复。继续？')) return;
+      var keys = [];
+      try {
+        for (var i = 0; i < localStorage.length; i++) {
+          var k = localStorage.key(i);
+          if (k && k.indexOf('lifeos.') === 0) keys.push(k);
+        }
+      } catch (e) { }
+      keys.forEach(safeDel);
+      location.reload();
+    });
+
+    $('#btn-logout').addEventListener('click', function () {
+      if (!confirm('退出登录？数据已按邮箱保存在本机，用同一邮箱可再次进入。')) return;
+      safeDel(SESSION_KEY);
+      location.reload();
+    });
+  }
+
+  /* ---------------------------------------------------------
      启动
      --------------------------------------------------------- */
   function boot() {
-    state = loadState();
     bindGlobal();
-    renderNav();
-    renderPage();
+    bindAuth();
+    var email = currentEmail();
+    if (email && readAccounts()[email]) {
+      enterApp(email);
+    } else {
+      if (email) safeDel(SESSION_KEY);
+      showAuth();
+    }
     document.body.classList.add('ready');
   }
 
