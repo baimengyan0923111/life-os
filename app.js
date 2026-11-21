@@ -410,6 +410,7 @@
       }
     }
     cloudAfterSave();
+    sbAfterSave();
   }
   var saveFailed = false;
 
@@ -2978,6 +2979,786 @@
   }
 
   /* ---------------------------------------------------------
+     云端账号与数据同步（Supabase）
+     只用 fetch 直连 Supabase Auth / REST，不引入任何第三方库
+     会话键：lifeos.sb.v1（access_token / refresh_token / expires_at / uid / email）
+     数据表：public.life_os_state(user_id, data, rev, client_updated_at, updated_at)
+     --------------------------------------------------------- */
+  var SB_URL = 'https://bmfbizhacrzvhohhevpo.supabase.co';
+  var SB_ANON = 'sb_publishable_WHjW9GvlXc7lr0xpvJmrqA_5U9HLFRz';
+  var SB_SESSION_KEY = 'lifeos.sb.v1';
+  var SB_SYNC_KEY = 'lifeos.sb.sync';        /* 每账号一份：lifeos.sb.sync::邮箱 */
+  var SB_ROLLBACK_KEY = 'lifeos.sb.rollback';/* 下载覆盖前快照：lifeos.sb.rollback::邮箱 */
+  var SB_TABLE = 'life_os_state';
+  var SB_AUTO_DELAY = 2500;                  /* 数据变动后的自动同步防抖 */
+
+  var sbUi = { busy: 0, offline: false, msg: null, syncing: false };
+  var sbSuppress = false;      /* 程序化改写 state 期间不触发上传、不打页面时间戳 */
+  var sbPushTimer = null;
+  var sbRefreshTimer = null;
+  var sbConflictOpen = false;
+
+  /* ---------------- 基础工具 ---------------- */
+  function sbErr(code, msg, status) {
+    var e = new Error(msg || code);
+    e.code = code;
+    e.status = status || 0;
+    return e;
+  }
+
+  function sbText(d) {
+    if (!d) return '';
+    if (typeof d === 'string') return d;
+    return String(d.message || d.error_description || d.error || d.msg || d.hint || '');
+  }
+
+  function sbHttpError(status, data) {
+    var code = String((data && data.code) || (data && data.error) || '');
+    var text = sbText(data);
+    var s = (code + ' ' + text).toLowerCase();
+    if (status === 400 || status === 401 || status === 403 || status === 422 || status === 409 ||
+        /user_already_exists|already registered|email_exists|weak_password|password should be at least|invalid_email|email_not_confirmed|not confirmed/.test(s)) {
+      if (/email_not_confirmed|email not confirmed|not confirmed/.test(s)) {
+        return sbErr('EMAIL_UNCONFIRMED', text || '邮箱尚未确认', status);
+      }
+      if (/invalid_credentials|invalid login credentials|invalid grant|invalid_grant/.test(s)) {
+        return sbErr('BAD_PASSWORD', text || '邮箱或密码不正确', status);
+      }
+      if (/user_already_exists|already registered|already been registered|email_exists/.test(s)) {
+        return sbErr('EMAIL_EXISTS', text || '邮箱已注册', status);
+      }
+      if (/weak_password|password should be at least|password is too short|password_too_short/.test(s)) {
+        return sbErr('WEAK_PASSWORD', text || '密码强度不足', status);
+      }
+      if (/invalid_email|unable to validate email|email address .* invalid/.test(s)) {
+        return sbErr('BAD_EMAIL', text || '邮箱格式不正确', status);
+      }
+      if (/rate_limit|too many|over_/i.test(s)) return sbErr('RATE', text || '请求过于频繁', status);
+      if (status === 401 || status === 403) return sbErr('UNAUTH', text || '登录状态已失效', status);
+      return sbErr('BAD', text || '云端拒绝了这个请求', status);
+    }
+    if (status === 404) {
+      if (/pgrst205|schema cache|does not exist|not find the table/.test(s)) {
+        return sbErr('NO_TABLE', text || '数据表不存在', status);
+      }
+      return sbErr('NO_TABLE', text || '云端资源不存在', status);
+    }
+    if (status === 409) return sbErr('CONFLICT', text || '数据版本冲突', status);
+    if (status === 429) return sbErr('RATE', text || '请求过于频繁', status);
+    if (status === 422) return sbErr('BAD', text || '云端不接受这份数据', status);
+    if (status >= 500) return sbErr('SERVER', text || '云端服务异常', status);
+    return sbErr('BAD', text || ('请求失败（' + status + '）'), status);
+  }
+
+  /* 统一的错误文案：全中文、可操作 */
+  function sbErrInfo(e) {
+    var c = e && e.code;
+    if (c === 'NETWORK') {
+      return { type: 'warn', text: '网络不通，没能连上云端。可以继续用本机数据离线使用，网络恢复后会自动补同步。', action: 'retry', offline: true };
+    }
+    if (c === 'NO_TABLE') {
+      return { type: 'err', text: '云端数据表还不存在（public.life_os_state）。请在 Supabase SQL Editor 里建好表后点「重试」，其它功能不受影响。', action: 'retry' };
+    }
+    if (c === 'UNAUTH') {
+      return { type: 'err', text: '登录状态已失效，请重新登录云端账号后再同步。', action: 'relogin' };
+    }
+    if (c === 'EMAIL_UNCONFIRMED') {
+      return { type: 'warn', text: '邮箱还没确认。请到邮箱里点开确认链接，回来就能登录；没收到可以点「重新发送确认邮件」。', action: 'resend' };
+    }
+    if (c === 'BAD_PASSWORD') return { type: 'err', text: '邮箱或密码不正确，请重新输入。' };
+    if (c === 'EMAIL_EXISTS') return { type: 'err', text: '这个邮箱已经注册过了，请直接登录；忘记密码可以用「忘记密码」找回。' };
+    if (c === 'WEAK_PASSWORD') return { type: 'err', text: '密码太短了，至少 6 位。' };
+    if (c === 'BAD_EMAIL') return { type: 'err', text: '这个邮箱地址云端不接受，请检查是否写错。' };
+    if (c === 'RATE') return { type: 'warn', text: '请求太频繁被云端限流了，请等一会儿再试。' };
+    if (c === 'SERVER') return { type: 'err', text: '云端服务暂时异常，请稍后点「重试」。' };
+    if (c === 'CONFLICT') return { type: 'warn', text: '云端数据版本冲突，请点「立即同步」重新核对。' };
+    return { type: 'err', text: (e && e.message) || '云端请求失败，请稍后重试。' };
+  }
+
+  /* ---------------- 网络层 ---------------- */
+  function sbRequest(path, opt) {
+    opt = opt || {};
+    var headers = { apikey: SB_ANON };
+    if (opt.token) headers.Authorization = 'Bearer ' + opt.token;
+    if (opt.body !== undefined) headers['Content-Type'] = 'application/json';
+    if (opt.headers) {
+      Object.keys(opt.headers).forEach(function (k) { headers[k] = opt.headers[k]; });
+    }
+    var init = { method: opt.method || 'GET', headers: headers, mode: 'cors', cache: 'no-store' };
+    if (opt.body !== undefined) init.body = JSON.stringify(opt.body);
+    return fetch(SB_URL + path, init).then(function (res) {
+      return res.text().then(function (txt) {
+        var data = null;
+        if (txt) {
+          try { data = JSON.parse(txt); } catch (e) { data = txt; }
+        }
+        if (res.ok) return data;
+        throw sbHttpError(res.status, data);
+      });
+    }, function () {
+      throw sbErr('NETWORK', '网络不通，无法连接云端服务');
+    });
+  }
+
+  /* ---------------- 会话 ---------------- */
+  function sbReadSession() {
+    try {
+      var s = JSON.parse(safeGet(SB_SESSION_KEY) || 'null');
+      if (!s || !s.access_token) return null;
+      return s;
+    } catch (e) { return null; }
+  }
+  function sbWriteSession(s) {
+    if (!s) safeDel(SB_SESSION_KEY);
+    else safeSet(SB_SESSION_KEY, JSON.stringify(s));
+  }
+  function sbLoggedIn() { return !!sbReadSession(); }
+  function sbCurrentEmail() { var s = sbReadSession(); return s ? normalizeEmail(s.email) : ''; }
+
+  function sbAdoptToken(r, fallback) {
+    if (!r || !r.access_token) throw sbErr('BAD', '云端没有返回登录凭证');
+    var fb = fallback || {};
+    var user = r.user || {};
+    var s = {
+      access_token: r.access_token,
+      refresh_token: r.refresh_token || fb.refresh_token || '',
+      expires_at: Date.now() + ((Number(r.expires_in) || 3600) * 1000),
+      uid: user.id || fb.uid || '',
+      email: normalizeEmail(user.email || fb.email || ''),
+      at: Date.now()
+    };
+    sbWriteSession(s);
+    sbScheduleRefresh();
+    return s;
+  }
+
+  function sbScheduleRefresh() {
+    clearTimeout(sbRefreshTimer);
+    sbRefreshTimer = null;
+    var s = sbReadSession();
+    if (!s || !s.refresh_token) return;
+    var wait = (Number(s.expires_at) || 0) - Date.now() - 60000;
+    if (wait < 5000) wait = 5000;
+    if (wait > 1800000) wait = 1800000;
+    sbRefreshTimer = setTimeout(function () {
+      sbEnsureSession().then(function () {
+        updateCloudEntry();
+      }, function (e) {
+        if (e && (e.code === 'UNAUTH' || e.code === 'BAD_PASSWORD')) sbSessionExpired();
+        else { sbUi.offline = true; updateCloudEntry(); }
+      });
+    }, wait);
+  }
+
+  /* 取可用会话：60 秒内将过期就先刷新 */
+  function sbEnsureSession() {
+    var s = sbReadSession();
+    if (!s) return Promise.reject(sbErr('UNAUTH', '未登录云端账号'));
+    if (s.access_token && (Number(s.expires_at) || 0) - Date.now() > 60000) {
+      return Promise.resolve(s);
+    }
+    if (!s.refresh_token) return Promise.reject(sbErr('UNAUTH', '缺少刷新凭证'));
+    return sbRequest('/auth/v1/token?grant_type=refresh_token', {
+      method: 'POST', body: { refresh_token: s.refresh_token }
+    }).then(function (r) {
+      return sbAdoptToken(r, s);
+    }, function (e) {
+      if (e && e.code === 'NETWORK') throw e;
+      sbWriteSession(null);
+      throw sbErr('UNAUTH', '登录状态已过期，请重新登录');
+    });
+  }
+
+  /* 刷新/校验彻底失败：回登录页，数据仍在本地 */
+  function sbSessionExpired() {
+    sbWriteSession(null);
+    clearTimeout(sbPushTimer);
+    sbPushTimer = null;
+    updateCloudEntry();
+    if ($('#auth') && $('#auth').hidden) {
+      showAuth('云端登录状态已过期，请重新登录。本机数据不受影响。');
+    }
+  }
+
+  /* ---------------- Auth 接口 ---------------- */
+  function sbSignUp(email, password) {
+    return sbRequest('/auth/v1/signup', {
+      method: 'POST', body: { email: email, password: password }
+    }).then(function (r) {
+      if (r && r.access_token) return { session: sbAdoptToken(r), needConfirm: false };
+      return { session: null, needConfirm: true, email: (r && r.email) || email };
+    });
+  }
+
+  function sbSignIn(email, password) {
+    return sbRequest('/auth/v1/token?grant_type=password', {
+      method: 'POST', body: { email: email, password: password }
+    }).then(function (r) { return sbAdoptToken(r); });
+  }
+
+  function sbRecover(email) {
+    return sbRequest('/auth/v1/recover', { method: 'POST', body: { email: email } });
+  }
+
+  function sbResendConfirm(email) {
+    return sbRequest('/auth/v1/resend', { method: 'POST', body: { type: 'signup', email: email } });
+  }
+
+  function sbSignOutRemote() {
+    var s = sbReadSession();
+    if (!s) return Promise.resolve();
+    return sbRequest('/auth/v1/logout', { method: 'POST', token: s.access_token, body: {} })
+      .then(function () { return null; }, function () { return null; });
+  }
+
+  function sbFetchUser() {
+    return sbEnsureSession().then(function (s) {
+      return sbRequest('/auth/v1/user', { token: s.access_token });
+    });
+  }
+
+  /* ---------------- 数据接口 ---------------- */
+  function sbSyncStoreKey() { return SB_SYNC_KEY + '::' + (currentEmail() || sbCurrentEmail() || 'local'); }
+  function sbSnapStoreKey() { return SB_ROLLBACK_KEY + '::' + (currentEmail() || sbCurrentEmail() || 'local'); }
+
+  function sbReadMeta() {
+    try {
+      var m = JSON.parse(safeGet(sbSyncStoreKey()) || 'null');
+      if (!m || typeof m !== 'object') m = {};
+      return {
+        lastFp: typeof m.lastFp === 'string' ? m.lastFp : '',
+        lastAt: Number(m.lastAt) || 0,
+        remoteAt: Number(m.remoteAt) || 0,
+        rev: Number(m.rev) || 0
+      };
+    } catch (e) {
+      return { lastFp: '', lastAt: 0, remoteAt: 0, rev: 0 };
+    }
+  }
+  function sbWriteMeta(m) { safeSet(sbSyncStoreKey(), JSON.stringify(m)); }
+
+  function sbSnapRead() {
+    try {
+      var s = JSON.parse(safeGet(sbSnapStoreKey()) || 'null');
+      return (s && s.data) ? s : null;
+    } catch (e) { return null; }
+  }
+  function sbSnapWrite(data) {
+    try {
+      safeSet(sbSnapStoreKey(), JSON.stringify({ at: Date.now(), data: data }));
+    } catch (e) { }
+  }
+
+  function sbGetRow() {
+    var s = sbReadSession();
+    if (!s) return Promise.reject(sbErr('UNAUTH', '未登录云端账号'));
+    if (!s.uid) return Promise.reject(sbErr('UNAUTH', '缺少用户标识，请重新登录'));
+    return sbEnsureSession().then(function (ses) {
+      var q = '/rest/v1/' + SB_TABLE + '?select=*&user_id=eq.' + encodeURIComponent(ses.uid);
+      return sbRequest(q, { token: ses.access_token });
+    }).then(function (rows) {
+      if (Array.isArray(rows)) return rows[0] || null;
+      return rows || null;
+    });
+  }
+
+  function sbUpsertRow(data) {
+    var s = sbReadSession();
+    if (!s) return Promise.reject(sbErr('UNAUTH', '未登录云端账号'));
+    if (!s.uid) return Promise.reject(sbErr('UNAUTH', '缺少用户标识，请重新登录'));
+    return sbEnsureSession().then(function (ses) {
+      return sbRequest('/rest/v1/' + SB_TABLE, {
+        method: 'POST',
+        token: ses.access_token,
+        headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+        body: {
+          user_id: ses.uid,
+          data: data,
+          client_updated_at: new Date().toISOString()
+        }
+      });
+    }).then(function (r) {
+      if (Array.isArray(r)) return r[0] || null;
+      return r || null;
+    });
+  }
+
+  /* ---------------- 数据指纹 / 内容判定 ---------------- */
+  function sbFp(obj) { return cloudFp(obj); }
+
+  function sbLocalHasContent() {
+    if (!state) return false;
+    var hit = false;
+    try {
+      if (state.lines && typeof state.lines === 'object' && Object.keys(state.lines).length) hit = true;
+      (state.life8 || []).forEach(function (d) {
+        if (Number(d.score) > 0) hit = true;
+        if (d.note && String(d.note).trim()) hit = true;
+      });
+      (state.pages || []).forEach(function (p) {
+        if (hit) return;
+        if (!Array.isArray(p.modules)) return;
+        p.modules.forEach(function (m) {
+          if (!m || typeof m !== 'object') return;
+          Object.keys(m).forEach(function (k) {
+            var v = m[k];
+            if (Array.isArray(v) && v.length) hit = true;
+            if (typeof v === 'string' && v.trim() && v !== m.type) hit = true;
+          });
+        });
+      });
+    } catch (e) { }
+    return hit;
+  }
+
+  /* ---------------- 同步状态与入口 ---------------- */
+  function sbStatusInfo() {
+    if (!sbLoggedIn()) return { key: 'off', text: '未登录云端' };
+    if (sbUi.syncing || sbUi.busy > 0) return { key: 'busy', text: '同步中' };
+    if (sbUi.offline) return { key: 'offline', text: '离线' };
+    var meta = sbReadMeta();
+    if (!meta.lastFp) return { key: 'new', text: '待首次同步' };
+    if (sbFp(state) !== meta.lastFp) return { key: 'dirty', text: '有本地改动待同步' };
+    return { key: 'ok', text: '云端已连接' };
+  }
+
+  function sbTime(ts) {
+    if (!ts) return '—';
+    try { return cloudFmtTime(ts); } catch (e) { return new Date(ts).toLocaleString('zh-CN'); }
+  }
+
+  function sbSetMsg(type, text, action) {
+    if (!text) sbUi.msg = null;
+    else sbUi.msg = { type: type || 'info', text: text, action: action || '' };
+    sbPaint();
+  }
+
+  function sbPaint() {
+    var box = $('#sb-msg');
+    if (!box) return;
+    var m = sbUi.msg;
+    if (!m) { box.hidden = true; box.className = 'cloud-msg'; box.innerHTML = ''; return; }
+    box.hidden = false;
+    box.className = 'cloud-msg is-' + m.type;
+    var label = { retry: '重试', relogin: '重新登录', resend: '重新发送确认邮件' }[m.action] || '处理';
+    box.innerHTML = '<span class="cm-text">' + esc(m.text) + '</span>' +
+      (m.action ? '<button class="cm-act" type="button" data-sb="' + esc(m.action) + '">' + esc(label) + '</button>' : '');
+  }
+
+  function sbFail(e, where) {
+    var info = sbErrInfo(e);
+    if (info.offline) sbUi.offline = true;
+    updateCloudEntry();
+    sbSetMsg(info.type, info.text, info.action);
+    return info;
+  }
+
+  /* ---------------- 同步主流程 ---------------- */
+  function sbPushNow(silent) {
+    if (!sbLoggedIn()) return Promise.resolve();
+    var fp = sbFp(state);
+    var payload = JSON.parse(JSON.stringify(state));
+    sbUi.syncing = true;
+    sbUi.busy++;
+    updateCloudEntry();
+    if (!silent) sbSetMsg('info', '正在上传到云端…');
+    return sbUpsertRow(payload).then(function (row) {
+      sbUi.busy--; sbUi.syncing = false; sbUi.offline = false;
+      var meta = sbReadMeta();
+      meta.lastFp = fp;
+      meta.lastAt = Date.now();
+      if (row) {
+        if (row.rev !== undefined && row.rev !== null) meta.rev = Number(row.rev) || 0;
+        var at = Date.parse(row.client_updated_at || row.updated_at || '');
+        meta.remoteAt = isNaN(at) ? Date.now() : at;
+      } else {
+        meta.remoteAt = Date.now();
+      }
+      sbWriteMeta(meta);
+      updateCloudEntry();
+      sbSetMsg('ok', '已同步到云端 · ' + sbTime(meta.lastAt));
+      if (!silent) toast('已同步到云端');
+      return row;
+      function fb2() { return fp; }
+    }).catch(function (e) {
+      sbUi.busy--; sbUi.syncing = false;
+      sbFail(e, 'push');
+    });
+  }
+
+  function sbApplyRemote(data, fp, rev, remoteAt, silent) {
+    if (!data || !Array.isArray(data.pages) || !data.pages.length) {
+      sbSetMsg('err', '云端数据格式不正确，已跳过下载，本机数据未受影响。');
+      return;
+    }
+    sbSnapWrite(state);
+    sbSuppress = true;
+    state = normalize(JSON.parse(JSON.stringify(data)));
+    save();
+    sbSuppress = false;
+    cloudResetStamps(state);
+    var meta = sbReadMeta();
+    meta.lastFp = fp || sbFp(state);
+    meta.lastAt = Date.now();
+    meta.rev = Number(rev) || 0;
+    meta.remoteAt = Number(remoteAt) || Date.now();
+    sbWriteMeta(meta);
+    renderNav();
+    renderPage();
+    updateCloudEntry();
+    sbSetMsg('ok', '已把云端数据下载到本机 · ' + sbTime(meta.lastAt));
+    toast(silent === false ? '已下载云端数据' : '已同步云端更新');
+  }
+
+  /* 云端有数据：提示拉取（数据覆盖前自动存快照，可恢复） */
+  function sbOfferRemote(data, fp, rev, remoteAt) {
+    var pages = (data && Array.isArray(data.pages)) ? data.pages.length : 0;
+    openDialog(
+      '<h3>云端有数据</h3>' +
+      '<p class="sub">云端账号里已经有一份数据（' + pages + ' 个页面），和这台电脑上的内容不一致。' +
+      '下载会用云端数据覆盖本机，覆盖前会自动存一份快照，随时可以恢复。</p>' +
+      '<div class="cloud-msg is-info" style="margin-top:10px"><span class="cm-text">' +
+      '想保留这台电脑现有的内容？先选「稍后」，在云同步面板里点「上传本机」。</span></div>' +
+      '<div class="sheet-actions">' +
+      '<button class="ghost-btn" type="button" data-close>稍后</button>' +
+      '<button class="solid-btn" type="button" data-dl>立即下载</button></div>',
+      function (sheet, close) {
+        $('[data-dl]', sheet).addEventListener('click', function () {
+          close();
+          sbApplyRemote(data, fp, rev, remoteAt, false);
+        });
+      }
+    );
+  }
+
+  /* 两端都改过：三选一 */
+  function sbOpenConflict(remoteData, remoteFp, rev, remoteAt) {
+    if (sbConflictOpen) return;
+    sbConflictOpen = true;
+    var meta = sbReadMeta();
+    openDialog(
+      '<h3>两边都有改动</h3>' +
+      '<p class="sub">这台电脑和云端各有一份不同的数据，需要你决定保留哪一份。' +
+      '上一次同步：' + esc(sbTime(meta.lastAt)) + '。</p>' +
+      '<div class="sb-conflict-list">' +
+      '<div class="sb-cf"><b>本机</b><span>' + ((state.pages || []).length) + ' 个页面 · 指纹 ' + esc(sbFp(state)) + '</span></div>' +
+      '<div class="sb-cf"><b>云端</b><span>' + ((remoteData && remoteData.pages) ? remoteData.pages.length : 0) + ' 个页面 · 指纹 ' + esc(remoteFp) + '</span></div>' +
+      '</div>' +
+      '<div class="sheet-actions sheet-actions-wrap">' +
+      '<button class="ghost-btn" type="button" data-close>先不动</button>' +
+      '<button class="ghost-btn" type="button" data-local>用本机覆盖云端</button>' +
+      '<button class="ghost-btn" type="button" data-remote>用云端覆盖本机</button>' +
+      '<button class="solid-btn" type="button" data-merge>合并（逐页取较新）</button></div>',
+      function (sheet, close) {
+        function done() { sbConflictOpen = false; close(); }
+        $('[data-local]', sheet).addEventListener('click', function () {
+          done();
+          sbPushNow(false);
+        });
+        $('[data-remote]', sheet).addEventListener('click', function () {
+          done();
+          sbApplyRemote(remoteData, remoteFp, rev, remoteAt, false);
+        });
+        $('[data-merge]', sheet).addEventListener('click', function () {
+          done();
+          var merged = cloudMerge(state, remoteData || { pages: [] });
+          sbSuppress = true;
+          state = normalize(merged);
+          save();
+          sbSuppress = false;
+          cloudResetStamps(state);
+          renderNav();
+          renderPage();
+          toast('已合并两边数据');
+          sbPushNow(false);
+        });
+        $('[data-close]', sheet).addEventListener('click', function () { sbConflictOpen = false; });
+      }
+    );
+  }
+
+  /* 登录后 / 页面打开时对齐一次 */
+  function sbAfterEnter() {
+    updateCloudEntry();
+    if (!sbLoggedIn()) return;
+    sbScheduleRefresh();
+    sbSyncAtStart();
+  }
+
+  function sbSyncAtStart() {
+    if (!sbLoggedIn()) return;
+    sbUi.busy++;
+    updateCloudEntry();
+    sbGetRow().then(function (row) {
+      sbUi.busy--;
+      sbUi.offline = false;
+      updateCloudEntry();
+      var meta = sbReadMeta();
+      var localFp = sbFp(state);
+      if (!row) {
+        /* 云端为空：本机有内容就自动上传（首次登录迁移） */
+        if (sbLocalHasContent()) {
+          sbPushNow(true);
+          sbSetMsg('ok', '云端还没有数据，已把本机数据上传上去。');
+        } else {
+          meta.lastFp = localFp;
+          meta.lastAt = Date.now();
+          sbWriteMeta(meta);
+          updateCloudEntry();
+        }
+        return;
+      }
+      var remoteData = row.data || null;
+      var remoteFp = remoteData ? sbFp(remoteData) : '';
+      var remoteAt = Date.parse(row.client_updated_at || row.updated_at || '');
+      if (isNaN(remoteAt)) remoteAt = 0;
+      var rev = Number(row.rev) || 0;
+      if (remoteFp && remoteFp === localFp) {
+        meta.lastFp = localFp;
+        meta.remoteAt = remoteAt || meta.remoteAt;
+        meta.rev = rev || meta.rev;
+        meta.lastAt = meta.lastAt || Date.now();
+        sbWriteMeta(meta);
+        updateCloudEntry();
+        return;
+      }
+      var everSynced = !!meta.lastFp;
+      var localDirty = everSynced && localFp !== meta.lastFp;
+      var remoteNewer = !everSynced || remoteAt > (meta.remoteAt || 0) || rev > (meta.rev || 0);
+      if (localDirty && remoteNewer) { sbOpenConflict(remoteData, remoteFp, rev, remoteAt); return; }
+      if (remoteNewer) { sbOfferRemote(remoteData, remoteFp, rev, remoteAt); return; }
+      /* 本机更新、云端没动 */
+      sbPushNow(true);
+    }).catch(function (e) {
+      sbUi.busy--;
+      sbFail(e, 'pull');
+    });
+  }
+
+  /* 手动「立即同步」：拉一次再决定推/拉/冲突 */
+  function sbSyncNow() {
+    if (!sbLoggedIn()) { sbSetMsg('err', '请先登录云端账号'); return; }
+    if (sbUi.busy > 0) return;
+    sbUi.busy++;
+    sbUi.syncing = true;
+    updateCloudEntry();
+    sbSetMsg('info', '正在和云端核对…');
+    sbGetRow().then(function (row) {
+      sbUi.busy--;
+      sbUi.syncing = false;
+      sbUi.offline = false;
+      var meta = sbReadMeta();
+      var localFp = sbFp(state);
+      if (!row) { sbPushNow(false); return; }
+      var remoteData = row.data || null;
+      var remoteFp = remoteData ? sbFp(remoteData) : '';
+      var remoteAt = Date.parse(row.client_updated_at || row.updated_at || '');
+      if (isNaN(remoteAt)) remoteAt = 0;
+      var rev = Number(row.rev) || 0;
+      if (remoteFp && remoteFp === localFp) {
+        meta.lastFp = localFp;
+        meta.remoteAt = remoteAt || meta.remoteAt;
+        meta.rev = rev || meta.rev;
+        meta.lastAt = Date.now();
+        sbWriteMeta(meta);
+        updateCloudEntry();
+        sbSetMsg('ok', '本机和云端已经一致 · ' + sbTime(meta.lastAt));
+        return;
+      }
+      var everSynced = !!meta.lastFp;
+      var localDirty = everSynced && localFp !== meta.lastFp;
+      var remoteNewer = !everSynced || remoteAt > (meta.remoteAt || 0) || rev > (meta.rev || 0);
+      if (localDirty && remoteNewer) { sbOpenConflict(remoteData, remoteFp, rev, remoteAt); return; }
+      if (remoteNewer) { sbOfferRemote(remoteData, remoteFp, rev, remoteAt); return; }
+      sbPushNow(false);
+    }).catch(function (e) {
+      sbUi.busy--;
+      sbUi.syncing = false;
+      sbFail(e, 'sync');
+    });
+  }
+
+  /* 手动下载云端 */
+  function sbPullNow() {
+    if (!sbLoggedIn()) { sbSetMsg('err', '请先登录云端账号'); return; }
+    if (sbUi.busy > 0) return;
+    sbUi.busy++;
+    sbUi.syncing = true;
+    updateCloudEntry();
+    sbGetRow().then(function (row) {
+      sbUi.busy--;
+      sbUi.syncing = false;
+      if (!row || !row.data) { sbSetMsg('warn', '云端还没有数据，先点「上传本机」。'); return; }
+      var remoteFp = sbFp(row.data);
+      var remoteAt = Date.parse(row.client_updated_at || row.updated_at || '');
+      if (isNaN(remoteAt)) remoteAt = 0;
+      if (remoteFp === sbFp(state)) { sbSetMsg('ok', '云端数据和本机一致，无需下载。'); updateCloudEntry(); return; }
+      sbApplyRemote(row.data, remoteFp, Number(row.rev) || 0, remoteAt, false);
+    }).catch(function (e) {
+      sbUi.busy--;
+      sbUi.syncing = false;
+      sbFail(e, 'pull');
+    });
+  }
+
+  function sbRestoreSnap() {
+    var snap = sbSnapRead();
+    if (!snap) { sbSetMsg('err', '没有可用的覆盖前快照'); return; }
+    sbSuppress = true;
+    state = normalize(JSON.parse(JSON.stringify(snap.data)));
+    save();
+    sbSuppress = false;
+    cloudResetStamps(state);
+    renderNav();
+    renderPage();
+    updateCloudEntry();
+    toast('已恢复覆盖前的本机数据');
+    sbSetMsg('ok', '已恢复覆盖前的本机数据（' + sbTime(snap.at) + '）');
+  }
+
+  /* 保存后的联动：2.5 秒防抖上传 */
+  function sbAfterSave() {
+    if (sbSuppress) return;
+    updateCloudEntry();
+    if (!sbLoggedIn()) return;
+    clearTimeout(sbPushTimer);
+    sbPushTimer = setTimeout(sbAutoPush, SB_AUTO_DELAY);
+  }
+
+  function sbAutoPush() {
+    sbPushTimer = null;
+    if (!sbLoggedIn()) return;
+    if (sbUi.busy > 0) { sbPushTimer = setTimeout(sbAutoPush, SB_AUTO_DELAY); return; }
+    var localFp = sbFp(state);
+    var meta = sbReadMeta();
+    sbGetRow().then(function (row) {
+      var remoteFp = (row && row.data) ? sbFp(row.data) : '';
+      var remoteAt = row ? Date.parse(row.client_updated_at || row.updated_at || '') : 0;
+      if (isNaN(remoteAt)) remoteAt = 0;
+      var rev = row ? (Number(row.rev) || 0) : 0;
+      if (remoteFp && remoteFp !== localFp) {
+        var localDirty = !!meta.lastFp && localFp !== meta.lastFp;
+        var remoteNewer = remoteAt > (meta.remoteAt || 0) || rev > (meta.rev || 0);
+        if (localDirty && remoteNewer) { sbOpenConflict(row.data, remoteFp, rev, remoteAt); return; }
+        if (!meta.lastFp && remoteNewer) { sbOfferRemote(row.data, remoteFp, rev, remoteAt); return; }
+      }
+      sbPushNow(true);
+    }).catch(function (e) {
+      if (e && e.code === 'NETWORK') { sbUi.offline = true; updateCloudEntry(); }
+      else sbFail(e, 'push');
+    });
+  }
+
+  /* ---------------- 退出登录 ---------------- */
+  function sbSignOutFlow() {
+    var email = sbCurrentEmail() || currentEmail();
+    openDialog(
+      '<h3>退出云端账号？</h3>' +
+      '<p class="sub">退出后这台电脑需要重新登录才能同步。数据可以留在本机，也可以一并清除。</p>' +
+      '<p class="sub" style="margin-top:6px">当前账号：<b>' + esc(email) + '</b></p>' +
+      '<div class="sheet-actions sheet-actions-wrap">' +
+      '<button class="ghost-btn" type="button" data-close>取消</button>' +
+      '<button class="ghost-btn" type="button" data-keep>保留本机数据并退出</button>' +
+      '<button class="solid-btn cloud-danger" type="button" data-wipe>清除本机缓存并退出</button></div>',
+      function (sheet, close) {
+        function finish(wipe) {
+          sbSignOutRemote().then(function () { return null; });
+          sbWriteSession(null);
+          clearTimeout(sbPushTimer);
+          clearTimeout(sbRefreshTimer);
+          sbPushTimer = null;
+          sbRefreshTimer = null;
+          safeDel(SESSION_KEY);
+          if (wipe) {
+            try {
+              safeDel(keyFor(email));
+              safeDel(sbSyncStoreKey());
+              safeDel(sbSnapStoreKey());
+            } catch (e) { }
+          }
+          close();
+          location.reload();
+        }
+        $('[data-keep]', sheet).addEventListener('click', function () { finish(false); });
+        $('[data-wipe]', sheet).addEventListener('click', function () { finish(true); });
+      }
+    );
+  }
+
+  /* ---------------- 云同步面板里的云端区块 ---------------- */
+  function sbRowHtml(k, v) {
+    return '<div class="sb-row"><span class="sb-k">' + esc(k) + '</span><span class="sb-v">' + v + '</span></div>';
+  }
+
+  function sbPanelHtml() {
+    var st = sbStatusInfo();
+    var s = sbReadSession();
+    var html = '<h3 class="cloud-h3">云端账号<span class="cloud-tag">Supabase</span></h3>';
+    if (!s) {
+      html += '<p class="sub">这台电脑还没有登录云端账号。登录后数据会在所有设备之间保持一致。</p>' +
+        '<div class="cloud-msg" id="sb-msg" hidden></div>' +
+        '<div class="sb-actions"><button class="solid-btn" type="button" data-sb="login">去登录云端账号</button></div>' +
+        '<p class="sub sb-tip">想用旧的本机账号也可以：退出后在登录页选「本机账号离线登录」。</p>';
+      return '<div class="sb-sec">' + html + '</div>';
+    }
+    var meta = sbReadMeta();
+    var snap = sbSnapRead();
+    html += '<div class="sb-rows">' +
+      sbRowHtml('状态', '<span class="sb-dot" data-s="' + esc(st.key) + '"></span>' + esc(st.text)) +
+      sbRowHtml('登录邮箱', esc(s.email || '')) +
+      sbRowHtml('最后同步', esc(meta.lastAt ? sbTime(meta.lastAt) : '尚未同步')) +
+      '</div>' +
+      '<div class="cloud-msg" id="sb-msg" hidden></div>' +
+      '<div class="sb-actions">' +
+      '<button class="solid-btn" type="button" data-sb="sync">立即同步</button>' +
+      '<button class="ghost-btn" type="button" data-sb="push">上传本机</button>' +
+      '<button class="ghost-btn" type="button" data-sb="pull">下载云端</button>' +
+      (snap ? '<button class="ghost-btn" type="button" data-sb="restore">恢复覆盖前数据</button>' : '') +
+      '<button class="ghost-btn" type="button" data-sb="signout">退出登录</button>' +
+      '</div>' +
+      '<p class="sub sb-tip">改动停下 2.5 秒后自动上传；离线时继续用本机数据，网络恢复后自动补同步。</p>';
+    return '<div class="sb-sec">' + html + '</div>';
+  }
+
+  function sbAction(name) {
+    switch (name) {
+      case 'login':
+        closeDialog();
+        safeDel(SESSION_KEY);
+        showAuth();
+        break;
+      case 'sync': sbSyncNow(); break;
+      case 'push': sbPushNow(false); break;
+      case 'pull': sbPullNow(); break;
+      case 'restore': sbRestoreSnap(); break;
+      case 'signout': sbSignOutFlow(); break;
+      case 'retry': sbSyncNow(); break;
+      case 'relogin':
+        sbWriteSession(null);
+        closeDialog();
+        safeDel(SESSION_KEY);
+        showAuth('请重新登录云端账号。本机数据仍在。');
+        break;
+      case 'resend': {
+        var em = sbCurrentEmail() || normalizeEmail($('#auth-email') ? $('#auth-email').value : '');
+        if (!em) { sbSetMsg('warn', '请先填写邮箱'); break; }
+        sbResendConfirm(em).then(function () {
+          sbSetMsg('ok', '确认邮件已重新发送到 ' + em + '，请到邮箱点开确认链接。');
+        }).catch(function (e) { sbFail(e, 'resend'); });
+        break;
+      }
+    }
+  }
+
+  function sbMount(sheet) {
+    sheet.addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('[data-sb]') : null;
+      if (!b || !sheet.contains(b)) return;
+      sbAction(b.getAttribute('data-sb'));
+    });
+  }
+
+  /* ---------------------------------------------------------
      云同步（GitHub Gist）
      浏览器直连 GitHub REST API，数据只在本机与自己的私有 Gist 之间流动
      --------------------------------------------------------- */
@@ -3234,11 +4015,12 @@
       ico.innerHTML = icon('cloud');
       ico.setAttribute('data-ready', '1');
     }
-    var st = cloudStatusInfo();
+    var useSb = sbLoggedIn();
+    var st = useSb ? sbStatusInfo() : cloudStatusInfo();
     btn.setAttribute('data-state', st.key);
     var txt = $('#cloud-state');
     if (txt) txt.textContent = st.text;
-    btn.title = '云同步（GitHub Gist）· ' + st.text;
+    btn.title = '云同步（' + (useSb ? 'Supabase 云端账号' : 'GitHub Gist 备份') + '）· ' + st.text;
     btn.setAttribute('aria-label', '云同步，当前状态：' + st.text);
   }
 
@@ -3428,9 +4210,18 @@
     else if (cloudUi.view === 'confirm-pull') html = cloudConfirmPullHtml();
     else if (cloudUi.view === 'confirm-unbind') html = cloudConfirmUnbindHtml();
     else html = cloudMainHtml();
+    /* 主视图：云端账号（Supabase）在上，GitHub Gist 折叠为备份通道；子流程仍独占面板 */
+    if (cloudUi.view === 'main' || !readCloud()) {
+      html = sbPanelHtml() +
+        '<details class="sb-backup">' +
+        '<summary>备份通道 · GitHub Gist（可选，独立于云端账号）</summary>' +
+        '<div class="sb-backup-body">' + html + '</div>' +
+        '</details>';
+    }
     if (overlay) overlay.classList.add('cloud-open');
     openDialog(html, cloudMount);
     paintCloudMsg();
+    sbPaint();
   }
 
   function cloudMount(sheet) {
@@ -3464,6 +4255,7 @@
       if (!b || !sheet.contains(b)) return;
       cloudAction(b.getAttribute('data-cloud'));
     });
+    sbMount(sheet);
   }
 
   function cloudAction(name) {
@@ -4230,15 +5022,69 @@
     return true;
   }
 
-  function showAuth(msg) {
+  var authMode = 'login';
+
+  function showAuth(msg, mode) {
     document.documentElement.classList.add('locked');
     document.documentElement.classList.remove('authed');
     state = initialState();
     var auth = $('#auth');
     auth.hidden = false;
-    authFail(msg || '', false);
     $('#auth-mark').innerHTML = icon('leaf');
-    setTimeout(function () { var e = $('#auth-email'); if (e) e.focus(); }, 60);
+    var em = $('#auth-email');
+    if (em && !em.value) {
+      var last = sbCurrentEmail() || '';
+      if (last) em.value = last;
+    }
+    setAuthMode(mode || (sbLoggedIn() ? 'login' : 'login'));
+    authFail(msg || '', false, /确认/.test(msg || ''));
+    setTimeout(function () { if (em) em.focus(); }, 60);
+  }
+
+  /* 登录页三态 + 本机离线模式 */
+  function setAuthMode(mode) {
+    authMode = mode || 'login';
+    var box = $('#auth');
+    if (!box) return;
+    box.setAttribute('data-mode', authMode);
+    var titles = {
+      login: ['登录 Life OS', '用一个邮箱账号登录，换设备也能看到同一份数据。'],
+      signup: ['注册 Life OS', '注册一个邮箱账号，数据会跟着账号走。'],
+      recover: ['找回密码', '填邮箱，我们会发一封重置密码的邮件给你。'],
+      local: ['本机账号登录', '这次只在这台电脑上进入，数据不会上传云端。']
+    };
+    var t = titles[authMode] || titles.login;
+    var h1 = $('#auth-title'), sub = $('#auth-sub');
+    if (h1) h1.textContent = t[0];
+    if (sub) sub.textContent = t[1];
+    $$('#auth-tabs .auth-tab').forEach(function (b) {
+      var on = b.getAttribute('data-mode') === authMode;
+      b.classList.toggle('is-on', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    var pf = $('#auth-pass-field'), pass = $('#auth-pass'), hint = $('#auth-hint');
+    var submit = $('#auth-submit'), note = $('#auth-note'), local = $('#auth-local');
+    if (pf) pf.hidden = (authMode === 'recover');
+    if (pass) {
+      pass.required = (authMode !== 'recover');
+      pass.setAttribute('autocomplete', authMode === 'signup' ? 'new-password' : 'current-password');
+      pass.placeholder = authMode === 'signup' ? '至少 6 位' : (authMode === 'local' ? '这台电脑上的密码' : '至少 6 位');
+      if (authMode === 'recover') pass.value = '';
+    }
+    var lbl = $('#auth-pass-label');
+    if (lbl) lbl.textContent = authMode === 'local' ? '本机密码' : '密码';
+    if (submit) submit.textContent = { login: '登录', signup: '注册并登录', recover: '发送重置邮件', local: '进入本机数据' }[authMode] || '登录';
+    if (hint) {
+      hint.textContent = {
+        login: '邮箱与密码由云端校验，登录后数据自动同步到所有设备。',
+        signup: '注册后需要到邮箱点开确认链接，确认完再回来登录。',
+        recover: '邮件里点开链接即可设置新密码，本机已有数据不会被清空。',
+        local: '本机模式仅供离线使用：密码只在这台电脑上校验，数据不会同步。'
+      }[authMode];
+    }
+    if (note) note.hidden = (authMode !== 'local');
+    if (local) local.hidden = (authMode === 'local');
+    authFail('', false, false);
   }
 
   function enterApp(email, isNew) {
@@ -4268,55 +5114,69 @@
     renderPage();
     cloudResetStamps(state);
     cloudAfterEnter();
+    sbAfterEnter();
     if (inherited) toast('已把原有本机数据继承到 ' + email);
     else if (isNew) toast('已为该邮箱创建本地账号');
     else toast('欢迎回来，' + email);
   }
 
   /* 登录页错误条：带「重置这台电脑的密码」入口时一并显示 */
-  function authFail(msg, showReset) {
-    var box = $('#auth-error-box'), err = $('#auth-error'), btn = $('#auth-reset');
+  function authFail(msg, showReset, showResend) {
+    var box = $('#auth-error-box'), err = $('#auth-error');
+    var btn = $('#auth-reset'), resend = $('#auth-resend');
     if (err) err.textContent = msg || '';
     if (box) box.hidden = !msg;
     if (btn) btn.hidden = !(msg && showReset);
+    if (resend) resend.hidden = !(msg && showResend);
   }
   function authFailClear() { authFail('', false); }
 
+  /* 登录页交互：登录 / 注册 / 忘记密码（云端） + 本机离线登录 */
   function bindAuth() {
+    $$('#auth-tabs .auth-tab').forEach(function (b) {
+      b.addEventListener('click', function () { setAuthMode(b.getAttribute('data-mode')); });
+    });
+
+    var localToggle = $('#auth-local-toggle');
+    if (localToggle) localToggle.addEventListener('click', function () { setAuthMode('local'); });
+
     $('#auth-form').addEventListener('submit', function (e) {
       e.preventDefault();
       var email = normalizeEmail($('#auth-email').value);
       var pass = $('#auth-pass').value || '';
-      if (!isValidEmail(email)) return authFail('请输入有效的邮箱地址', false);
-      if (pass.length < 4) return authFail('密码至少 4 位', false);
-      var acc = readAccounts();
-      var rec = acc[email];
-      if (rec) {
-        if (!verifyAuthRecord(rec, pass)) {
-          /* 死路修复：明确说明密码只在本机，并当场给重置入口 */
-          return authFail('这台电脑保存的 ' + email + ' 密码与此不符。密码只保存在本机浏览器，不随云端同步。', true);
-        }
-        migrateAuthRecord(email, pass);
-      } else {
-        acc[email] = makeAuthRecord(pass);
-        writeAccounts(acc);
-      }
-      authFailClear();
-      safeSet(SESSION_KEY, email);
-      $('#auth-pass').value = '';
-      cloudEnterLocalEmpty = !safeGet(keyFor(email));
-      cloudEnterFromLogin = true;
-      enterApp(email, !rec);
+      if (!isValidEmail(email)) return authFail('请输入有效的邮箱地址', false, false);
+      if (authMode === 'recover') return doRecover(email);
+      if (authMode === 'local') return doLocalLogin(email, pass);
+      if (pass.length < 6) return authFail('密码至少 6 位', false, false);
+      if (authMode === 'signup') return doSignUp(email, pass);
+      return doCloudLogin(email, pass);
+    });
+
+    $('#auth-resend').addEventListener('click', function () {
+      var email = normalizeEmail($('#auth-email').value);
+      if (!isValidEmail(email)) return authFail('请先填写要接收确认邮件的邮箱', false, false);
+      var btn = $('#auth-resend');
+      btn.disabled = true;
+      authFail('正在重新发送确认邮件…', false, false);
+      sbResendConfirm(email).then(function () {
+        btn.disabled = false;
+        authFail('确认邮件已重新发送到 ' + email + '，请到邮箱点开确认链接后再登录。', false, false);
+      }).catch(function (err) {
+        btn.disabled = false;
+        var info = sbErrInfo(err);
+        if (err && err.code === 'RATE') return authFail('发送太频繁，请过几分钟再试。', false, false);
+        authFail('确认邮件发送失败：' + info.text, false, true);
+      });
     });
 
     $('#auth-reset').addEventListener('click', function () {
       var email = normalizeEmail($('#auth-email').value);
-      if (!isValidEmail(email)) return authFail('请先填写要重置密码的邮箱地址', false);
+      if (!isValidEmail(email)) return authFail('请先填写要重置密码的邮箱地址', false, false);
       openResetPasswordDialog(email);
     });
 
     $('#auth-clear').addEventListener('click', function () {
-      if (!confirm('这会清除本机保存的全部账号与数据，且不可恢复。继续？')) return;
+      if (!confirm('这会清除本机保存的全部账号、云端会话与数据（云端数据不动），且不可恢复。继续？')) return;
       var keys = [];
       try {
         for (var i = 0; i < localStorage.length; i++) {
@@ -4333,10 +5193,135 @@
     });
 
     $('#btn-logout').addEventListener('click', function () {
+      if (sbLoggedIn()) return sbSignOutFlow();
       if (!confirm('退出登录？数据已按邮箱保存在本机，用同一邮箱可再次进入。')) return;
       safeDel(SESSION_KEY);
       location.reload();
     });
+  }
+
+  function authBusy(on, text) {
+    var btn = $('#auth-submit');
+    if (btn) {
+      btn.disabled = !!on;
+      if (on) {
+        btn.dataset.label = btn.textContent;
+        btn.textContent = text || '请稍候…';
+      } else if (btn.dataset.label) {
+        btn.textContent = btn.dataset.label;
+        delete btn.dataset.label;
+      }
+    }
+  }
+
+  /* 云端登录成功后进入应用（本机数据按邮箱隔离，云端数据随后对齐） */
+  function afterCloudAuth(email, isSignup) {
+    var acc = readAccounts();
+    var had = !!acc[email];
+    if (!had) {
+      acc[email] = makeAuthRecord('*cloud*');
+      writeAccounts(acc);
+    }
+    authFailClear();
+    $('#auth-pass').value = '';
+    safeSet(SESSION_KEY, email);
+    cloudEnterFromLogin = true;
+    cloudEnterLocalEmpty = !sbLocalHasContent();
+    enterApp(email, isSignup && !had);
+  }
+
+  function doCloudLogin(email, pass) {
+    authFail('正在登录…', false, false);
+    authBusy(true, '登录中…');
+    sbSignIn(email, pass).then(function () {
+      authBusy(false);
+      afterCloudAuth(email, false);
+    }).catch(function (err) {
+      authBusy(false);
+      var c = err && err.code;
+      if (c === 'EMAIL_UNCONFIRMED') {
+        return authFail('邮箱还没确认。请到邮箱点开确认链接，回来就能登录；没收到可以点下面的按钮重新发送。', false, true);
+      }
+      if (c === 'BAD_PASSWORD') {
+        var acc = readAccounts();
+        var rec = acc[email];
+        if (rec && verifyAuthRecord(rec, pass)) {
+          return authFail('云端提示邮箱或密码不正确，但这台电脑上存有该邮箱的本机账号，可以直接离线进入。', true, false);
+        }
+        return authFail('邮箱或密码不正确，请重新输入。', !!rec, false);
+      }
+      if (c === 'NETWORK') {
+        return authFail('连不上云端（网络或代理问题）。可以先点下面的「用本机账号离线登录」继续使用，网络恢复后再登录云端即可补同步。', false, false);
+      }
+      if (c === 'NO_TABLE') {
+        return authFail('云端数据表还没建好，请联系管理员或稍后重试。登录本身不受影响。', false, false);
+      }
+      var info = sbErrInfo(err);
+      authFail(info.text, false, info.action === 'resend');
+    });
+  }
+
+  function doSignUp(email, pass) {
+    authFail('正在注册…', false, false);
+    authBusy(true, '注册中…');
+    sbSignUp(email, pass).then(function (r) {
+      authBusy(false);
+      if (r && r.session) return afterCloudAuth(email, true);
+      authFail('注册成功，确认邮件已发到 ' + email + '。请点开邮件里的确认链接，然后回来登录。', false, true);
+      setAuthMode('login');
+      authFail('注册成功，确认邮件已发到 ' + email + '。请点开邮件里的确认链接，然后回来登录。', false, true);
+    }).catch(function (err) {
+      authBusy(false);
+      var c = err && err.code;
+      if (c === 'EMAIL_EXISTS') {
+        setAuthMode('login');
+        return authFail('这个邮箱已经注册过了，请直接登录；忘记密码可以点「忘记密码」。', false, false);
+      }
+      if (c === 'WEAK_PASSWORD') return authFail('密码太短了，至少 6 位。', false, false);
+      if (c === 'BAD_EMAIL') return authFail('这个邮箱地址云端不接受，请检查是否写错。', false, false);
+      if (c === 'RATE') return authFail('注册请求太频繁，请过几分钟再试。', false, false);
+      if (c === 'NETWORK') return authFail('连不上云端（网络或代理问题），稍后再试，或用本机账号离线使用。', false, false);
+      var info = sbErrInfo(err);
+      authFail('注册失败：' + info.text, false, false);
+    });
+  }
+
+  function doRecover(email) {
+    authFail('正在发送重置邮件…', false, false);
+    authBusy(true, '发送中…');
+    sbRecover(email).then(function () {
+      authBusy(false);
+      setAuthMode('login');
+      authFail('重置邮件已发到 ' + email + '（若该邮箱已注册）。点开邮件里的链接即可设置新密码，本机已有数据不会被清空。', false, false);
+    }).catch(function (err) {
+      authBusy(false);
+      if (err && err.code === 'NETWORK') return authFail('连不上云端（网络或代理问题），请稍后重试。', false, false);
+      if (err && err.code === 'RATE') return authFail('发送太频繁，请过几分钟再试。', false, false);
+      var info = sbErrInfo(err);
+      authFail('重置邮件发送失败：' + info.text, false, false);
+    });
+  }
+
+  /* 本机离线登录：老机制，仅本机校验密码，不上传云端 */
+  function doLocalLogin(email, pass) {
+    if (pass.length < 4) return authFail('本机密码至少 4 位', false, false);
+    var acc = readAccounts();
+    var rec = acc[email];
+    if (rec) {
+      if (!verifyAuthRecord(rec, pass)) {
+        return authFail('这台电脑保存的 ' + email + ' 密码与此不符。密码只保存在本机浏览器，不随云端同步。', true, false);
+      }
+      migrateAuthRecord(email, pass);
+    } else {
+      acc[email] = makeAuthRecord(pass);
+      writeAccounts(acc);
+    }
+    authFailClear();
+    $('#auth-pass').value = '';
+    safeSet(SESSION_KEY, email);
+    cloudEnterLocalEmpty = !safeGet(keyFor(email));
+    cloudEnterFromLogin = true;
+    enterApp(email, !rec);
   }
 
   /* ---------------------------------------------------------
@@ -4413,10 +5398,22 @@
     bindGlobal();
     bindNavFold();
     bindAuth();
+    var sb = sbReadSession();
     var email = currentEmail();
-    if (email && readAccounts()[email]) {
+    if (!email && sb && sb.email) {
+      /* 只剩云端会话（例如本机登录记录被清）：恢复会话，保持刷新后仍登录 */
+      email = normalizeEmail(sb.email);
+      safeSet(SESSION_KEY, email);
+    }
+    if (email) {
+      if (!readAccounts()[email]) {
+        var acc = readAccounts();
+        acc[email] = makeAuthRecord('*cloud*');
+        writeAccounts(acc);
+      }
       enterApp(email);
     } else {
+      if (sb) sbWriteSession(null);
       if (email) safeDel(SESSION_KEY);
       showAuth();
     }
