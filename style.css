@@ -301,7 +301,7 @@ html.locked .auth:not([hidden]) { display: flex; }
 .brand-text strong:hover, .brand-text em:hover { color: var(--accent); }
 
 .nav-group { display: flex; flex-direction: column; min-height: 0; }
-.nav-group-custom { flex: 1 1 auto; min-height: 0; }
+.nav-group-system { flex: 1 1 auto; min-height: 0; }
 
 /* 侧栏分组标题：明确弱于菜单项（11px / 常规字重 / 灰 / 小字距），层级靠“更小更淡”区分 */
 .nav-label {
@@ -343,7 +343,10 @@ html.locked .auth:not([hidden]) { display: flex; }
   display: grid; grid-template-rows: 1fr;
   transition: grid-template-rows var(--dur-2) var(--ease-soft), opacity var(--dur-2);
 }
-.nav-group-custom .nav-body { flex: 1 1 auto; min-height: 0; }
+.nav-group-system .nav-body,
+.nav-group-system .nav-body-inner { flex: 1 1 auto; min-height: 0; }
+.nav-group-system .nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; align-content: start; scrollbar-width: none; }
+.nav-group-system .nav::-webkit-scrollbar { width: 0; }
 .nav-body-inner {
   overflow: hidden; min-height: 0;
   display: flex; flex-direction: column;
@@ -387,55 +390,6 @@ html.locked .auth:not([hidden]) { display: flex; }
 .nav-pen svg { width: 13px; height: 13px; }
 .nav-item:hover .nav-pen, .nav-item:focus-within .nav-pen { opacity: 1; }
 .nav-pen:hover { background: var(--line); color: var(--ink); }
-
-/* 我的模块页（自定义页签）：紧凑 chip。
-   关键约束：宽度必须贴合内容（flex: 0 0 auto + width: auto），
-   不继承 .nav 的 grid 拉伸、不被单一/激活页签撑宽；多页签等尺寸等间距、可换行。 */
-#nav-custom.nav {
-  display: flex; flex-flow: row wrap;
-  align-items: center; align-content: flex-start; justify-content: flex-start;
-  justify-items: initial;            /* 清除潜在 grid 继承 */
-  gap: 6px;
-  padding-top: 2px;
-}
-#nav-custom .nav-item {
-  flex: 0 0 auto;                    /* 不拉伸、不放大 */
-  width: auto; min-width: 0; max-width: 100%;
-  height: 32px; min-height: 32px;      /* 保证可点热区 ≥32px */
-  padding: 0 9px; gap: 6px;
-  display: inline-flex; align-items: center; justify-content: flex-start;
-  border: 1px solid var(--line); border-radius: 9px;
-  background: var(--elev);
-  color: var(--ink-2); font-size: var(--t-12); line-height: 1;
-  letter-spacing: 0;
-}
-#nav-custom .nav-item:hover {
-  background: var(--elev-2); border-color: var(--line-2); color: var(--ink);
-  transform: translateY(-1px);
-}
-/* 激活态：只做颜色 + 淡描边区分，不用大面积色块 */
-#nav-custom .nav-item.active {
-  background: var(--accent-soft);
-  border-color: var(--accent-line);
-  color: var(--accent-strong); font-weight: 500;
-}
-#nav-custom .nav-item.active::before { display: none; }
-#nav-custom .nav-item > svg { width: 12px; height: 12px; flex: none; opacity: .62; }
-#nav-custom .nav-item.active > svg { opacity: 1; }
-#nav-custom .nav-text { flex: 0 0 auto; min-width: 0; max-width: 116px; }
-/* 铅笔不占过多布局宽度，但用透明外扩伪元素把可点热区撑到 32×32 */
-#nav-custom .nav-pen {
-  position: relative; flex: none;
-  width: 18px; height: 18px; border-radius: 5px;
-}
-#nav-custom .nav-pen::before { content: ''; position: absolute; inset: -7px; }
-#nav-custom .nav-pen svg { width: 11px; height: 11px; }
-#nav-custom .nav-pen:hover { background: var(--line); color: var(--ink); }
-#nav-custom .nav-hint {
-  flex: 0 0 auto; width: auto; height: 32px; min-height: 32px; padding: 0 2px;
-  border-color: transparent; background: transparent; cursor: default;
-}
-#nav-custom .rename-input { height: 24px; width: 100px; font-size: var(--t-12); }
 
 .rename-input {
   width: 100%; min-width: 0;
@@ -1629,8 +1583,7 @@ body.is-dragging { cursor: grabbing; }
   .skel-line { animation: none; background: var(--skel-1); }
   /* 位移类动效统一降级为无位移 */
   .card:hover, .ovcard:hover, .board-card:hover,
-  .nav-item:hover, .solid-btn:hover, .ghost-btn:hover, .foot-btn:hover,
-  #nav-custom .nav-item:hover { transform: none; }
+  .nav-item:hover, .solid-btn:hover, .ghost-btn:hover, .foot-btn:hover { transform: none; }
   .cell.poped { animation: none; }
   .theme-btn.turning svg { animation: none; }
   #canvas.page-enter { animation: none; }
