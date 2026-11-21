@@ -18,9 +18,42 @@
   location.replace(url);
 })();
 </script>
+<script>
+/* 登录门禁：脚本解析前即锁定界面，避免未登录时主界面闪一下 */
+(function () {
+  var ok = false;
+  try { ok = !!localStorage.getItem('lifeos.session.v1'); } catch (e) { ok = false; }
+  document.documentElement.className += ok ? ' authed' : ' locked';
+})();
+</script>
 </head>
 <body>
-  <div class="app">
+  <!-- 邮箱登录 -->
+  <section class="auth" id="auth" hidden>
+    <div class="auth-card">
+      <div class="auth-mark" id="auth-mark"></div>
+      <h1 class="auth-title" id="auth-title">登录 Life OS</h1>
+      <p class="auth-sub" id="auth-sub">用邮箱进入你的人生管理系统，数据按邮箱分别保存在本机浏览器。</p>
+      <form class="auth-form" id="auth-form" autocomplete="on" novalidate>
+        <label class="auth-field">
+          <span>邮箱</span>
+          <input id="auth-email" type="email" name="email" inputmode="email" autocomplete="username"
+                 placeholder="you@example.com" spellcheck="false" required />
+        </label>
+        <label class="auth-field">
+          <span>密码</span>
+          <input id="auth-pass" type="password" name="password" autocomplete="current-password"
+                 placeholder="至少 4 位，首次登录即创建本地账号" required />
+        </label>
+        <p class="auth-error" id="auth-error" hidden></p>
+        <button class="solid-btn auth-submit" id="auth-submit" type="submit">登录</button>
+      </form>
+      <p class="auth-note">纯前端演示：账号只记录在本机浏览器，不做服务端校验；换浏览器或清缓存后需重新登录。</p>
+      <button class="auth-alt" id="auth-clear" type="button">清除本机账号与数据</button>
+    </div>
+  </section>
+
+  <div class="app" id="app">
     <!-- 左侧垂直导航 -->
     <aside class="sidebar" id="sidebar">
       <a class="brand" href="#" data-act="home">
@@ -46,7 +79,11 @@
           <button class="foot-btn" data-act="import">导入</button>
           <button class="foot-btn" data-act="reset">清空</button>
         </div>
-        <p class="foot-hint">数据保存在本机浏览器，刷新不丢</p>
+        <div class="user-box">
+          <span class="user-mail" id="user-mail" title="">未登录</span>
+          <button class="user-out" id="btn-logout" type="button">退出</button>
+        </div>
+        <p class="foot-hint" id="foot-hint">数据保存在本机浏览器，刷新不丢</p>
       </div>
     </aside>
 
@@ -54,13 +91,15 @@
 
     <!-- 右侧画布 -->
     <main class="main">
-      <header class="topbar">
+      <header class="topbar" id="topbar">
         <button class="icon-btn menu-btn" id="btn-menu" aria-label="菜单"></button>
         <button class="topbar-title" id="page-title" type="button" title="点击重命名当前页">概览</button>
-        <div class="topbar-actions">
+        <div class="topbar-actions" id="topbar-actions">
           <button class="ghost-btn" id="btn-page-menu">页签设置</button>
           <button class="solid-btn" id="btn-add-module">添加模块</button>
         </div>
+        <button class="icon-btn actions-toggle" id="btn-actions-toggle" type="button"
+                aria-expanded="true" aria-controls="topbar-actions" title="隐藏操作区"></button>
       </header>
 
       <div class="canvas" id="canvas"></div>
