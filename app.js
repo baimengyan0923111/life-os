@@ -333,6 +333,8 @@
       cus: !!foldSrc.cus,
       blocks: (foldSrc.blocks && typeof foldSrc.blocks === 'object' && !Array.isArray(foldSrc.blocks)) ? foldSrc.blocks : {}
     };
+    /* 我的模块页分组已移除，折叠状态不再保留 cus 键 */
+    if (s.settings.fold && 'cus' in s.settings.fold) delete s.settings.fold.cus;
     /* 每日日程当前查看的日期 / 月度计划当前查看的月份（跨刷新、跨月切换都靠这两项） */
     s.settings.dailyDate = isDateStr(s.settings.dailyDate) ? s.settings.dailyDate : today();
     s.settings.planMonth = isMonthStr(s.settings.planMonth) ? s.settings.planMonth : monthKey(new Date());
@@ -371,7 +373,13 @@
     /* 旧数据兼容：为每日日程里的每条任务补稳定唯一 id 与所属日期，供月度计划引用 */
     s.pages.forEach(function (pg) { migrateDailyTasks(pg, s); });
     s.pages = orderBuiltinPages(s.pages);
-    if (!s.pages.some(function (p) { return p.id === s.current; })) s.current = s.pages[0].id;
+    /* 侧栏已不再展示自定义页：当前页若指向隐藏页，回退到系统页首页 */
+    var visible = s.pages.filter(function (p) { return p.builtin; });
+    if (!visible.length) visible = s.pages.slice();
+    if (!visible.some(function (p) { return p.id === s.current; })) {
+      s.current = visible[0].id;
+      hiddenPageFallback = true;
+    }
     return s;
   }
 
@@ -382,6 +390,8 @@
     var rest = list.filter(function (p) { return !p.builtin; });
     return built.concat(rest);
   }
+
+  var hiddenPageFallback = false;
 
   function save() {
     try {
@@ -452,10 +462,11 @@
      --------------------------------------------------------- */
   function renderNav() {
     var sys = $('#nav-system');
-    var cus = $('#nav-custom');
+    if (!sys) return;
     sys.innerHTML = '';
-    cus.innerHTML = '';
+    /* 侧栏只保留系统页分组；自定义页数据仍保存在本地，仅不再渲染入口 */
     state.pages.forEach(function (p) {
+      if (!p.builtin) return;
       var b = document.createElement('div');
       b.className = 'nav-item' + (p.id === state.current ? ' active' : '');
       b.setAttribute('role', 'button');
@@ -508,20 +519,12 @@
         startPageRename(lab, p);
       });
 
-      (p.builtin ? sys : cus).appendChild(b);
+      sys.appendChild(b);
     });
-    if (!cus.children.length) {
-      var hint = document.createElement('div');
-      hint.className = 'nav-item nav-hint';
-      hint.style.cssText = 'color:var(--faint);font-size:12px;cursor:default';
-      hint.innerHTML = '<span>还没有自定义页签</span>';
-      cus.appendChild(hint);
-    }
   }
 
   var NAV_GROUPS = [
-    { group: '#group-system', btn: '#fold-system', key: 'sys', label: '系统页' },
-    { group: '#group-custom', btn: '#fold-custom', key: 'cus', label: '我的模块页' }
+    { group: '#group-system', btn: '#fold-system', key: 'sys', label: '系统页' }
   ];
 
   function applyNavFold() {
@@ -548,12 +551,6 @@
         applyNavFold();
       });
     });
-  }
-
-  /* 折叠状态下仍可新建页签：新建成功后自动展开分组 */
-  function expandCustomGroup() {
-    var f = foldState();
-    if (f.cus) { delete f.cus; save(); applyNavFold(); }
   }
 
   /* ---------------------------------------------------------
@@ -2444,72 +2441,21 @@
     );
   }
 
-  /* -------- 新建页签 -------- */
-  function dialogAddPage() {
-    var iconName = 'page';
-    openDialog(
-      '<h3>新建页签</h3><p class="sub">一个页签是一块独立的画布，比如「一人公司」「考研」「副业」。</p>' +
-      '<div class="sheet-label">页签名称</div>' +
-      '<input class="field" style="width:100%" maxlength="20" placeholder="例如：一人公司">' +
-      '<div class="sheet-label">图标</div>' +
-      '<div class="icon-grid">' + ICON_CHOICES.map(function (n) {
-        return '<button class="icon-opt' + (n === iconName ? ' active' : '') + '" type="button" data-icon="' + n + '">' + icon(n) + '</button>';
-      }).join('') + '</div>' +
-      '<div class="sheet-actions"><button class="ghost-btn" data-close>取消</button><button class="solid-btn" data-ok>创建</button></div>',
-      function (sheet, close) {
-        var inp = $('input', sheet);
-        $$('[data-icon]', sheet).forEach(function (b) {
-          b.addEventListener('click', function () {
-            iconName = b.dataset.icon;
-            $$('[data-icon]', sheet).forEach(function (x) { x.classList.toggle('active', x === b); });
-          });
-        });
-        $('[data-ok]', sheet).addEventListener('click', function () {
-          var name = (inp.value || '').trim();
-          if (!name) { inp.focus(); return; }
-          var p = { id: uid('p'), name: name, icon: iconName, builtin: null, modules: [] };
-          state.pages.push(p);
-          state.current = p.id;
-          save();
-          close();
-          renderNav();
-          renderPage();
-          toast('已创建页签「' + name + '」');
-        });
-      }
-    );
-  }
-
-  /* -------- 页签设置 -------- */
+  /* -------- 页签设置（仅系统页：可改名，不可删除） -------- */
   function dialogPages() {
+    var list = state.pages.filter(function (p) { return p.builtin; });
     openDialog(
-      '<h3>页签设置</h3><p class="sub">点击任意一行可改名（系统页也可以改名，改名后依然不可删除）；自定义页签可以改名或移除，页内模块会一起删除。</p>' +
-      '<div class="page-list">' + state.pages.map(function (p) {
+      '<h3>页签设置</h3><p class="sub">点击任意一行可改名（系统页不可删除）。</p>' +
+      '<div class="page-list">' + list.map(function (p) {
         return '<div class="page-row" data-page="' + p.id + '">' + icon(p.icon) +
           '<span>' + esc(p.name) + '</span>' +
-          '<span class="tag">' + (p.builtin ? '系统' : p.modules.length + ' 个模块') + '</span>' +
-          (p.builtin ? '' : '<button type="button" data-del title="删除">' + icon('trash') + '</button>') +
+          '<span class="tag">系统</span>' +
           '</div>';
       }).join('') + '</div>' +
-      '<div class="sheet-actions"><button class="ghost-btn" data-close>关闭</button>' +
-      '<button class="solid-btn" data-newpage>新建页签</button></div>',
+      '<div class="sheet-actions"><button class="ghost-btn" data-close>关闭</button></div>',
       function (sheet, close) {
-        $$('[data-del]', sheet).forEach(function (b) {
-          b.addEventListener('click', function (e) {
-            e.stopPropagation();
-            var id = b.closest('.page-row').dataset.page;
-            var p = pageById(id);
-            if (!p || p.builtin) return;
-            if (!window.confirm('删除页签「' + p.name + '」及其中的 ' + p.modules.length + ' 个模块？')) return;
-            state.pages = state.pages.filter(function (x) { return x.id !== id; });
-            if (state.current === id) state.current = state.pages[0].id;
-            save(); close(); renderNav(); renderPage();
-            toast('已删除页签');
-          });
-        });
         $$('.page-row', sheet).forEach(function (rowEl) {
-          rowEl.addEventListener('click', function (e) {
-            if (e.target.closest('button[data-del]')) return;
+          rowEl.addEventListener('click', function () {
             var p = pageById(rowEl.dataset.page);
             if (!p) return;
             var inp = window.prompt('页签名称', p.name);
@@ -2518,7 +2464,6 @@
             save(); close(); renderNav(); renderPage();
           });
         });
-        $('[data-newpage]', sheet).addEventListener('click', function () { close(); dialogAddPage(); });
       }
     );
   }
@@ -2772,33 +2717,6 @@
       })
     ];
 
-    /* ---- 自定义页示例 ---- */
-    s.pages.push({
-      id: uid('p'), name: '一人公司', icon: 'sparkle', builtin: null,
-      modules: [
-        mkMod('okr', '产品线 · 只做一个', 'target', '#b07cb5', 'half', {
-          objectives: [{
-            id: uid('o'), title: '把最小闭环跑通，再谈扩张', krs: [
-              { id: uid('k'), text: '付费用户', cur: 12, target: 30, unit: '人' },
-              { id: uid('k'), text: '月经常性收入', cur: 4200, target: 12000, unit: '元' },
-              { id: uid('k'), text: '交付文档完成度', cur: 6, target: 10, unit: '篇' }
-            ]
-          }]
-        }),
-        mkMod('metric', '本月订阅收入', 'wallet', '#c98b5e', 'half', {
-          value: 12800, unit: '元', label: '目标 15000 元', step: 500,
-          history: [{ d: '2026-07', v: 3600 }, { d: '2026-08', v: 5200 }, { d: '2026-09', v: 7400 }, { d: '2026-10', v: 9600 }, { d: '2026-11', v: 12800 }]
-        }),
-        mkMod('todo', '本周推进', 'check', '#3f8f63', 'full', {
-          items: [
-            { id: uid('t'), text: '写一版报价页文案', done: true },
-            { id: uid('t'), text: '给 5 个老客户发一封回访邮件', done: false },
-            { id: uid('t'), text: '把交付流程整理成 SOP', done: false }
-          ]
-        })
-      ]
-    });
-
     return s;
   }
 
@@ -2817,10 +2735,11 @@
 
   function searchEntries() {
     var out = [];
-    state.pages.forEach(function (p) {
+    /* 侧栏只保留系统页：命令面板不再索引隐藏的自定义页 */
+    state.pages.filter(function (p) { return p.builtin; }).forEach(function (p) {
       out.push({
         kind: 'page', group: '页签', page: p.id, icon: p.icon,
-        text: p.name, meta: (p.builtin ? '系统页' : '自定义页') + ' · ' + p.modules.length + ' 个模块',
+        text: p.name, meta: '系统页 · ' + p.modules.length + ' 个模块',
         keys: p.name
       });
       p.modules.forEach(function (m) {
@@ -2862,7 +2781,6 @@
       });
     });
     out.push({ kind: 'action', group: '操作', icon: 'plus', text: '添加模块', meta: '在当前页新建一个模块', keys: '添加 新建 模块', run: dialogAddModule });
-    out.push({ kind: 'action', group: '操作', icon: 'plus', text: '新建页签', meta: '在侧栏新增自定义页', keys: '新建 页签 页面', run: dialogAddPage });
     out.push({ kind: 'action', group: '操作', icon: 'download', text: '导出备份', meta: '把当前数据导出为 JSON', keys: '导出 备份 下载 json', run: exportData });
     out.push({ kind: 'action', group: '操作', icon: 'user', text: '修改用户名', meta: '当前：' + userName(), keys: '用户名 昵称 账户 名字 账号', run: openAccountDialog });
     out.push({ kind: 'action', group: '操作', icon: 'auto', text: '切换外观', meta: '在跟随系统 / 浅色 / 深色之间切换', keys: '主题 深浅色 外观 暗色', run: cycleTheme });
@@ -3078,8 +2996,8 @@
     });
     $('#scrim').addEventListener('click', closeSidebar);
     $('#btn-add-module').addEventListener('click', dialogAddModule);
-    $('#btn-add-page').addEventListener('click', function () { expandCustomGroup(); dialogAddPage(); });
-    $('#btn-page-menu').addEventListener('click', dialogPages);
+    var pageMenuBtn = $('#btn-page-menu');
+    if (pageMenuBtn) pageMenuBtn.addEventListener('click', dialogPages);
     applyActions(actionsOpen());
     $('#btn-actions-toggle').addEventListener('click', toggleActions);
 
@@ -3351,8 +3269,15 @@
     activeKey = keyFor(email);
     var inherited = inheritLegacy(email);
     state = loadState();
+    if (hiddenPageFallback) { hiddenPageFallback = false; save(); }
     /* 旧数据补 id 后立即落盘，避免刷新后又重新生成一批 id 导致引用失效 */
     if (dailyMigrated) { dailyMigrated = false; save(); }
+    /* 侧栏不再展示自定义页：上次停留在隐藏页时，回退系统页首页并落盘 */
+    var sysPages = state.pages.filter(function (p) { return p.builtin; });
+    if (!sysPages.some(function (p) { return p.id === state.current; })) {
+      state.current = (sysPages[0] || state.pages[0]).id;
+      save();
+    }
     if (!String(state.settings.name || '').trim()) {
       state.settings.name = emailPrefix(email);
       save();
