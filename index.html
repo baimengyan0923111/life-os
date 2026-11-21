@@ -6,6 +6,18 @@
 <meta name="theme-color" content="#f7f5ef" />
 <title>Life OS · 人生管理系统</title>
 <link rel="stylesheet" href="style.css" />
+<script>
+/* 强制 HTTPS：仅在 http 且非本地地址时跳转，file:// 与 localhost 预览不受影响 */
+(function () {
+  if (location.protocol !== 'http:') return;
+  var h = (location.hostname || '').toLowerCase();
+  if (!h) return;
+  if (h === 'localhost' || h === '127.0.0.1' || h === '::1' || h === '[::1]' || h === '0.0.0.0' ||
+      h === '::ffff:127.0.0.1' || /^127\./.test(h) || /\.localhost$/.test(h) || /\.local$/.test(h)) return;
+  var url = 'https://' + location.host + location.pathname + location.search + location.hash;
+  location.replace(url);
+})();
+</script>
 </head>
 <body>
   <div class="app">
@@ -14,8 +26,8 @@
       <a class="brand" href="#" data-act="home">
         <span class="brand-mark" id="brand-mark"></span>
         <span class="brand-text">
-          <strong>Life OS</strong>
-          <em>人生管理系统</em>
+          <strong id="brand-name" title="点击重命名系统名称">Life OS</strong>
+          <em id="brand-sub" title="点击重命名副标题">人生管理系统</em>
         </span>
       </a>
 
@@ -44,7 +56,7 @@
     <main class="main">
       <header class="topbar">
         <button class="icon-btn menu-btn" id="btn-menu" aria-label="菜单"></button>
-        <div class="topbar-title" id="page-title">概览</div>
+        <button class="topbar-title" id="page-title" type="button" title="点击重命名当前页">概览</button>
         <div class="topbar-actions">
           <button class="ghost-btn" id="btn-page-menu">页签设置</button>
           <button class="solid-btn" id="btn-add-module">添加模块</button>
