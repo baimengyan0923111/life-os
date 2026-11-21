@@ -201,6 +201,9 @@
     };
   }
 
+  /* 窗口尺寸变化后重排文本域高度（防抖） */
+  var reflowLazy = debounce(function () { autoGrow(document); }, 200);
+
   /* ---------------------------------------------------------
      状态
      --------------------------------------------------------- */
@@ -552,7 +555,23 @@
     save();
   }
 
-  /* 把 sec 内除表头外的内容包进可折叠容器，并在表头右侧放一个旋转箭头按钮 */
+  /* 文本域自动撑高：只在「已挂载且可见」时测量。
+     脱离文档或 display:none 时 scrollHeight 为 0，直接写死会把输入框压成 0 高。 */
+  function autoGrow(root) {
+    $$('.rev-field textarea, .note-area', root || document).forEach(function (ta) {
+      if (!ta.isConnected || !ta.getClientRects().length) return;
+      var min = ta.classList.contains('note-area') ? 120 : 36;
+      ta.style.height = 'auto';
+      var h = ta.scrollHeight;
+      // border-box：把上下边框高度补回去，避免最后一两像素被裁
+      var extra = Math.max(0, ta.offsetHeight - ta.clientHeight);
+      ta.style.height = Math.max(min, h + extra) + 'px';
+    });
+  }
+
+  /* 把 sec 内除表头外的内容包进可折叠容器，并在表头右侧放一个旋转箭头按钮。
+     折叠仅作用于「整块」层级（分组 / 独立区块），用 display 切换，
+     不使用 grid 0fr + overflow:hidden —— 那会把内部卡片正文裁成 0 高。 */
   function foldSection(sec, key, headSel) {
     if (!sec) return sec;
     var head = $(headSel, sec);
@@ -592,17 +611,29 @@
     }
 
     var on = foldGet(key);
+    var hint = document.createElement('button');
+    hint.type = 'button';
+    hint.className = 'fold-hint';
+    hint.textContent = '已收起「' + label + '」，点击展开';
+    sec.appendChild(hint);
+
     function apply() {
       sec.classList.toggle('is-folded', on);
+      body.hidden = on;
+      hint.hidden = !on;
       btn.setAttribute('aria-expanded', on ? 'false' : 'true');
       btn.title = (on ? '展开' : '折叠') + '「' + label + '」';
       btn.setAttribute('aria-label', (on ? '展开' : '折叠') + '「' + label + '」');
+      // 展开后重新测量内部文本域高度（收起期间无法测量）
+      if (!on) requestAnimationFrame(function () { autoGrow(sec); });
     }
-    btn.addEventListener('click', function () {
+    function toggle() {
       on = !on;
       foldSet(key, on);
       apply();
-    });
+    }
+    btn.addEventListener('click', toggle);
+    hint.addEventListener('click', toggle);
     apply();
     return sec;
   }
@@ -729,6 +760,8 @@
     canvas.appendChild(foot);
 
     observeReveal(canvas);
+    // 卡片挂载到文档后再测量文本域高度（脱离文档时测不到高度）
+    requestAnimationFrame(function () { autoGrow(canvas); });
     clearBusy();
   }
 
@@ -1078,6 +1111,7 @@
     if (!el) return;
     var fresh = renderCard(m);
     el.replaceWith(fresh);
+    requestAnimationFrame(function () { autoGrow(fresh); });
   }
 
   /* FLIP：让被挤开的卡片平滑落位（拖拽重排时使用，尊重减少动效偏好） */
@@ -1722,15 +1756,10 @@
     },
     bind: function (body, card, m) {
       var ta = $('.note-area', body);
-      function fit() {
-        ta.style.height = 'auto';
-        ta.style.height = Math.max(120, ta.scrollHeight) + 'px';
-      }
-      fit();
       ta.addEventListener('input', debounce(function () {
         m.data.text = ta.value;
         save();
-        fit();
+        autoGrow(ta.parentNode);
       }, 350));
     }
   };
@@ -1791,12 +1820,10 @@
           });
         });
         $$('textarea', row).forEach(function (ta) {
-          function fit() { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
-          fit();
           ta.addEventListener('input', debounce(function () {
             it[ta.dataset.f] = ta.value;
             save();
-            fit();
+            autoGrow(ta.parentNode);
           }, 300));
         });
       });
@@ -2744,6 +2771,7 @@
 
     window.addEventListener('resize', function () {
       if (window.innerWidth > 900) closeSidebar();
+      reflowLazy();
     });
 
     overlay.addEventListener('click', function (e) {
