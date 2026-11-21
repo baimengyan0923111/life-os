@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#fbfbfd" id="theme-color" />
 <meta name="description" content="Life OS · 人生管理系统：把生活拆成可执行的模块，记录、推进、复盘。数据只保存在本机浏览器。" />
 <title>Life OS · 人生管理系统</title>
-<link rel="stylesheet" href="style.css?v=20261121g" />
+<link rel="stylesheet" href="style.css?v=20261122a" />
 <script>
 /* 强制 HTTPS：仅在 http 且非本地地址时跳转，file:// 与 localhost 预览不受影响 */
 (function () {
@@ -93,6 +93,12 @@
       </section>
 
       <div class="sidebar-foot">
+        <button class="cloud-btn" id="btn-cloud" type="button" data-state="off"
+                aria-label="云同步" title="云同步（GitHub Gist）">
+          <span class="cloud-ico" id="cloud-ico"></span>
+          <span class="cloud-txt">云同步</span>
+          <span class="cloud-state" id="cloud-state">未绑定</span>
+        </button>
         <div class="foot-actions">
           <button class="foot-btn" type="button" data-act="export">导出备份</button>
           <button class="foot-btn" type="button" data-act="import">导入</button>
@@ -160,6 +166,6 @@
   <input type="file" id="file-import" accept="application/json,.json" hidden />
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-  <script src="app.js?v=20261121g"></script>
+  <script src="app.js?v=20261122a"></script>
 </body>
 </html>
