@@ -18,8 +18,8 @@
   --t-11: 11px; --t-12: 12px; --t-13: 13px; --t-15: 15px;
   --t-17: 17px; --t-20: 20px; --t-26: 26px; --t-34: 34px;
 
-  /* 圆角 */
-  --r-xs: 8px; --r-sm: 12px; --r-md: 16px; --r-lg: 20px; --r-xl: 22px; --r-pill: 999px;
+  /* 圆角（v3：收敛为 6/8/10/12/14 五档，盖掉原先 18–22px 的大圆角苹果感） */
+  --r-xs: 6px; --r-sm: 8px; --r-md: 10px; --r-lg: 12px; --r-xl: 14px; --r-pill: 999px;
 
   /* 动效 */
   --ease: cubic-bezier(.16, 1, .3, 1);
@@ -30,74 +30,76 @@
   --sbw: 256px;
   --cell-w: 30px; --cell-min: 20px; --hname-min: 92px; --hname-max: 148px;
 
-  /* 浅色主题 */
+  /* 浅色主题 v3：淡粉紫底 + 纯白卡片 + 极淡紫描边 + 紫色系主色 */
   color-scheme: light;
-  --bg: #fbfbfd;
-  --bg-soft: #f5f5f7;
-  --elev: #ffffff;
-  --elev-2: #f4f4f6;
-  --card: #ffffff;
-  --glass: rgba(251, 251, 253, .76);
-  --ink: #1d1d1f;
-  --ink-2: #424245;
-  --muted: #55555a;
-  --faint: #6b6b70;
-  --line: rgba(0, 0, 0, .075);
-  --line-2: rgba(0, 0, 0, .14);
-  --accent: #2f7d55;
-  --accent-2: #4a9b6e;
-  --accent-line: rgba(47, 125, 85, .34);
-  --accent-soft: rgba(47, 125, 85, .10);
-  --accent-strong: #1f7a4d;
-  --accent-strong-hover: #17603c;
+  --bg: #f8f4fa;              /* 页面底色：淡粉紫 */
+  --bg-soft: #f4eef8;         /* 次级面板 / 侧栏 / 输入底 */
+  --elev: #ffffff;            /* 浮层 / 输入 / 卡片 */
+  --elev-2: #f6f0f8;          /* 悬浮态淡紫底 */
+  --card: #ffffff;            /* 卡片纯白 */
+  --glass: rgba(248, 244, 250, .88);
+  --ink: #2e2738;             /* 正文深灰紫 */
+  --ink-2: #453b54;
+  --muted: #665c74;
+  --faint: #766c82;
+  --line: rgba(150, 120, 210, .24);   /* 卡片 1px 极淡紫描边 */
+  --line-2: rgba(150, 120, 210, .34);
+  --accent: #6b4ca8;                  /* 主紫 */
+  --accent-2: #8a6fc7;
+  --accent-line: rgba(107, 76, 168, .30);
+  --accent-soft: rgba(150, 120, 210, .12);  /* 次按钮 / 选中态浅紫底 */
+  --accent-strong: #6b4ca8;           /* 主按钮实心紫 */
+  --accent-strong-hover: #5a3f92;
   --on-accent: #ffffff;
+  --title: #6b4ca8;                   /* 标题深紫加粗 */
   --danger: #b3261e;
   --danger-soft: rgba(179, 38, 30, .08);
-  --ring: rgba(47, 125, 85, .30);
-  --focus: #2f7d55;
-  --shadow-1: 0 1px 2px rgba(17, 17, 20, .05);
-  --shadow-2: 0 18px 48px -20px rgba(17, 17, 20, .22);
-  --scrim: rgba(24, 24, 27, .28);
-  --toast-bg: rgba(29, 29, 31, .94);
-  --toast-ink: #f7f7f8;
-  --skel-1: #eeeef1;
-  --skel-2: #f8f8fa;
-  --hit: rgba(47, 125, 85, .10);
+  --ring: rgba(107, 76, 168, .26);
+  --focus: #6b4ca8;
+  --shadow-1: 0 1px 2px rgba(82, 58, 122, .06);
+  --shadow-2: 0 14px 34px -18px rgba(74, 52, 110, .28);
+  --scrim: rgba(43, 33, 58, .32);
+  --toast-bg: rgba(46, 39, 56, .95);
+  --toast-ink: #f8f4fa;
+  --skel-1: #f1eaf7;
+  --skel-2: #f8f4fa;
+  --hit: rgba(150, 120, 210, .14);
 }
 
 html[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #08080a;
-  --bg-soft: #101012;
-  --elev: #151517;
-  --elev-2: #1d1d20;
-  --card: #131315;
-  --glass: rgba(10, 10, 12, .76);
-  --ink: #f5f5f7;
-  --ink-2: #d6d6da;
-  --muted: #a1a1a6;
-  --faint: #86868b;
-  --line: rgba(255, 255, 255, .09);
-  --line-2: rgba(255, 255, 255, .18);
-  --accent: #56b184;
-  --accent-2: #74c79b;
-  --accent-line: rgba(86, 177, 132, .42);
-  --accent-soft: rgba(86, 177, 132, .14);
-  --accent-strong: #276f4c;
-  --accent-strong-hover: #1f5b3e;
+  --bg: #1b1626;              /* 深紫底 */
+  --bg-soft: #211b2e;
+  --elev: #241d33;            /* 深紫卡 / 浮层 */
+  --elev-2: #2c2440;          /* 悬浮态 */
+  --card: #241d33;
+  --glass: rgba(27, 22, 38, .88);
+  --ink: #f2ecfa;             /* 浅紫白正文 */
+  --ink-2: #ded3f0;
+  --muted: #b6a9ce;
+  --faint: #9c90b4;
+  --line: rgba(186, 164, 232, .24);   /* 浅紫描边 */
+  --line-2: rgba(186, 164, 232, .34);
+  --accent: #bfa2ee;
+  --accent-2: #d3bcf7;
+  --accent-line: rgba(191, 162, 238, .40);
+  --accent-soft: rgba(160, 124, 226, .20);
+  --accent-strong: #7b5bc0;           /* 暗色主按钮：实心紫 + 白字 */
+  --accent-strong-hover: #8b6bce;
   --on-accent: #ffffff;
+  --title: #d3bcf7;                   /* 暗色标题浅紫 */
   --danger: #f0726a;
   --danger-soft: rgba(240, 114, 106, .12);
-  --ring: rgba(86, 177, 132, .32);
-  --focus: #74c79b;
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, .5);
-  --shadow-2: 0 24px 56px -24px rgba(0, 0, 0, .8);
-  --scrim: rgba(0, 0, 0, .58);
-  --toast-bg: rgba(245, 245, 247, .94);
-  --toast-ink: #16161a;
-  --skel-1: #1b1b1e;
-  --skel-2: #26262a;
-  --hit: rgba(86, 177, 132, .14);
+  --ring: rgba(191, 162, 238, .32);
+  --focus: #c3a8f0;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .40);
+  --shadow-2: 0 18px 40px -20px rgba(0, 0, 0, .72);
+  --scrim: rgba(12, 8, 18, .62);
+  --toast-bg: rgba(242, 236, 250, .95);
+  --toast-ink: #1b1626;
+  --skel-1: #2a2238;
+  --skel-2: #322842;
+  --hit: rgba(191, 162, 238, .16);
 }
 
 /* ---------- 2. 基础重置 ---------- */
@@ -2239,4 +2241,234 @@ html[data-theme="dark"] { --warn: #dfae5c; --warn-soft: rgba(223, 174, 92, .12);
     margin-left: 0; justify-content: flex-end; gap: 6px;
   }
   .topbar-actions:not([hidden]) { display: flex; }
+}
+
+/* =========================================================
+   视觉改版 v3 · 淡粉紫底 / 纯白卡 / 浅紫描边 / 紫色系
+   仅视觉层：不改 DOM 结构、不改交互逻辑、不改数据结构
+   ========================================================= */
+
+/* ---------- V3-1 平面化：去掉渐变光晕与磨砂，回归干净平面 ---------- */
+body { background: var(--bg); }
+.auth { background: var(--bg); }
+.auth-card { box-shadow: none; }
+.card:hover, .card:focus-within { transform: none; }
+.section-head h2, .hero h1 { letter-spacing: -.02em; }
+
+/* ---------- V3-2 侧栏与顶栏：淡紫底 + 浅紫细线 ---------- */
+.sidebar {
+  background: var(--bg-soft);
+  border-right: 1px solid var(--line);
+}
+.topbar {
+  height: 56px;
+  background: var(--bg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border-bottom: 1px solid var(--line);
+}
+.topbar-title { color: var(--title); font-weight: 600; }
+.topbar-title:hover { background: var(--elev-2); border-color: var(--line); }
+.nav-item { border-radius: var(--r-sm); }
+.nav-item:hover { background: var(--elev-2); color: var(--ink); }
+.nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+.nav-item.active::before { background: var(--accent); }
+.nav-label { font-size: 11px; font-weight: 400; letter-spacing: .04em; color: var(--faint); }
+.nav-pen:hover { background: var(--accent-soft); color: var(--accent); }
+.brand-mark { border-radius: var(--r-sm); background: var(--accent-soft); color: var(--accent); }
+.brand-text strong { color: var(--title); }
+.user-out:hover { background: var(--danger-soft); }
+
+/* ---------- V3-3 排版：标题深紫，副标题中等紫，正文深灰紫 ---------- */
+.hero h1, .section-head h2, .agenda-title h2, .plan-head h3,
+.card-title, .cloud-h3, .cloud-h4, .auth-title, .sheet h3 { color: var(--title); }
+.hero h1 { font-size: clamp(24px, 3vw, 34px); line-height: 1.16; }
+.hero h1 em { color: var(--accent); }
+.eyebrow, .lede, .section-head p, .ov-label, .agenda-title p { color: var(--muted); }
+.card-title { font-size: var(--t-13); font-weight: 600; }
+
+/* ---------- V3-4 卡片：纯白底 + 1px 极淡紫描边 + 12px 圆角 + 紧凑间距 ---------- */
+.modules { gap: 10px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.card {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: none;
+}
+.card:hover { border-color: var(--line-2); box-shadow: var(--shadow-1); }
+.card.is-target { border-color: var(--accent); box-shadow: 0 0 0 3px var(--hit); }
+.card-head { gap: 8px; min-height: 22px; }
+/* 图标：细线性、无彩色圆底 */
+.card-icon {
+  width: 18px; height: 18px;
+  background: transparent !important;
+  color: var(--accent) !important;
+  border-radius: 0;
+}
+.card-icon svg { width: 15px; height: 15px; stroke-width: 1.5; }
+.card-type {
+  padding: 1px 6px;
+  border-radius: var(--r-xs);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10px;
+}
+.card-body { margin-top: 8px; }
+.obj { background: var(--bg-soft); border-radius: var(--r-md); }
+.loop { background: var(--card); border: 1px solid var(--line); }
+
+/* ---------- V3-5 按钮三档：主 / 次 / 文字 ---------- */
+.solid-btn {
+  background: var(--accent-strong);
+  color: var(--on-accent);
+  border-color: transparent;
+  padding: 8px 16px;
+  font-weight: 500;
+  border-radius: var(--r-pill);
+}
+.solid-btn:hover { background: var(--accent-strong-hover); color: var(--on-accent); }
+.ghost-btn, .add-btn, .step-btn, .foot-btn, .mini-btn {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: transparent;
+  border-radius: var(--r-pill);
+}
+.ghost-btn { padding: 8px 16px; }
+.add-btn { padding: 7px 14px; border-radius: var(--r-pill); }
+.ghost-btn:hover, .add-btn:hover, .foot-btn:hover, .mini-btn:hover {
+  background: var(--accent-line);
+  color: var(--accent-strong-hover);
+  border-color: transparent;
+}
+.link-btn, .cloud-state, .sb-hint { color: var(--accent); }
+.icon-btn:hover, .actions-toggle:hover, .card-menu-btn:hover { background: var(--elev-2); color: var(--accent); }
+.search-btn {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: transparent;
+}
+.search-btn:hover { background: var(--accent-line); color: var(--accent-strong-hover); border-color: transparent; }
+.search-kbd { background: var(--elev); border-color: var(--line); color: var(--faint); }
+
+/* ---------- V3-6 完成 / 打卡态：实心紫圆点 + 白色勾 ---------- */
+.check { border-color: var(--line-2); }
+.check:hover { border-color: var(--accent-strong); }
+.check.on { background: var(--accent-strong); border-color: var(--accent-strong); }
+.check.on svg { color: var(--on-accent); opacity: 1; }
+.cell.on { background: var(--accent-strong); color: var(--on-accent); }
+.cell.on:hover { background: var(--accent-strong-hover); color: var(--on-accent); }
+.cell.today { box-shadow: 0 0 0 1.5px var(--accent-strong) inset; }
+.rev-dots button.on { background: var(--accent-strong); border-color: var(--accent-strong); }
+.ov-bar i, .kr-bar i, .mini-progress i, .board-bar i { background: var(--accent); }
+
+/* ---------- V3-7 表格 / 列表更紧凑：行高压缩，表头小字弱化 ---------- */
+.habit-table { gap: 3px; }
+.habit-wd { font-size: 9.5px; letter-spacing: .03em; color: var(--faint); padding-bottom: 1px; }
+.habit-name-head { min-height: 16px; }
+.habit-name { min-height: 22px; font-size: 11.5px; }
+.habit-name span { padding: 0 4px; border-radius: var(--r-xs); background: var(--accent-soft); color: var(--accent); font-size: 9.5px; }
+.cell { height: 22px; border-radius: var(--r-xs); font-size: 10px; }
+.habit-month { border-radius: var(--r-pill); background: var(--bg-soft); border-color: var(--line); }
+.todo-list { gap: 1px; }
+.todo { padding: 5px 6px; border-radius: var(--r-xs); }
+.todo:hover { background: var(--elev-2); }
+.tl-item { padding: 6px 8px; border-radius: var(--r-xs); }
+.qt-badge, .card-type { background: var(--accent-soft); color: var(--accent); }
+
+/* ---------- V3-8 浮层：白底 + 浅紫描边 + 柔和阴影 ---------- */
+.card-menu, .cmdk-panel, .sheet, .qt-panel, .cloud-panel {
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-2);
+}
+.cmdk-item.active, .cmdk-row.is-active { background: var(--accent-soft); }
+.cmdk-item.active .cmdk-item-ico, .cmdk-row.is-active .cmdk-row-ico { background: var(--elev); color: var(--accent); }
+.menu-row:hover { background: var(--elev-2); color: var(--ink); }
+
+/* ---------- V3-9 375 窄屏：不挤压、不重叠 ---------- */
+@media (max-width: 620px) {
+  .modules { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .card { padding: 10px; }
+  .canvas { padding-left: 12px; padding-right: 12px; }
+  .hero h1 { font-size: 22px; }
+  .cell { height: 20px; }
+  .habit-name { min-height: 20px; }
+}
+
+/* ---------- V3-12 自定义色只做点缀：图标底 / 左侧 3px 竖条 / 进度条 / 色点 ---------- */
+:root { --brand-accent: #6b4ca8; }
+html[data-theme="dark"] { --brand-accent: #bfa2ee; }
+
+/* 模块内所有控件主色仍统一主题紫；自定义色单独走 --m-color */
+.card { --accent: var(--brand-accent) !important; }
+/* 未设自定义色的模块：低饱和默认紫点缀 */
+.card, .board-card { --m-color: var(--brand-accent); }
+
+/* ① 左侧 3px 竖条 */
+.card::before {
+  content: ''; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px;
+  border-radius: 0 2px 2px 0; background: var(--m-color); opacity: .5;
+}
+html[data-theme="dark"] .card::before { opacity: .66; }
+
+/* 模块名 / 卡片标题统一主题紫（自定义色只做点缀，不上标题） */
+.board-name { color: var(--title) !important; }
+.card-title, .sec-title { color: var(--title); }
+
+/* ② 模块小图标底（自定义色极淡着色 + 主题化字色） */
+.card-icon, .board-icon {
+  background: color-mix(in srgb, var(--m-color) 13%, var(--card)) !important;
+  color: color-mix(in srgb, var(--m-color) 68%, var(--ink)) !important;
+  border-radius: var(--r-sm) !important;
+}
+html[data-theme="dark"] .card-icon, html[data-theme="dark"] .board-icon {
+  background: color-mix(in srgb, var(--m-color) 24%, var(--card)) !important;
+  color: color-mix(in srgb, var(--m-color) 46%, #ffffff) !important;
+}
+
+/* 自定义色统一降饱和：避免刺眼杂色（暗色再压低一档） */
+.card::before, .card-icon, .board-icon, .board-bar i, .card-type::before { filter: saturate(.84); }
+html[data-theme="dark"] .card::before,
+html[data-theme="dark"] .card-icon,
+html[data-theme="dark"] .board-icon,
+html[data-theme="dark"] .board-bar i,
+html[data-theme="dark"] .card-type::before { filter: saturate(.66); }
+
+/* ③ 卡片类型徽章前的色点 */
+.card-type { background: var(--accent-soft); color: var(--brand-accent); }
+.card-type::before {
+  content: ''; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--m-color); flex: none;
+}
+
+/* 卡片内小按钮保持主题紫 */
+.card .add-btn, .card .ghost-btn {
+  background: var(--accent-soft) !important;
+  color: var(--accent-strong) !important;
+}
+
+/* ④ 进度条填充：模块卡（含八个抽屉）用自定义色；概览 KPI 保持品牌紫 */
+.ovcard { --tone: var(--brand-accent) !important; --tint: var(--accent-soft) !important; }
+.ov-ico { background: var(--accent-soft) !important; color: var(--brand-accent) !important; }
+.ov-bar i { background: var(--brand-accent) !important; }
+.board-bar i { background: var(--m-color) !important; }
+
+/* 暗色主题：点缀色向白混合，保证在深紫卡上可见（含竖条与进度条） */
+html[data-theme="dark"] .card::before {
+  background: color-mix(in srgb, var(--m-color) 62%, #ffffff);
+}
+html[data-theme="dark"] .board-bar i {
+  background: color-mix(in srgb, var(--m-color) 70%, #ffffff) !important;
+}
+html[data-theme="dark"] .card-type::before {
+  background: color-mix(in srgb, var(--m-color) 62%, #ffffff);
+}
+
+/* ---------- V3-11 窄屏打卡表：名称列加宽（横向滚动兜底），避免名称被截断 ---------- */
+@media (max-width: 620px) {
+  :root { --hname-min: 104px; --hname-max: 132px; }
+}
+@media (max-width: 430px) {
+  :root { --hname-min: 150px; --hname-max: 168px; }
+  .habit-name { padding-right: 6px; gap: 4px; }
 }
