@@ -2990,13 +2990,21 @@
   var SB_SYNC_KEY = 'lifeos.sb.sync';        /* 每账号一份：lifeos.sb.sync::邮箱 */
   var SB_ROLLBACK_KEY = 'lifeos.sb.rollback';/* 下载覆盖前快照：lifeos.sb.rollback::邮箱 */
   var SB_TABLE = 'life_os_state';
-  var SB_AUTO_DELAY = 2500;                  /* 数据变动后的自动同步防抖 */
+  var SB_AUTO_DELAY = 1500;                  /* 数据变动后的自动同步防抖（静默后台推送） */
+  var SB_CHANNEL = 'lifeos.sb.channel';      /* 同浏览器多标签页互通 */
 
   var sbUi = { busy: 0, offline: false, msg: null, syncing: false };
   var sbSuppress = false;      /* 程序化改写 state 期间不触发上传、不打页面时间戳 */
   var sbPushTimer = null;
   var sbRefreshTimer = null;
   var sbConflictOpen = false;
+  var sbReconciling = false;   /* 同一时刻只跑一个对齐流程 */
+  var sbReconcileAgain = false;
+  var sbOfflineTimer = null;
+  var sbBc = null;             /* BroadcastChannel 实例 */
+  var sbTabId = 'tab-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  var sbLastToastAt = 0;
+  var sbOnlineHooked = false;
 
   /* ---------------- 基础工具 ---------------- */
   function sbErr(code, msg, status) {
@@ -3284,7 +3292,26 @@
   }
 
   /* ---------------- 数据指纹 / 内容判定 ---------------- */
-  function sbFp(obj) { return cloudFp(obj); }
+  /* p.up 是「页面最后改动时刻」这类易变字段：只服务合并，不参与内容比对，
+     否则每次打时间戳都会让指纹变化，被误判成本机改动并反复回推 */
+  function sbVolatile(obj) {
+    if (!obj) return obj;
+    var c;
+    try { c = JSON.parse(JSON.stringify(obj)); } catch (e) { return obj; }
+    if (c && Array.isArray(c.pages)) {
+      c.pages.forEach(function (p) { if (p && typeof p === 'object') delete p.up; });
+    }
+    return c;
+  }
+
+  function sbFp(obj) { return cloudFp(sbVolatile(obj)); }
+
+  /* 云端原始 JSON 与内存 state 的形态不同（normalize 会补默认字段与 id），
+     必须先归一化再取指纹，否则每次打开都会被误判成「本地/云端都改过」 */
+  function sbNormFp(data) {
+    if (!data) return '';
+    try { return sbFp(normalize(JSON.parse(JSON.stringify(data)))); } catch (e) { return ''; }
+  }
 
   function sbLocalHasContent() {
     if (!state) return false;
@@ -3313,13 +3340,13 @@
 
   /* ---------------- 同步状态与入口 ---------------- */
   function sbStatusInfo() {
-    if (!sbLoggedIn()) return { key: 'off', text: '未登录云端' };
-    if (sbUi.syncing || sbUi.busy > 0) return { key: 'busy', text: '同步中' };
-    if (sbUi.offline) return { key: 'offline', text: '离线' };
+    if (!sbLoggedIn()) return { key: 'off', text: '未登录云端', panel: '未登录云端' };
+    if (sbUi.syncing || sbUi.busy > 0) return { key: 'busy', text: '同步中', panel: '同步中' };
+    if (sbUi.offline) return { key: 'offline', text: '离线', panel: '离线，稍后自动补传' };
     var meta = sbReadMeta();
-    if (!meta.lastFp) return { key: 'new', text: '待首次同步' };
-    if (sbFp(state) !== meta.lastFp) return { key: 'dirty', text: '有本地改动待同步' };
-    return { key: 'ok', text: '云端已连接' };
+    if (!meta.lastFp) return { key: 'new', text: '已开启', panel: '自动同步已开启' };
+    if (sbFp(state) !== meta.lastFp) return { key: 'busy', text: '同步中', panel: '同步中' };
+    return { key: 'ok', text: '已同步', panel: '已同步 · ' + sbClock(meta.lastAt) };
   }
 
   function sbTime(ts) {
@@ -3333,7 +3360,35 @@
     sbPaint();
   }
 
+  /* 面板打开时原地刷新状态行：从「同步中」自动落到「已同步 · 时间」，无需用户点击 */
+  function sbPaintRows() {
+    var stEl = $('#sb-stat');
+    if (stEl) {
+      var st = sbStatusInfo();
+      var html = '<span class="sb-dot" data-s="' + esc(st.key) + '"></span>' + esc(st.panel || st.text);
+      var vEl = stEl.querySelector('.sb-v');
+      if (vEl) { if (vEl.innerHTML !== html) vEl.innerHTML = html; }
+    }
+    var lastEl = $('#sb-last');
+    if (lastEl) {
+      var v2 = lastEl.querySelector('.sb-v');
+      var meta = sbReadMeta();
+      var txt = meta.lastAt ? sbTime(meta.lastAt) : '尚未同步';
+      if (v2 && v2.textContent !== txt) v2.textContent = txt;
+    }
+  }
+
+  var sbTick = null;
+  function sbWatch() {
+    if (sbTick) return;
+    sbTick = setInterval(function () {
+      if (!cloudIsOpen()) { clearInterval(sbTick); sbTick = null; return; }
+      sbPaintRows();
+    }, 400);
+  }
+
   function sbPaint() {
+    sbPaintRows();
     var box = $('#sb-msg');
     if (!box) return;
     var m = sbUi.msg;
@@ -3354,8 +3409,9 @@
   }
 
   /* ---------------- 同步主流程 ---------------- */
-  function sbPushNow(silent) {
+  function sbPushNow(silent, opts) {
     if (!sbLoggedIn()) return Promise.resolve();
+    opts = opts || {};
     var fp = sbFp(state);
     var payload = JSON.parse(JSON.stringify(state));
     sbUi.syncing = true;
@@ -3376,10 +3432,11 @@
       }
       sbWriteMeta(meta);
       updateCloudEntry();
-      sbSetMsg('ok', '已同步到云端 · ' + sbTime(meta.lastAt));
-      if (!silent) toast('已同步到云端');
+      sbSetMsg('ok', '已同步 · ' + sbTime(meta.lastAt));
+      if (silent) sbLightToast('已与云端同步');
+      else toast('已与云端同步');
+      sbBroadcast();
       return row;
-      function fb2() { return fp; }
     }).catch(function (e) {
       sbUi.busy--; sbUi.syncing = false;
       sbFail(e, 'push');
@@ -3398,7 +3455,8 @@
     sbSuppress = false;
     cloudResetStamps(state);
     var meta = sbReadMeta();
-    meta.lastFp = fp || sbFp(state);
+    /* 用「归一化落盘后」的本机指纹作基线：避免 normalize 补字段后被误判成本机改动，反复回推 */
+    meta.lastFp = sbFp(state);
     meta.lastAt = Date.now();
     meta.rev = Number(rev) || 0;
     meta.remoteAt = Number(remoteAt) || Date.now();
@@ -3406,29 +3464,10 @@
     renderNav();
     renderPage();
     updateCloudEntry();
-    sbSetMsg('ok', '已把云端数据下载到本机 · ' + sbTime(meta.lastAt));
-    toast(silent === false ? '已下载云端数据' : '已同步云端更新');
-  }
-
-  /* 云端有数据：提示拉取（数据覆盖前自动存快照，可恢复） */
-  function sbOfferRemote(data, fp, rev, remoteAt) {
-    var pages = (data && Array.isArray(data.pages)) ? data.pages.length : 0;
-    openDialog(
-      '<h3>云端有数据</h3>' +
-      '<p class="sub">云端账号里已经有一份数据（' + pages + ' 个页面），和这台电脑上的内容不一致。' +
-      '下载会用云端数据覆盖本机，覆盖前会自动存一份快照，随时可以恢复。</p>' +
-      '<div class="cloud-msg is-info" style="margin-top:10px"><span class="cm-text">' +
-      '想保留这台电脑现有的内容？先选「稍后」，在云同步面板里点「上传本机」。</span></div>' +
-      '<div class="sheet-actions">' +
-      '<button class="ghost-btn" type="button" data-close>稍后</button>' +
-      '<button class="solid-btn" type="button" data-dl>立即下载</button></div>',
-      function (sheet, close) {
-        $('[data-dl]', sheet).addEventListener('click', function () {
-          close();
-          sbApplyRemote(data, fp, rev, remoteAt, false);
-        });
-      }
-    );
+    sbSetMsg('ok', '已拉取云端数据 · ' + sbTime(meta.lastAt));
+    if (silent === false) toast('已拉取云端数据');
+    else sbLightToast('已与云端同步');
+    sbBroadcast();
   }
 
   /* 两端都改过：三选一 */
@@ -3438,17 +3477,17 @@
     var meta = sbReadMeta();
     openDialog(
       '<h3>两边都有改动</h3>' +
-      '<p class="sub">这台电脑和云端各有一份不同的数据，需要你决定保留哪一份。' +
-      '上一次同步：' + esc(sbTime(meta.lastAt)) + '。</p>' +
+      '<p class="sub">这台电脑和云端在「上次同步之后都被改过」，才会出现这个提示（日常使用碰不到）。' +
+      '上一次同步：' + esc(sbTime(meta.lastAt)) + '。默认推荐合并：逐页保留较新的那一份。</p>' +
       '<div class="sb-conflict-list">' +
       '<div class="sb-cf"><b>本机</b><span>' + ((state.pages || []).length) + ' 个页面 · 指纹 ' + esc(sbFp(state)) + '</span></div>' +
       '<div class="sb-cf"><b>云端</b><span>' + ((remoteData && remoteData.pages) ? remoteData.pages.length : 0) + ' 个页面 · 指纹 ' + esc(remoteFp) + '</span></div>' +
       '</div>' +
       '<div class="sheet-actions sheet-actions-wrap">' +
-      '<button class="ghost-btn" type="button" data-close>先不动</button>' +
+      '<button class="solid-btn" type="button" data-merge>合并（推荐，逐页取较新）</button>' +
       '<button class="ghost-btn" type="button" data-local>用本机覆盖云端</button>' +
       '<button class="ghost-btn" type="button" data-remote>用云端覆盖本机</button>' +
-      '<button class="solid-btn" type="button" data-merge>合并（逐页取较新）</button></div>',
+      '<button class="ghost-btn" type="button" data-close>先不动</button></div>',
       function (sheet, close) {
         function done() { sbConflictOpen = false; close(); }
         $('[data-local]', sheet).addEventListener('click', function () {
@@ -3477,104 +3516,195 @@
     );
   }
 
-  /* 登录后 / 页面打开时对齐一次 */
-  function sbAfterEnter() {
-    updateCloudEntry();
-    if (!sbLoggedIn()) return;
-    sbScheduleRefresh();
-    sbSyncAtStart();
+  /* ---------------- 全自动静默同步引擎 ---------------- */
+  /* 原则：常规使用零确认。只有「两端自上次同步后都改过同一份数据」才算真冲突。 */
+
+  function sbClock(ts) {
+    if (!ts) return '';
+    var d = new Date(ts);
+    return (d.getHours() < 10 ? '0' : '') + d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes();
   }
 
-  function sbSyncAtStart() {
-    if (!sbLoggedIn()) return;
+  /* 轻提示：右下角浮出 1.5 秒自动消失，不打断任何操作 */
+  function sbLightToast(text) {
+    var now = Date.now();
+    if (now - sbLastToastAt < 900) return;
+    sbLastToastAt = now;
+    toast(text || '已与云端同步', '', 1500);
+  }
+
+  /* 同浏览器多标签页：把「我同步过了」广播出去，避免其它标签页用旧数据反推覆盖 */
+  function sbBroadcast() {
+    try {
+      if (sbBc) sbBc.postMessage({ from: sbTabId, at: Date.now(), fp: sbFp(state) });
+    } catch (e) { }
+  }
+
+  function sbInitChannel() {
+    if (!sbOnlineHooked) {
+      sbOnlineHooked = true;
+      window.addEventListener('online', function () {
+        sbUi.offline = false;
+        updateCloudEntry();
+        if (sbLoggedIn()) sbReconcile({ reason: 'online' });
+      });
+      window.addEventListener('offline', function () {
+        sbUi.offline = true;
+        updateCloudEntry();
+      });
+    }
+    if (!sbBc && typeof BroadcastChannel !== 'function') {
+      window.addEventListener('storage', function (e) {
+        if (!e || !e.key) return;
+        if (e.key.indexOf('lifeos.v1') !== 0) return;
+        sbOnOtherTab({ from: 'storage', at: Date.now() });
+      });
+      return;
+    }
+    if (sbBc) return;
+    try {
+      sbBc = new BroadcastChannel(SB_CHANNEL);
+      sbBc.onmessage = function (ev) { sbOnOtherTab(ev && ev.data); };
+    } catch (e) {
+      sbBc = null;
+    }
+  }
+
+  /* 收到其它标签页的同步结果：把内存里的 state 对齐到共享存储，不再反向推送 */
+  function sbOnOtherTab(msg) {
+    if (!msg || msg.from === sbTabId) return;
+    if (sbSuppress) return;
+    if (sbPushTimer) return;  /* 本地还有未推送的改动，交给自己的防抖流程 */
+    sbStateFromStore();
+  }
+
+  function sbStateFromStore() {
+    if (!state) return;
+    var raw = safeGet(keyFor(currentEmail() || sbCurrentEmail() || 'local'));
+    if (!raw) return;
+    var incoming;
+    try { incoming = normalize(JSON.parse(raw)); } catch (e) { return; }
+    if (!incoming || sbFp(incoming) === sbFp(state)) return;
+    sbSuppress = true;
+    state = incoming;
+    sbSuppress = false;
+    renderNav();
+    renderPage();
+    updateCloudEntry();
+  }
+
+  function sbScheduleOfflineRetry() {
+    clearTimeout(sbOfflineTimer);
+    sbOfflineTimer = setTimeout(function () {
+      if (!sbLoggedIn()) return;
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) { sbScheduleOfflineRetry(); return; }
+      sbReconcile({ reason: 'retry' });
+    }, 8000);
+  }
+
+  /* 核心：拉一次云端 → 判定 推 / 拉 / 冲突，全程不需要用户确认 */
+  function sbReconcile(opts) {
+    opts = opts || {};
+    if (!sbLoggedIn()) return Promise.resolve(null);
+    if (sbReconciling) { sbReconcileAgain = true; return Promise.resolve(null); }
+    sbReconciling = true;
     sbUi.busy++;
     updateCloudEntry();
-    sbGetRow().then(function (row) {
+    return sbGetRow().then(function (row) {
       sbUi.busy--;
       sbUi.offline = false;
+      clearTimeout(sbOfflineTimer);
       updateCloudEntry();
       var meta = sbReadMeta();
       var localFp = sbFp(state);
-      if (!row) {
-        /* 云端为空：本机有内容就自动上传（首次登录迁移） */
-        if (sbLocalHasContent()) {
-          sbPushNow(true);
-          sbSetMsg('ok', '云端还没有数据，已把本机数据上传上去。');
-        } else {
-          meta.lastFp = localFp;
-          meta.lastAt = Date.now();
-          sbWriteMeta(meta);
-          updateCloudEntry();
-        }
-        return;
-      }
-      var remoteData = row.data || null;
-      var remoteFp = remoteData ? sbFp(remoteData) : '';
-      var remoteAt = Date.parse(row.client_updated_at || row.updated_at || '');
+      var remoteData = (row && row.data) ? row.data : null;
+      var remoteFp = sbNormFp(remoteData);
+      var rev = row ? (Number(row.rev) || 0) : 0;
+      var remoteAt = row ? Date.parse(row.client_updated_at || row.updated_at || '') : 0;
       if (isNaN(remoteAt)) remoteAt = 0;
-      var rev = Number(row.rev) || 0;
-      if (remoteFp && remoteFp === localFp) {
+
+      /* ① 云端为空 */
+      if (!remoteFp) {
+        if (sbLocalHasContent()) return sbPushNow(true, opts);
         meta.lastFp = localFp;
-        meta.remoteAt = remoteAt || meta.remoteAt;
-        meta.rev = rev || meta.rev;
         meta.lastAt = meta.lastAt || Date.now();
+        meta.rev = rev || meta.rev;
+        meta.remoteAt = remoteAt || meta.remoteAt;
         sbWriteMeta(meta);
         updateCloudEntry();
-        return;
+        return null;
       }
-      var everSynced = !!meta.lastFp;
-      var localDirty = everSynced && localFp !== meta.lastFp;
-      var remoteNewer = !everSynced || remoteAt > (meta.remoteAt || 0) || rev > (meta.rev || 0);
-      if (localDirty && remoteNewer) { sbOpenConflict(remoteData, remoteFp, rev, remoteAt); return; }
-      if (remoteNewer) { sbOfferRemote(remoteData, remoteFp, rev, remoteAt); return; }
-      /* 本机更新、云端没动 */
-      sbPushNow(true);
+      /* ② 两边内容完全一致：只更新基线 */
+      if (remoteFp === localFp) {
+        meta.lastFp = localFp;
+        meta.lastAt = meta.lastAt || Date.now();
+        meta.rev = rev || meta.rev;
+        meta.remoteAt = remoteAt || meta.remoteAt;
+        sbWriteMeta(meta);
+        updateCloudEntry();
+        return null;
+      }
+      var localChanged = localFp !== meta.lastFp;
+      var remoteChanged = remoteFp !== meta.lastFp;
+
+      /* ③ 首次对齐（还没有基线）：以云端为准静默拉取，拉取前自动存快照 */
+      if (!meta.lastFp) {
+        sbApplyRemote(remoteData, remoteFp, rev, remoteAt, true);
+        return null;
+      }
+      /* ④ 真冲突：两端自上次同步后都改过 */
+      if (localChanged && remoteChanged) {
+        sbOpenConflict(remoteData, remoteFp, rev, remoteAt);
+        return null;
+      }
+      /* ⑤ 只有云端变了：自动下载 */
+      if (remoteChanged) {
+        sbApplyRemote(remoteData, remoteFp, rev, remoteAt, true);
+        return null;
+      }
+      /* ⑥ 只有本机变了：自动上传 */
+      if (localChanged) return sbPushNow(true, opts);
+      return null;
     }).catch(function (e) {
       sbUi.busy--;
       sbFail(e, 'pull');
+      sbScheduleOfflineRetry();
+      return null;
+    }).then(function (r) {
+      sbReconciling = false;
+      if (sbReconcileAgain) {
+        sbReconcileAgain = false;
+        setTimeout(function () { sbReconcile({ reason: 'queued' }); }, 60);
+      }
+      return r;
     });
   }
 
-  /* 手动「立即同步」：拉一次再决定推/拉/冲突 */
+  /* 登录后 / 页面打开时对齐一次：全自动，无弹窗 */
+  function sbAfterEnter() {
+    updateCloudEntry();
+    sbInitChannel();
+    if (!sbLoggedIn()) return;
+    sbScheduleRefresh();
+    sbReconcile({ reason: 'open' });
+  }
+
+  /* 手动兜底「立即同步」：走同一套对齐逻辑，只是多给一次明确反馈 */
   function sbSyncNow() {
     if (!sbLoggedIn()) { sbSetMsg('err', '请先登录云端账号'); return; }
-    if (sbUi.busy > 0) return;
-    sbUi.busy++;
+    if (sbUi.busy > 0) { sbSetMsg('info', '正在同步中，稍等片刻…'); return; }
     sbUi.syncing = true;
     updateCloudEntry();
     sbSetMsg('info', '正在和云端核对…');
-    sbGetRow().then(function (row) {
-      sbUi.busy--;
+    sbReconcile({ reason: 'manual' }).then(function () {
       sbUi.syncing = false;
-      sbUi.offline = false;
-      var meta = sbReadMeta();
-      var localFp = sbFp(state);
-      if (!row) { sbPushNow(false); return; }
-      var remoteData = row.data || null;
-      var remoteFp = remoteData ? sbFp(remoteData) : '';
-      var remoteAt = Date.parse(row.client_updated_at || row.updated_at || '');
-      if (isNaN(remoteAt)) remoteAt = 0;
-      var rev = Number(row.rev) || 0;
-      if (remoteFp && remoteFp === localFp) {
-        meta.lastFp = localFp;
-        meta.remoteAt = remoteAt || meta.remoteAt;
-        meta.rev = rev || meta.rev;
-        meta.lastAt = Date.now();
-        sbWriteMeta(meta);
-        updateCloudEntry();
-        sbSetMsg('ok', '本机和云端已经一致 · ' + sbTime(meta.lastAt));
-        return;
+      updateCloudEntry();
+      if (sbConflictOpen) return;  /* 真冲突时交给冲突面板，不再叠加成功提示 */
+      if (!sbUi.msg || sbUi.msg.type === 'info') {
+        var m = sbReadMeta();
+        sbSetMsg('ok', '已与云端同步 · ' + sbTime(m.lastAt));
       }
-      var everSynced = !!meta.lastFp;
-      var localDirty = everSynced && localFp !== meta.lastFp;
-      var remoteNewer = !everSynced || remoteAt > (meta.remoteAt || 0) || rev > (meta.rev || 0);
-      if (localDirty && remoteNewer) { sbOpenConflict(remoteData, remoteFp, rev, remoteAt); return; }
-      if (remoteNewer) { sbOfferRemote(remoteData, remoteFp, rev, remoteAt); return; }
-      sbPushNow(false);
-    }).catch(function (e) {
-      sbUi.busy--;
-      sbUi.syncing = false;
-      sbFail(e, 'sync');
+      toast('已与云端同步');
     });
   }
 
@@ -3616,7 +3746,7 @@
     sbSetMsg('ok', '已恢复覆盖前的本机数据（' + sbTime(snap.at) + '）');
   }
 
-  /* 保存后的联动：2.5 秒防抖上传 */
+  /* 保存后的联动：1.5 秒防抖，后台静默对齐（推/拉/冲突自动判定） */
   function sbAfterSave() {
     if (sbSuppress) return;
     updateCloudEntry();
@@ -3629,24 +3759,7 @@
     sbPushTimer = null;
     if (!sbLoggedIn()) return;
     if (sbUi.busy > 0) { sbPushTimer = setTimeout(sbAutoPush, SB_AUTO_DELAY); return; }
-    var localFp = sbFp(state);
-    var meta = sbReadMeta();
-    sbGetRow().then(function (row) {
-      var remoteFp = (row && row.data) ? sbFp(row.data) : '';
-      var remoteAt = row ? Date.parse(row.client_updated_at || row.updated_at || '') : 0;
-      if (isNaN(remoteAt)) remoteAt = 0;
-      var rev = row ? (Number(row.rev) || 0) : 0;
-      if (remoteFp && remoteFp !== localFp) {
-        var localDirty = !!meta.lastFp && localFp !== meta.lastFp;
-        var remoteNewer = remoteAt > (meta.remoteAt || 0) || rev > (meta.rev || 0);
-        if (localDirty && remoteNewer) { sbOpenConflict(row.data, remoteFp, rev, remoteAt); return; }
-        if (!meta.lastFp && remoteNewer) { sbOfferRemote(row.data, remoteFp, rev, remoteAt); return; }
-      }
-      sbPushNow(true);
-    }).catch(function (e) {
-      if (e && e.code === 'NETWORK') { sbUi.offline = true; updateCloudEntry(); }
-      else sbFail(e, 'push');
-    });
+    sbReconcile({ reason: 'edit' });
   }
 
   /* ---------------- 退出登录 ---------------- */
@@ -3686,8 +3799,9 @@
   }
 
   /* ---------------- 云同步面板里的云端区块 ---------------- */
-  function sbRowHtml(k, v) {
-    return '<div class="sb-row"><span class="sb-k">' + esc(k) + '</span><span class="sb-v">' + v + '</span></div>';
+  function sbRowHtml(k, v, id) {
+    return '<div class="sb-row"' + (id ? ' id="' + esc(id) + '"' : '') +
+      '><span class="sb-k">' + esc(k) + '</span><span class="sb-v">' + v + '</span></div>';
   }
 
   function sbPanelHtml() {
@@ -3704,9 +3818,10 @@
     var meta = sbReadMeta();
     var snap = sbSnapRead();
     html += '<div class="sb-rows">' +
-      sbRowHtml('状态', '<span class="sb-dot" data-s="' + esc(st.key) + '"></span>' + esc(st.text)) +
+      sbRowHtml('状态', '<span class="sb-dot" data-s="' + esc(st.key) + '"></span>' + esc(st.panel || st.text), 'sb-stat') +
+      sbRowHtml('自动同步', '已开启<span class="sb-sub">改动 1.5 秒后自动上传，打开页面自动拉取</span>') +
       sbRowHtml('登录邮箱', esc(s.email || '')) +
-      sbRowHtml('最后同步', esc(meta.lastAt ? sbTime(meta.lastAt) : '尚未同步')) +
+      sbRowHtml('最后同步', esc(meta.lastAt ? sbTime(meta.lastAt) : '尚未同步'), 'sb-last') +
       '</div>' +
       '<div class="cloud-msg" id="sb-msg" hidden></div>' +
       '<div class="sb-actions">' +
@@ -3716,7 +3831,7 @@
       (snap ? '<button class="ghost-btn" type="button" data-sb="restore">恢复覆盖前数据</button>' : '') +
       '<button class="ghost-btn" type="button" data-sb="signout">退出登录</button>' +
       '</div>' +
-      '<p class="sub sb-tip">改动停下 2.5 秒后自动上传；离线时继续用本机数据，网络恢复后自动补同步。</p>';
+      '<p class="sub sb-tip">云端与本机自动双向同步，不需要点任何按钮；「立即同步」只是手动兜底。离线时继续用本机数据，网络恢复后自动补传。</p>';
     return '<div class="sb-sec">' + html + '</div>';
   }
 
@@ -4222,6 +4337,7 @@
     openDialog(html, cloudMount);
     paintCloudMsg();
     sbPaint();
+    sbWatch();
   }
 
   function cloudMount(sheet) {
@@ -4520,7 +4636,9 @@
       seen[lp.id] = true;
       if (!rp) { merged.push(lp); return; }
       if (cloudStable(lp) === cloudStable(rp)) { merged.push(lp); return; }
-      merged.push((Number(rp.up) || 0) > (Number(lp.up) || 0) ? rp : lp);
+      var rt = Number(rp.updatedAt) || Number(rp.up) || 0;
+      var lt = Number(lp.updatedAt) || Number(lp.up) || 0;
+      merged.push(rt > lt ? rp : lp);
     });
     (remote.pages || []).forEach(function (rp) {
       if (rp && rp.id && !seen[rp.id]) merged.push(rp);
@@ -4599,7 +4717,7 @@
     cloudDraw();
   }
 
-  /* 刚登录时若云端数据比本机新（或本机为空），询问是否下载；下载沿用覆盖前快照 */
+  /* 首登对齐：已统一由 sbReconcile 静默处理，此处不再询问是否下载 */
   function cloudOfferRemote(data, rfp, localEmpty) {
     var pages = (data && Array.isArray(data.pages)) ? data.pages.length : 0;
     var cfg = readCloud() || {};
@@ -4666,7 +4784,7 @@
   /* ---------------------------------------------------------
      交互
      --------------------------------------------------------- */
-  function toast(msg, ico) {
+  function toast(msg, ico, ms) {
     var el = $('#toast');
     el.innerHTML = (ico ? '<span class="toast-ico">' + ico + '</span>' : '') +
       '<span class="toast-msg">' + esc(msg) + '</span>';
@@ -4679,7 +4797,7 @@
     el._t = setTimeout(function () {
       el.classList.remove('show');
       setTimeout(function () { el.hidden = true; }, 320);
-    }, 2200);
+    }, Number(ms) || 2200);
   }
 
   function openSidebar() {
