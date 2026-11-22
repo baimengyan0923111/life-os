@@ -2060,6 +2060,8 @@ html[data-theme="dark"] { --warn: #dfae5c; --warn-soft: rgba(223, 174, 92, .12);
 .sb-dot[data-s="busy"] { background: var(--accent-2); }
 .sb-dot[data-s="dirty"], .sb-dot[data-s="new"] { background: var(--warn); }
 .sb-dot[data-s="offline"], .sb-dot[data-s="off"] { background: var(--danger); }
+.sb-v { flex-wrap: wrap; }
+.sb-sub { width: 100%; text-align: right; color: var(--faint); font-size: var(--t-11); line-height: 1.4; }
 .sb-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: var(--s-3); }
 .sb-actions > * { flex: 0 0 auto; }
 .sb-tip { margin-top: 2px; }
