@@ -60,7 +60,62 @@
     cornerDown: '<path d="M4 5v6a3 3 0 0 0 3 3h13"/><path d="m15.5 9 4.5 5-4.5 5"/>',
     cloud: '<path d="M7 18.5a4 4 0 0 1-.4-7.98A5.5 5.5 0 0 1 17.3 9.9a3.9 3.9 0 0 1 .1 8.6H7Z"/>',
     eye: '<path d="M2.6 12S6.1 6.6 12 6.6 21.4 12 21.4 12 17.9 17.4 12 17.4 2.6 12 2.6 12Z"/><circle cx="12" cy="12" r="2.7"/>',
-    eyeOff: '<path d="M4 4.2 20 20"/><path d="M9.9 6a9.9 9.9 0 0 1 2.1-.2c5.9 0 9.4 6.2 9.4 6.2a17.4 17.4 0 0 1-3.2 3.9"/><path d="M6.5 7.7A16.8 16.8 0 0 0 2.6 12s3.5 5.4 9.4 5.4a9.8 9.8 0 0 0 3.3-.6"/><path d="M9.7 10a3 3 0 0 0 4.2 4.2"/>'
+    eyeOff: '<path d="M4 4.2 20 20"/><path d="M9.9 6a9.9 9.9 0 0 1 2.1-.2c5.9 0 9.4 6.2 9.4 6.2a17.4 17.4 0 0 1-3.2 3.9"/><path d="M6.5 7.7A16.8 16.8 0 0 0 2.6 12s3.5 5.4 9.4 5.4a9.8 9.8 0 0 0 3.3-.6"/><path d="M9.7 10a3 3 0 0 0 4.2 4.2"/>',
+    list: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.6" cy="6" r="1.1"/><circle cx="4.6" cy="12" r="1.1"/><circle cx="4.6" cy="18" r="1.1"/>',
+    timer: '<circle cx="12" cy="13.5" r="7"/><path d="M12 10v3.6l2.2 1.6"/><path d="M9.4 3.4h5.2"/>',
+    hourglass: '<path d="M7 3.5h10M7 20.5h10"/><path d="M8.2 3.5c0 3.6 3.8 5.2 3.8 8.5s-3.8 5-3.8 8.5"/><path d="M15.8 3.5c0 3.6-3.8 5.2-3.8 8.5s3.8 5 3.8 8.5"/>',
+    pin: '<path d="M12 21v-6.4"/><path d="M8.4 3.6h7.2l-1 4.4 2 2.6v2H7.4v-2l2-2.6z"/>',
+    home: '<path d="M4 10.4 12 4l8 6.4"/><path d="M6.4 9.6V20h11.2V9.6"/><path d="M10 20v-4.6h4V20"/>',
+    cup: '<path d="M6 8h10v6.4a4 4 0 0 1-4 4h-2a4 4 0 0 1-4-4z"/><path d="M16 9.4h1.6a2.2 2.2 0 0 1 0 4.4H16"/><path d="M6 20.6h11"/>',
+    droplet: '<path d="M12 3.6c3 3.6 5.4 6.2 5.4 9a5.4 5.4 0 0 1-10.8 0c0-2.8 2.4-5.4 5.4-9z"/>',
+    bed: '<path d="M3.6 19v-9"/><path d="M3.6 15.4h16.8V19"/><path d="M8 15.4v-2.6h6v2.6"/>',
+    apple: '<path d="M12 7.6c1-1.4 2.6-2 4-1.4 1.8.8 2.6 3.2 2 6-.6 2.8-2.4 5.4-4.2 5.4-.8 0-1.2-.4-1.8-.4s-1 .4-1.8.4c-1.8 0-3.6-2.6-4.2-5.4-.6-2.8.2-5.2 2-6 1.4-.6 3 0 4 1.4z"/><path d="M12 7.6c0-1.8.6-3 2-3.6"/>',
+    cake: '<path d="M4 20.4h16"/><path d="M5.4 20.4v-5.2h13.2v5.2"/><path d="M5.4 15.2c1.4 1.4 2.8 1.4 4.2 0s2.8-1.4 4.2 0 2.8 1.4 4.8 0"/><path d="M12 10V6.6"/><path d="M12 5.4a1.2 1.2 0 1 1 0-2.4 1.2 1.2 0 0 1 0 2.4"/>',
+    gift: '<path d="M4 10.4h16v3.2H4z"/><path d="M5.6 13.6V20h12.8v-6.4"/><path d="M12 10.4V20"/><path d="M12 10.4C10.4 7 8.6 6.2 7.4 7.4c-1.2 1.2.4 3 4.6 3zM12 10.4c1.6-3.4 3.4-4.2 4.6-3 1.2 1.2-.4 3-4.6 3z"/>',
+    shoppingBag: '<path d="M5.6 8h12.8l-1.2 12H6.8z"/><path d="M9 8V6.6a3 3 0 0 1 6 0V8"/>',
+    smile: '<circle cx="12" cy="12" r="8.4"/><path d="M8.6 14.2c.8 1.4 2 2.2 3.4 2.2s2.6-.8 3.4-2.2"/><circle cx="9.4" cy="10.2" r=".9"/><circle cx="14.6" cy="10.2" r=".9"/>',
+    music: '<path d="M9 17.4V6.6l9-2v10.6"/><circle cx="6.8" cy="17.8" r="2.2"/><circle cx="15.8" cy="15.6" r="2.2"/>',
+    plane: '<path d="M21 4 3 11l6.4 2.6L12 20l3-5.4L21 4z"/><path d="M9.4 13.6 21 4"/>',
+    map: '<path d="M9.4 4.6 4 6.6v13l5.4-2 5.2 2L20 17.6v-13L14.6 6.6z"/><path d="M9.4 4.6v13M14.6 6.6v13"/>',
+    building: '<path d="M5 20.4V4.6h9v15.8"/><path d="M14 9.4h5v11"/><path d="M8 8h3M8 11.4h3M8 14.8h3"/><path d="M3.6 20.4h16.8"/>',
+    sitemap: '<rect x="9.2" y="3.4" width="5.6" height="4.4" rx="1.2"/><rect x="3" y="16.2" width="5.6" height="4.4" rx="1.2"/><rect x="15.4" y="16.2" width="5.6" height="4.4" rx="1.2"/><path d="M12 7.8v4.4M5.8 16.2v-4h12.4v4"/>',
+    kanban: '<rect x="3.4" y="4.4" width="5" height="15.2" rx="1.4"/><rect x="9.6" y="4.4" width="5" height="10.4" rx="1.4"/><rect x="15.8" y="4.4" width="5" height="6.4" rx="1.4"/>',
+    layout: '<rect x="3.6" y="3.6" width="16.8" height="16.8" rx="2"/><path d="M12 3.6v16.8M3.6 12h16.8"/>',
+    code: '<path d="M9 8 4.6 12 9 16"/><path d="M15 8l4.4 4L15 16"/>',
+    mail: '<rect x="3.4" y="5.4" width="17.2" height="13.2" rx="2"/><path d="m4.6 7 7.4 6 7.4-6"/>',
+    message: '<path d="M20.4 12.4c0 3.6-3.8 6.4-8.4 6.4-1 0-2-.12-2.9-.34L4.2 20l1.3-3.6A6.2 6.2 0 0 1 3.6 12.4C3.6 8.8 7.4 6 12 6s8.4 2.8 8.4 6.4z"/>',
+    link: '<path d="M10.2 13.8a3.6 3.6 0 0 0 5.1 0l2.4-2.4a3.6 3.6 0 0 0-5.1-5.1l-1 1"/><path d="M13.8 10.2a3.6 3.6 0 0 0-5.1 0l-2.4 2.4a3.6 3.6 0 0 0 5.1 5.1l1-1"/>',
+    shield: '<path d="M12 3.6 5.4 6.2v5.4c0 4 2.8 7.2 6.6 8.8 3.8-1.6 6.6-4.8 6.6-8.8V6.2z"/>',
+    lock: '<rect x="5" y="10.4" width="14" height="9.6" rx="2.2"/><path d="M8.2 10.4V8a3.8 3.8 0 0 1 7.6 0v2.4"/>',
+    bookmark: '<path d="M6.6 3.6h10.8v16.8L12 16.2l-5.4 4.2z"/>',
+    journal: '<rect x="5" y="3.6" width="14" height="16.8" rx="2"/><path d="M9 3.6v16.8M12.4 8.4h3.6M12.4 12.2h3.6"/>',
+    quote: '<path d="M10 7H6.6A2.2 2.2 0 0 0 4.4 9.2v2.6c0 1.2 1 2.2 2.2 2.2h1.6c0 2-1 3.4-3 4.4"/><path d="M20 7h-3.4a2.2 2.2 0 0 0-2.2 2.2v2.6c0 1.2 1 2.2 2.2 2.2h1.6c0 2-1 3.4-3 4.4"/>',
+    cap: '<path d="M3.4 9.4 12 5.6l8.6 3.8-8.6 3.8z"/><path d="M7 11.2v4.2c0 1.6 2.2 2.8 5 2.8s5-1.2 5-2.8v-4.2"/><path d="M20.6 9.4v5.2"/>',
+    language: '<circle cx="12" cy="12" r="8.4"/><path d="M3.8 12h16.4"/><path d="M12 3.6c2.2 2.2 3.4 5.2 3.4 8.4s-1.2 6.2-3.4 8.4c-2.2-2.2-3.4-5.2-3.4-8.4s1.2-6.2 3.4-8.4z"/>',
+    flask: '<path d="M9.4 3.6h5.2M10.4 3.6v5L5.6 17.6a2 2 0 0 0 1.8 2.8h9.2a2 2 0 0 0 1.8-2.8L13.6 8.6v-5"/><path d="M7.6 14.6h8.8"/>',
+    atom: '<circle cx="12" cy="12" r="1.8"/><ellipse cx="12" cy="12" rx="8.6" ry="3.6"/><ellipse cx="12" cy="12" rx="8.6" ry="3.6" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="8.6" ry="3.6" transform="rotate(120 12 12)"/>',
+    edit: '<path d="M4 20h4l10-10-4-4L4 16z"/><path d="M13.6 6.4 17.6 10.4"/>',
+    run: '<circle cx="14.6" cy="5.4" r="2"/><path d="M13.4 9.4 9.6 12l2.6 2.4-1.4 4.2"/><path d="M12.2 14.4 8 16.2"/><path d="M13.4 9.4l3.6 1.6.8 3.4"/>',
+    pill: '<rect x="2.6" y="8.4" width="18.8" height="7.2" rx="3.6" transform="rotate(-45 12 12)"/><path d="M9 9l6 6"/>',
+    sprout: '<path d="M12 20.4v-7.6"/><path d="M12 13.4C10 10.6 7.4 10 5 10.6c.2 2.6 2.2 4.4 5.2 4.6"/><path d="M12 12.6c1.4-2.6 3.8-3.6 6.4-3.2-.2 2.8-2.2 4.6-5.2 4.8"/>',
+    mountain: '<path d="M3 18.6h18"/><path d="M3.6 18.6 9.4 8l3.4 5.6 2-3 5.6 8z"/>',
+    fire: '<path d="M12 20.4c3 0 5-2 5-4.8 0-3.6-3.4-5.2-3.4-8.6-2.2 1.2-2.6 3.4-2.6 5-1-.8-1.6-2-1.6-3.4-1.6 1.6-2.4 4-2.4 6.2 0 3.4 2 5.6 5 5.6z"/>',
+    anchor: '<circle cx="12" cy="5.4" r="2.2"/><path d="M12 7.6v12.8"/><path d="M8.4 10.4h7.2"/><path d="M4.6 13.6c0 3.6 3.2 6.8 7.4 6.8s7.4-3.2 7.4-6.8"/>',
+    gauge: '<path d="M4 17.6a8.6 8.6 0 1 1 16 0"/><path d="M12 13.4 15.6 9"/><circle cx="12" cy="17.6" r="1.4"/>',
+    yen: '<path d="M7 5.4 12 12l5-6.6"/><path d="M12 12v7"/><path d="M8.6 13.4h6.8M8.6 16.4h6.8"/>',
+    card: '<rect x="3" y="6" width="18" height="12" rx="2.4"/><path d="M3 10h18"/><path d="M6.6 14.4h3.4"/>',
+    receipt: '<path d="M6 3.6h12v16.8l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4-2 1.4z"/><path d="M9 8h6M9 11.4h6"/>',
+    calculator: '<rect x="5" y="3.6" width="14" height="16.8" rx="2.2"/><path d="M8.4 7.6h7.2"/><path d="M8.6 12h.8M11.6 12h.8M14.6 12h.8M8.6 16h.8M11.6 16h.8M14.6 16h.8"/>',
+    percent: '<path d="M6.4 17.6 17.6 6.4"/><circle cx="8" cy="8" r="2"/><circle cx="16" cy="16" r="2"/>',
+    barChart: '<path d="M4 18h16"/><rect x="6" y="12" width="3.4" height="6"/><rect x="11.4" y="8" width="3.4" height="10"/><rect x="16.8" y="4.6" width="3.4" height="13.4"/>',
+    pieChart: '<circle cx="12" cy="12" r="8.4"/><path d="M12 12V3.6"/><path d="M12 12l7.4 4.2"/>',
+    repeat: '<path d="M4.4 11.4V9a2.4 2.4 0 0 1 2.4-2.4h10.4"/><path d="M15 4.2 17.6 6.6 15 9"/><path d="M19.6 12.6V15a2.4 2.4 0 0 1-2.4 2.4H6.8"/><path d="M9 15l-2.6 2.4L9 19.8"/>',
+    arrowUpRight: '<path d="M7 17 17 7"/><path d="M9.4 7H17v7.6"/>',
+    crown: '<path d="M4 8.4 8 12l4-6.4 4 6.4 4-3.6-1.6 9.2H5.6z"/>',
+    trophy: '<path d="M8 4.6h8v4.2a4 4 0 0 1-8 0z"/><path d="M8 5.6H5.4v1.8a3 3 0 0 0 2.8 3"/><path d="M16 5.6h2.6v1.8a3 3 0 0 1-2.8 3"/><path d="M12 12.8v3.6"/><path d="M8.6 20h6.8l-.8-3.6H9.4z"/>',
+    play: '<circle cx="12" cy="12" r="8.4"/><path d="M10.2 8.6 16 12l-5.8 3.4z"/>',
+    filter: '<path d="M4 6h16l-6.2 7.2v5.4l-3.6 1.8v-7.2z"/>',
+    tag: '<path d="M20 12.6V4.6a.6.6 0 0 0-.6-.6h-8L3.6 11.6 12 20z"/><circle cx="15.6" cy="8" r="1.2"/>'
   };
 
   function icon(name, cls) {
@@ -145,21 +200,61 @@
     applyTheme(next);
   }
 
-  var PALETTE = ['#6b4ca8', '#8a6fc7', '#a98ad6', '#7f6bb5', '#b07cb5', '#c48fb4', '#6f7ba8', '#9c8fc0', '#b3a1d9'];
+  /* 配色：24 色，按 紫 / 蓝 / 青 / 绿 / 黄 / 橙 / 红 / 粉 / 棕 / 中性 分组。
+     只存一套色值：暗色下由 CSS 的 color-mix 自动降饱和，避免维护两份调色板 */
+  var PALETTE_GROUPS = [
+    { key: 'purple', name: '紫', colors: ['#6b4ca8', '#8a6fc7', '#a98ad6', '#b07cb5'] },
+    { key: 'blue', name: '蓝', colors: ['#5b93bf', '#6f7ba8', '#4c7a9e'] },
+    { key: 'cyan', name: '青', colors: ['#4f9c9c', '#56a8a0'] },
+    { key: 'green', name: '绿', colors: ['#6fae8b', '#5f9e6f'] },
+    { key: 'yellow', name: '黄', colors: ['#d9a13d', '#c9b24a'] },
+    { key: 'orange', name: '橙', colors: ['#c98b5e', '#d07a4a'] },
+    { key: 'red', name: '红', colors: ['#c96b6b', '#b3564f'] },
+    { key: 'pink', name: '粉', colors: ['#c48fb4', '#d98aa8'] },
+    { key: 'brown', name: '棕', colors: ['#9c7b5f', '#8a6a52'] },
+    { key: 'neutral', name: '中性', colors: ['#7d7689', '#6b6478', '#a5a1b5'] }
+  ];
+  var PALETTE = PALETTE_GROUPS.reduce(function (acc, g) { return acc.concat(g.colors); }, []);
 
+  /* 8 套推荐组合：在一堆图标和颜色之间帮用户直接选好一套 */
+  var COLOR_PRESETS = [
+    { name: '学习计划', type: 'okr', icon: 'book', color: '#5b93bf', desc: '书本 + 蓝' },
+    { name: '健身训练', type: 'habit', icon: 'dumbbell', color: '#c98b5e', desc: '哑铃 + 橙' },
+    { name: '阅读清单', type: 'reading', icon: 'bookmark', color: '#56a8a0', desc: '书签 + 青' },
+    { name: '财务记账', type: 'counter', icon: 'wallet', color: '#5f9e6f', desc: '钱包 + 绿' },
+    { name: '每周复盘', type: 'review', icon: 'repeat', color: '#8a6fc7', desc: '循环箭头 + 紫' },
+    { name: '灵感收集', type: 'excerpt', icon: 'bulb', color: '#d9a13d', desc: '灯泡 + 黄' },
+    { name: '项目跟进', type: 'milestone', icon: 'target', color: '#6f7ba8', desc: '目标 + 靛' },
+    { name: '习惯打卡', type: 'habit', icon: 'check', color: '#6b4ca8', desc: '勾 + 紫' }
+  ];
+
+  /* 17 种类型：全部有数据字段 + 渲染 + 编辑，可真实使用（新增沿用同一 state 与同步链路） */
   var MODULE_TYPES = [
-    { type: 'habit', name: '习惯打卡', desc: '按天打钩的网格', icon: 'grid' },
-    { type: 'okr', name: '目标 OKR', desc: '目标 + 关键结果', icon: 'target' },
-    { type: 'todo', name: '待办清单', desc: '轻量的行动清单', icon: 'check' },
-    { type: 'timeline', name: '日程时间轴', desc: '按小时安排一天', icon: 'clock' },
-    { type: 'metric', name: '数字指标', desc: '一个数，持续记录', icon: 'trend' },
-    { type: 'note', name: '文字笔记', desc: '随手写下的区块', icon: 'note' },
-    { type: 'review', name: '决策复盘', desc: '选择 · 假设 · 收获', icon: 'bulb' }
+    { type: 'todo', name: '待办清单', desc: '轻量的行动清单', icon: 'check', color: '#6b4ca8', title: '待办清单', w: 'half' },
+    { type: 'habit', name: '习惯追踪', desc: '按天打钩的网格', icon: 'grid', color: '#6fae8b', title: '习惯打卡', w: 'full' },
+    { type: 'timeline', name: '时间轴日程', desc: '按小时安排一天', icon: 'clock', color: '#5b93bf', title: '今日时间轴', w: 'full' },
+    { type: 'note', name: '笔记随记', desc: '随手写下的区块', icon: 'note', color: '#c98b5e', title: '随手记', w: 'half' },
+    { type: 'goal', name: '目标进度条', desc: '一个目标 + 进度', icon: 'target', color: '#6b4ca8', title: '目标进度', w: 'half' },
+    { type: 'counter', name: '计数器', desc: '一天几次，加减记录', icon: 'cup', color: '#4f9c9c', title: '喝水打卡', w: 'half' },
+    { type: 'milestone', name: '里程碑进度', desc: '分阶段推进的节点', icon: 'flag', color: '#6f7ba8', title: '里程碑', w: 'half' },
+    { type: 'reading', name: '阅读清单', desc: '想读 / 在读 / 读完', icon: 'bookmark', color: '#56a8a0', title: '阅读清单', w: 'half' },
+    { type: 'kanban', name: '周看板', desc: '待办 / 进行中 / 完成', icon: 'kanban', color: '#8a6fc7', title: '本周看板', w: 'full' },
+    { type: 'dashboard', name: '指标仪表盘', desc: '多个数字一起看', icon: 'gauge', color: '#5b93bf', title: '关键指标', w: 'half' },
+    { type: 'diary', name: '每日一句话', desc: '一天只写一句', icon: 'journal', color: '#d9a13d', title: '每日一句话', w: 'half' },
+    { type: 'excerpt', name: '阅读摘录', desc: '句子 + 出处', icon: 'quote', color: '#d9a13d', title: '摘录本', w: 'half' },
+    { type: 'quadrant', name: '四象限待办', desc: '紧急 × 重要', icon: 'layout', color: '#c96b6b', title: '四象限', w: 'half' },
+    { type: 'countdown', name: '倒计时纪念日', desc: '还有几天 / 已过几天', icon: 'hourglass', color: '#b07cb5', title: '倒计时', w: 'half' },
+    { type: 'okr', name: '目标 OKR', desc: '目标 + 关键结果', icon: 'compass', color: '#6b4ca8', title: '目标 OKR', w: 'half' },
+    { type: 'metric', name: '数字指标', desc: '一个数，持续记录', icon: 'trend', color: '#6f7ba8', title: '数字指标', w: 'half' },
+    { type: 'review', name: '决策复盘', desc: '选择 · 假设 · 收获', icon: 'bulb', color: '#b07cb5', title: '决策复盘', w: 'half' }
   ];
 
   var TYPE_NAME = {
-    habit: '打卡网格', okr: 'OKR', todo: '待办', timeline: '时间轴',
-    metric: '指标', note: '笔记', review: '复盘'
+    todo: '待办', habit: '打卡网格', timeline: '时间轴', note: '笔记',
+    goal: '进度条', counter: '计数器', milestone: '里程碑', reading: '书单',
+    kanban: '看板', dashboard: '仪表盘', diary: '一句话', excerpt: '摘录',
+    quadrant: '四象限', countdown: '倒计时',
+    okr: 'OKR', metric: '指标', review: '复盘'
   };
 
   var LIFE8 = [
@@ -173,9 +268,36 @@
     { id: 'family', name: '家人关系', icon: 'heart', color: '#c96b6b' }
   ];
 
-  var ICON_CHOICES = ['grid', 'target', 'check', 'clock', 'trend', 'note', 'bulb', 'compass',
-    'flag', 'calendar', 'sun', 'moon', 'layers', 'heart', 'book', 'wallet', 'brief',
-    'dumbbell', 'coffee', 'users', 'sparkle', 'star', 'leaf', 'palette'];
+  /* 图标选择器：分组 + 可搜索（共 80 个，全部内联 SVG 24×24 stroke 1.6） */
+  var ICON_GROUPS = [
+    { name: '常用', icons: ['check', 'list', 'grid', 'clock', 'calendar', 'timer', 'hourglass', 'flag', 'target', 'compass', 'pin', 'star'] },
+    { name: '生活', icons: ['sun', 'moon', 'heart', 'home', 'coffee', 'cup', 'droplet', 'bed', 'apple', 'cake', 'gift', 'shoppingBag', 'smile', 'music', 'plane', 'map', 'users'] },
+    { name: '工作', icons: ['brief', 'building', 'layers', 'sitemap', 'kanban', 'layout', 'code', 'mail', 'message', 'link', 'shield', 'lock'] },
+    { name: '学习', icons: ['book', 'bookmark', 'journal', 'quote', 'cap', 'language', 'note', 'bulb', 'flask', 'atom', 'edit'] },
+    { name: '健康', icons: ['dumbbell', 'run', 'pill', 'leaf', 'sprout', 'mountain', 'fire', 'anchor', 'gauge'] },
+    { name: '财务', icons: ['wallet', 'yen', 'card', 'receipt', 'calculator', 'percent', 'barChart', 'pieChart', 'trend'] },
+    { name: '时间灵感', icons: ['repeat', 'arrowUpRight', 'sparkle', 'palette', 'crown', 'trophy', 'play', 'filter', 'tag', 'eye'] }
+  ];
+  /* 图标中文别名：搜索时既能打英文 key 也能打中文 */
+  var ICON_ALIAS = {
+    check: '勾 完成 打钩', list: '列表 清单', grid: '网格 打卡', clock: '时钟 时间', calendar: '日历 日期',
+    timer: '计时 番茄', hourglass: '沙漏 倒计时', flag: '旗 里程碑', target: '目标 靶心', compass: '罗盘 方向',
+    pin: '钉 固定', star: '星 收藏', sun: '太阳 早晨', moon: '月亮 夜晚', heart: '心 喜欢', home: '家 房子',
+    coffee: '咖啡 休闲', cup: '杯 喝水', droplet: '水滴 喝', bed: '床 睡眠', apple: '苹果 饮食',
+    cake: '蛋糕 生日', gift: '礼物 惊喜', shoppingBag: '购物 买', smile: '笑脸 心情', music: '音乐 听歌',
+    plane: '飞机 旅行', map: '地图 路线', users: '人 团队', brief: '公文包 工作', building: '楼 公司',
+    layers: '层 结构', sitemap: '结构 组织', kanban: '看板 列', layout: '布局 四象限', code: '代码 开发',
+    mail: '邮件 收件', message: '消息 聊天', link: '链接 关联', shield: '盾 防护', lock: '锁 安全',
+    book: '书 读书 学习', bookmark: '书签 阅读', journal: '日记 本子', quote: '引用 摘录', cap: '学士帽 学习',
+    language: '语言 外语', note: '笔记 便签', bulb: '灯泡 灵感', flask: '试管 实验', atom: '原子 科学',
+    edit: '笔 编辑 写作', dumbbell: '哑铃 健身', run: '跑步 运动', pill: '药 吃药', leaf: '叶 自然',
+    sprout: '发芽 成长', mountain: '山 目标', fire: '火 连续', anchor: '锚 稳定', gauge: '仪表 指标',
+    wallet: '钱包 记账', yen: '钱 收入', card: '卡 支付', receipt: '小票 账单', calculator: '计算 算',
+    percent: '百分比 折扣', barChart: '柱状 数据', pieChart: '饼图 占比', trend: '趋势 曲线',
+    repeat: '循环 复盘 每周', arrowUpRight: '上升 前进', sparkle: '闪光 亮点', palette: '调色 设计',
+    crown: '皇冠 优先', trophy: '奖杯 成就', play: '播放 开始', filter: '筛选 过滤', tag: '标签 分类', eye: '眼睛 观察'
+  };
+  var ICON_CHOICES = ICON_GROUPS.reduce(function (acc, g) { return acc.concat(g.icons); }, []);
 
   /* ---------------------------------------------------------
      小工具
@@ -282,14 +404,16 @@
   /* 旧数据迁移标记：加载时若给日程任务补了 id / 日期，需立即落盘，保证引用串稳定 */
   var dailyMigrated = false;
 
-  var PAGE_ORDER = ['overview', 'daily', 'monthly', 'yearly', 'life8', 'review'];
+  /* 系统页顺序：概览 → 年度目标 → 月度规划 → 每日日程 → 八大模块 → 决策复盘
+     按「年 → 月 → 日」的时间粒度收窄；这里就是唯一配置源，侧栏 / 顶部页签 / ⌘K / 数字快捷键都读它 */
+  var PAGE_ORDER = ['overview', 'yearly', 'monthly', 'daily', 'life8', 'review'];
 
   function basePages() {
     return [
       { id: 'overview', name: '概览', icon: 'compass', builtin: 'overview', modules: [] },
-      { id: 'daily', name: '每日日程', icon: 'sun', builtin: 'daily', modules: [] },
-      { id: 'monthly', name: '月度规划', icon: 'calendar', builtin: 'monthly', modules: [] },
       { id: 'yearly', name: '年度目标', icon: 'flag', builtin: 'yearly', modules: [] },
+      { id: 'monthly', name: '月度规划', icon: 'calendar', builtin: 'monthly', modules: [] },
+      { id: 'daily', name: '每日日程', icon: 'sun', builtin: 'daily', modules: [] },
       { id: 'life8', name: '八大模块', icon: 'layers', builtin: 'life8', modules: [] },
       { id: 'review', name: '决策复盘', icon: 'bulb', builtin: 'review', modules: [] }
     ];
@@ -363,14 +487,15 @@
       p.name = p.name || '未命名页签';
       p.icon = p.icon || 'page';
       p.modules = Array.isArray(p.modules) ? p.modules : [];
-      p.modules = p.modules.filter(Boolean).map(function (m) {
+      p.modules = p.modules.filter(function (m) { return !!m && typeof m === 'object'; }).map(function (m) {
         m.id = m.id || uid('m');
         m.type = m.type || 'note';
         m.title = m.title || (TYPE_NAME[m.type] || '模块');
         m.icon = m.icon || 'note';
         m.color = m.color || PALETTE[0];
         m.w = m.w === 'full' ? 'full' : 'half';
-        m.data = m.data || blankData(m.type);
+        /* 按类型把 data 洗成确定可渲染的结构（null / 半截对象 / 旧字段都会被修好） */
+        sanitizeModuleData(m);   /* 函数内部已把 m.data 洗成规范结构，切勿整体回写（曾导致 m.data === m 自引用） */
         return m;
       });
       return p;
@@ -391,7 +516,7 @@
     return s;
   }
 
-  /* 系统页固定按「概览 → 每日 → 月度 → 年度 → 八大模块 → 决策复盘」的时间粒度排序 */
+  /* 系统页固定按「概览 → 年度 → 月度 → 每日 → 八大模块 → 决策复盘」的时间粒度排序（年→月→日） */
   function orderBuiltinPages(list) {
     var rank = function (p) { return PAGE_ORDER.indexOf(p.builtin); };
     var built = list.filter(function (p) { return p.builtin; }).sort(function (a, b) { return rank(a) - rank(b); });
@@ -454,6 +579,229 @@
     });
   }
 
+  /* ---------------------------------------------------------
+     数据加固（修复「概览写 3 个模块却只渲染 1 张卡」的根因）
+     normalize 原先只做 filter(Boolean)，历史 / 导入 / 旧版本数据里
+     半截对象或 null 项进入 items 后，renderCard 会在渲染第一张卡时抛错，
+     异常冒泡出 renderPage 的循环 → 同页后续卡片全部不再渲染（模块数照常统计）。
+     这里按类型把每个可见字段洗成确定可渲染的值，并丢掉无法修复的条目。
+     --------------------------------------------------------- */
+  function str(v, d) {
+    if (typeof v === 'string') return v;
+    if (typeof v === 'number' && isFinite(v)) return String(v);
+    return d || '';
+  }
+  function num(v, d) {
+    var n = Number(v);
+    return isFinite(n) ? n : (d || 0);
+  }
+  function objArr(v) {
+    return Array.isArray(v) ? v.filter(function (x) { return x && typeof x === 'object'; }) : [];
+  }
+  function objMap(v) {
+    return (v && typeof v === 'object' && !Array.isArray(v)) ? v : {};
+  }
+
+  function sanitizeModuleData(m) {
+    var d = objMap(m.data);
+    m.data = d;
+    switch (m.type) {
+      case 'todo':
+        d.items = objArr(d.items).map(function (it) {
+          return { id: it.id || uid('t'), text: str(it.text), done: !!it.done, ref: it.ref };
+        }).filter(function (it) { return it.text; });
+        break;
+      case 'habit':
+        d.month = isMonthStr(d.month) ? d.month : monthKey(new Date());
+        d.habits = objArr(d.habits).map(function (h) {
+          var src = objMap(h.checks);
+          var safe = {};
+          Object.keys(src).forEach(function (k) { if (isDateStr(k) && src[k]) safe[k] = true; });
+          return { id: h.id || uid('h'), name: str(h.name, '未命名习惯'), checks: safe, goal: Math.max(0, num(h.goal, 0)) };
+        }).filter(function (h) { return !!h.name; });
+        break;
+      case 'timeline':
+        d.date = isDateStr(d.date) ? d.date : today();
+        d.items = objArr(d.items).map(function (it) {
+          return {
+            id: it.id || uid('tl'), text: str(it.text), start: str(it.start), end: str(it.end),
+            done: !!it.done, ref: it.ref
+          };
+        }).filter(function (it) { return it.text; });
+        break;
+      case 'metric':
+        d.value = num(d.value, 0);
+        d.unit = str(d.unit);
+        d.label = str(d.label);
+        d.step = num(d.step, 1) || 1;
+        d.history = objArr(d.history).map(function (h) {
+          return { d: isDateStr(h.d) ? h.d : today(), v: num(h.v, 0) };
+        });
+        break;
+      case 'note':
+        d.text = str(d.text);
+        break;
+      case 'goal':
+        d.items = objArr(d.items).map(function (g) {
+          return {
+            id: g.id || uid('g'), title: str(g.title, '目标'),
+            cur: Math.max(0, num(g.cur, 0)), target: Math.max(0, num(g.target, 10)), unit: str(g.unit)
+          };
+        }).filter(function (g) { return !!g.title; });
+        break;
+      case 'counter':
+        d.items = objArr(d.items).map(function (c) {
+          return {
+            id: c.id || uid('c'), name: str(c.name, '计数'), unit: str(c.unit, '次'),
+            val: num(c.val, 0), step: num(c.step, 1) || 1, goal: Math.max(0, num(c.goal, 0))
+          };
+        }).filter(function (c) { return !!c.name; });
+        break;
+      case 'milestone':
+        d.items = objArr(d.items).map(function (i) {
+          return {
+            id: i.id || uid('ms'), title: str(i.title, '里程碑'),
+            date: isDateStr(i.date) ? i.date : '', done: !!i.done
+          };
+        }).filter(function (i) { return !!i.title; });
+        break;
+      case 'reading':
+        d.items = objArr(d.items).map(function (b) {
+          var st = b.status === 'reading' || b.status === 'done' ? b.status : 'want';
+          return {
+            id: b.id || uid('bk'), title: str(b.title, '未命名'), author: str(b.author), status: st,
+            cur: Math.max(0, num(b.cur, 0)), total: Math.max(0, num(b.total, 0)), note: str(b.note)
+          };
+        }).filter(function (b) { return !!b.title; });
+        break;
+      case 'kanban':
+        d.cols = Array.isArray(d.cols) && d.cols.length >= 2
+          ? d.cols.map(function (c) { return str(c, '列'); })
+          : ['待办', '进行中', '已完成'];
+        d.items = objArr(d.items).map(function (i) {
+          return {
+            id: i.id || uid('kb'), text: str(i.text),
+            col: clamp(Math.floor(num(i.col, 0)), 0, d.cols.length - 1)
+          };
+        }).filter(function (i) { return !!i.text; });
+        break;
+      case 'dashboard':
+        d.metrics = objArr(d.metrics).map(function (k) {
+          return {
+            id: k.id || uid('kpi'), label: str(k.label, '指标'), value: num(k.value, 0),
+            unit: str(k.unit), target: Math.max(0, num(k.target, 0))
+          };
+        }).filter(function (k) { return !!k.label; });
+        break;
+      case 'diary':
+        var srcE = objMap(d.entries);
+        var safeE = {};
+        Object.keys(srcE).forEach(function (k) {
+          if (isDateStr(k) && srcE[k]) safeE[k] = str(srcE[k]).slice(0, 120);
+        });
+        d.entries = safeE;
+        break;
+      case 'excerpt':
+        d.items = objArr(d.items).map(function (q) {
+          return {
+            id: q.id || uid('ex'), text: str(q.text), source: str(q.source),
+            page: str(q.page), at: isDateStr(q.at) ? q.at : ''
+          };
+        }).filter(function (q) { return !!q.text; });
+        break;
+      case 'quadrant':
+        d.items = objArr(d.items).map(function (i) {
+          return {
+            id: i.id || uid('q'), text: str(i.text),
+            urgent: !!i.urgent, important: !!i.important, done: !!i.done
+          };
+        }).filter(function (i) { return !!i.text; });
+        break;
+      case 'countdown':
+        d.items = objArr(d.items).map(function (c) {
+          return {
+            id: c.id || uid('cd'), title: str(c.title, '纪念日'),
+            date: isDateStr(c.date) ? c.date : '', repeat: c.repeat === 'year' ? 'year' : ''
+          };
+        }).filter(function (c) { return !!c.title; });
+        break;
+      case 'okr':
+        d.objectives = objArr(d.objectives).map(function (o) {
+          return { id: o.id || uid('o'), title: str(o.title, '新的目标'), krs: Array.isArray(o.krs) ? o.krs : [] };
+        });
+        break;
+      case 'review':
+        d.items = objArr(d.items).map(function (it) {
+          return {
+            id: it.id || uid('r'), title: str(it.title, '未命名的决定'), date: str(it.date),
+            hypothesis: str(it.hypothesis), outcome: str(it.outcome), score: clamp(num(it.score, 0), 0, 5)
+          };
+        });
+        break;
+      default: break;
+    }
+    return d;
+  }
+
+  function sanitizePageData(pg) {
+    (pg.modules || []).forEach(function (m) { sanitizeModuleData(m); });
+    return pg;
+  }
+
+  /* 新增模块时给的默认内容：新卡片一落地就是能用的样子，而不是一堆空字段 */
+  function seedModuleData(type) {
+    /* 注意：这里必须用空对象起点，不能再回调 blankData —— 否则两者互递归会栈溢出 */
+    var base = {};
+    var t = today();
+    switch (type) {
+      case 'goal':
+        base.items = [{ id: uid('g'), title: '本周跑量', cur: 0, target: 20, unit: '公里' }];
+        break;
+      case 'counter':
+        base.items = [{ id: uid('c'), name: '喝水', unit: '杯', val: 0, step: 1, goal: 8 }];
+        break;
+      case 'milestone':
+        base.items = [
+          { id: uid('ms'), title: '启动', date: t, done: true },
+          { id: uid('ms'), title: '跑通最小闭环', date: shiftISO(t, 14), done: false },
+          { id: uid('ms'), title: '复盘并放大', date: shiftISO(t, 45), done: false }
+        ];
+        break;
+      case 'reading':
+        base.items = [{ id: uid('bk'), title: '一本想读的书', author: '', status: 'reading', cur: 0, total: 320, note: '' }];
+        break;
+      case 'kanban':
+        base.items = [
+          { id: uid('kb'), text: '把本周要推的事拆成卡片', col: 0 },
+          { id: uid('kb'), text: '已经开工的那一件', col: 1 }
+        ];
+        break;
+      case 'dashboard':
+        base.metrics = [
+          { id: uid('kpi'), label: '深睡时长', value: 0, unit: 'h', target: 7.5 },
+          { id: uid('kpi'), label: '省下的钱', value: 0, unit: '元', target: 2000 }
+        ];
+        break;
+      case 'excerpt':
+        base.items = [{ id: uid('ex'), text: '把打动你的那句话抄在这里', source: '', page: '', at: t }];
+        break;
+      case 'quadrant':
+        base.items = [
+          { id: uid('q'), text: '重要且紧急的一件事', urgent: true, important: true, done: false },
+          { id: uid('q'), text: '重要但不紧急的长期事', urgent: false, important: true, done: false }
+        ];
+        break;
+      case 'countdown':
+        base.items = [{ id: uid('cd'), title: '下一个重要日子', date: shiftISO(t, 30), repeat: '' }];
+        break;
+      case 'diary':
+        base.entries = {};
+        break;
+      default: break;
+    }
+    return base;
+  }
+
   function blankData(type) {
     switch (type) {
       case 'habit': return { month: monthKey(new Date()), habits: [] };
@@ -463,7 +811,7 @@
       case 'metric': return { value: 0, unit: '', label: '', step: 1, history: [] };
       case 'note': return { text: '' };
       case 'review': return { items: [] };
-      default: return {};
+      default: return seedModuleData(type);
     }
   }
 
@@ -816,6 +1164,8 @@
     $('#page-title').setAttribute('aria-label', '当前页：' + page.name + '，点击重命名');
     document.title = page.name + ' · ' + (state.settings.appName || 'Life OS');
     canvas.innerHTML = '';
+    /* 页面类型挂在 canvas 上，样式表据此给不同页各自的尺度（概览仪表盘 / 各类详情页） */
+    canvas.dataset.page = page.builtin || 'custom';
     /* 每日日程页：所有日程模块只渲染「当前查看日期」的任务；其它页面为 null（渲染全部） */
     dailyView = page.builtin === 'daily' ? (isDateStr(state.settings.dailyDate) ? state.settings.dailyDate : today()) : null;
 
@@ -832,9 +1182,18 @@
       (intro.actions || '');
     canvas.appendChild(hero);
 
-    /* 今日聚焦：概览页顶部，三件事 + 容量 + 逾期 */
-    if (page.builtin === 'overview') canvas.appendChild(focusBlock());
-    if (page.builtin === 'overview') canvas.appendChild(kpisBlock());
+    /* 概览仪表盘：响应式网格，首屏给出今日聚焦 / 时间轴 / 习惯 / OKR / 心情 / 全局速览 */
+    if (page.builtin === 'overview') canvas.appendChild(overviewBoard());
+    /* 今日聚焦：三件事 + 容量 + 逾期 */
+    if (page.builtin === 'overview') {
+      var fb = focusBlock();
+      fb.id = 'focus-card';
+      canvas.appendChild(fb);
+      var mb0 = moodBlock();
+      mb0.id = 'mood-block';
+      canvas.appendChild(mb0);
+      canvas.appendChild(kpisBlock());
+    }
     if (page.builtin === 'daily') canvas.appendChild(dailyBarBlock());
     if (page.builtin === 'monthly') canvas.appendChild(agendaBlock());
     if (page.builtin === 'life8') canvas.appendChild(boardBlock());
@@ -845,8 +1204,6 @@
     if (page.builtin === 'review') canvas.appendChild(weeklyBlock());
     /* OKR 等权汇总 + 季度归档 */
     if (page.builtin === 'yearly') canvas.appendChild(okrBlock());
-    /* 心情与精力：每日打分 + 近 30 天双曲线 */
-    if (page.builtin === 'overview') canvas.appendChild(moodBlock());
 
     // 模块区（整块可折叠）
     var modsWrap = document.createElement('section');
@@ -862,7 +1219,13 @@
     grid.className = 'modules';
     grid.id = 'modules';
     page.modules.forEach(function (m, i) {
-      var card = renderCard(m);
+      /* 单张卡渲染异常只降级这张卡，绝不中断同页后续卡片（概览「3 个模块只显示 1 张」的根因） */
+      var card;
+      try {
+        card = renderCard(m);
+      } catch (err) {
+        card = renderCardError(m, err);
+      }
       card.classList.add('reveal');
       grid.appendChild(card);
     });
@@ -891,6 +1254,203 @@
     clearBusy();
   }
 
+  /* ========= 概览仪表盘（响应式网格 + 紧凑卡片） ========= */
+
+  /* 概览卡片跳转：系统页直接切换，块内内容用锚点滚动 */
+  function ovGo(id) {
+    if (!pageById(id)) return;
+    if (state.current === id) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    state.current = id;
+    save();
+    renderNav();
+    renderPage();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function ovScrollTo(sel) {
+    var el = $(sel);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function ovCard(o) {
+    return '<div class="ov-card' + (o.wide ? ' wide' : '') + '" data-ov-go="' + esc(o.go || '') + '"' +
+      (o.anchor ? ' data-ov-anchor="' + esc(o.anchor) + '"' : '') +
+      ' role="button" tabindex="0" aria-label="' + esc(o.title) + '，点击查看详情">' +
+      '<div class="ov-head"><span class="ov-ico" style="--c:' + esc(o.color || '#6b4ca8') + '">' + icon(o.icon) + '</span>' +
+      '<span class="ov-title">' + esc(o.title) + '</span>' +
+      (o.meta ? '<span class="ov-meta">' + o.meta + '</span>' : '') +
+      '<span class="ov-more">详情 ›</span></div>' +
+      '<div class="ov-body">' + o.body + '</div>' +
+      '</div>';
+  }
+
+  /* 近 7 天心情曲线（迷你折线，无坐标轴） */
+  function moodSpark() {
+    var days = [];
+    for (var i = 6; i >= 0; i--) days.push(shiftISO(today(), -i));
+    var vals = days.map(function (d) {
+      var r = moodOf(d);
+      return r && r.mood ? clamp(Number(r.mood) || 0, 0, 10) : null;
+    });
+    var known = vals.filter(function (v) { return v != null; });
+    if (!known.length) return '<p class="ov-empty">近 7 天还没有心情记录。</p>';
+    var w = 200, h = 46, n = vals.length;
+    var pts = [];
+    vals.forEach(function (v, i) {
+      if (v == null) return;
+      var x = n > 1 ? (i / (n - 1)) * w : w / 2;
+      var y = h - (v / 10) * (h - 6) - 3;
+      pts.push([x, y]);
+    });
+    var line = pts.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ');
+    var area = '0,' + h + ' ' + line + ' ' + w + ',' + h;
+    return '<svg class="ov-spark" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" aria-hidden="true">' +
+      '<polygon points="' + area + '" fill="currentColor" opacity=".12"></polygon>' +
+      '<polyline points="' + line + '" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>' +
+      '</svg>';
+  }
+
+  function overviewBoard() {
+    var key = today();
+    var sec = document.createElement('section');
+    sec.className = 'ov-board reveal';
+    sec.id = 'overview-board';
+    var cards = [];
+
+    /* ① 今日聚焦 */
+    var mits = mitsOf(key).filter(function (x) { return String(x.text || '').trim(); });
+    var mitDone = mits.filter(function (x) { return x.done; }).length;
+    cards.push(ovCard({
+      title: '今日聚焦', icon: 'target', color: '#6b4ca8', go: 'overview', anchor: '#focus-card',
+      meta: mits.length ? mitDone + '/' + mits.length : '未设定',
+      body: mits.length
+        ? '<ul class="ov-mini">' + mits.slice(0, 3).map(function (x) {
+          return '<li class="' + (x.done ? 'done' : '') + '"><i>' + (x.done ? '✓' : '·') + '</i>' + esc(x.text) + '</li>';
+        }).join('') + '</ul>'
+        : '<p class="ov-empty">今天还没有挑出最重要的事。</p>'
+    }));
+
+    /* ② 今日时间轴摘要 */
+    var tl = [], tlMods = 0;
+    (pageById('daily') ? pageById('daily').modules : []).forEach(function (m) {
+      if (!m || m.type !== 'timeline') return;
+      tlMods += 1;
+      (m.data.items || []).forEach(function (it) {
+        if (!it) return;
+        var d = isDateStr(it.date) ? it.date : key;
+        if (d === key) tl.push(it);
+      });
+    });
+    tl.sort(function (a, b) { return String(a.start || a.time || '').localeCompare(String(b.start || b.time || '')); });
+    cards.push(ovCard({
+      title: '今日时间轴', icon: 'clock', color: '#5b93bf', go: 'daily',
+      meta: tl.length + ' 段安排',
+      body: tl.length
+        ? '<ul class="ov-mini">' + tl.slice(0, 3).map(function (it) {
+          return '<li><i>' + esc(it.start || it.time || '--:--') + '</i>' + esc(it.text || '未命名') + '</li>';
+        }).join('') + '</ul>'
+        : '<p class="ov-empty">今天的时间轴还空着。</p>'
+    }));
+
+    /* ③ 习惯打卡 */
+    var habits = [];
+    state.pages.forEach(function (p) {
+      (p.modules || []).forEach(function (m) {
+        if (!m || m.type !== 'habit') return;
+        (m.data.habits || []).forEach(function (h) { if (h) habits.push(h); });
+      });
+    });
+    var hit = habits.filter(function (h) { return h.checks && h.checks[key]; }).length;
+    cards.push(ovCard({
+      title: '习惯打卡', icon: 'grid', color: '#6fae8b', go: 'daily',
+      meta: habits.length ? hit + '/' + habits.length + ' 已完成' : '未建立',
+      body: habits.length
+        ? '<ul class="ov-mini">' + habits.slice(0, 3).map(function (h) {
+          var on = !!(h.checks && h.checks[key]);
+          return '<li class="' + (on ? 'done' : '') + '"><i>' + (on ? '✓' : '○') + '</i>' + esc(h.name) + '</li>';
+        }).join('') + '</ul>'
+        : '<p class="ov-empty">还没有习惯，加一条每天的固定动作。</p>'
+    }));
+
+    /* ④ OKR 进度 */
+    var krPcts = [], objNames = [];
+    state.pages.forEach(function (p) {
+      (p.modules || []).forEach(function (m) {
+        if (!m || m.type !== 'okr') return;
+        (m.data.objectives || []).forEach(function (o) {
+          var krs = (o.krs || []).filter(Boolean);
+          if (!krs.length) return;
+          var pct = Math.round(krs.reduce(function (a, k) {
+            return a + clamp(k.target ? (k.cur / k.target) * 100 : 0, 0, 100);
+          }, 0) / krs.length);
+          krPcts.push(pct);
+          objNames.push({ name: o.title, pct: pct });
+        });
+      });
+    });
+    var okrAvg = krPcts.length ? Math.round(krPcts.reduce(function (a, b) { return a + b; }, 0) / krPcts.length) : 0;
+    objNames.sort(function (a, b) { return b.pct - a.pct; });
+    cards.push(ovCard({
+      title: 'OKR 进度', icon: 'compass', color: '#8a6fc7', go: 'yearly',
+      meta: krPcts.length ? '平均 <b>' + okrAvg + '%</b>' : '未建立',
+      body: objNames.length
+        ? '<ul class="ov-mini ov-bars">' + objNames.slice(0, 2).map(function (o) {
+          return '<li><span>' + esc(o.name) + '</span><em>' + o.pct + '%</em>' +
+            '<span class="ov-bar"><i style="width:' + o.pct + '%"></i></span></li>';
+        }).join('') + '</ul>'
+        : '<p class="ov-empty">还没有年度目标。</p>'
+    }));
+
+    /* ⑤ 心情与精力（近 7 天） */
+    var mt = moodOf(key) || {};
+    cards.push(ovCard({
+      title: '心情曲线', icon: 'smile', color: '#d9a13d', go: 'overview', anchor: '#mood-block',
+      meta: mt.mood ? '今日 <b>' + mt.mood + '/10</b>' : '今日未记',
+      body: moodSpark()
+    }));
+
+    /* ⑥ 全局速览：各页模块数 + 最近的纪念日 */
+    var chip = state.pages.filter(function (p) { return p.builtin; }).map(function (p) {
+      return '<span class="ov-chip"><i></i>' + esc(p.name.replace(/·.*/, '')) + '<b>' + (p.modules || []).length + '</b></span>';
+    }).join('');
+    var nextCd = null;
+    state.pages.forEach(function (p) {
+      (p.modules || []).forEach(function (m) {
+        if (!m || m.type !== 'countdown') return;
+        (m.data.items || []).forEach(function (c) {
+          if (!c || !isDateStr(c.date)) return;
+          var left = dayDiff(today(), c.date);
+          if (left >= 0 && (!nextCd || left < nextCd.left)) nextCd = { left: left, title: c.title };
+        });
+      });
+    });
+    cards.push(ovCard({
+      title: '全局速览', icon: 'layers', color: '#7d7689', go: 'life8',
+      meta: nextCd ? '最近纪念日 <b>' + nextCd.left + ' 天</b>' : '',
+      body: '<div class="ov-chips">' + chip + '</div>' +
+        (nextCd ? '<p class="ov-line">' + esc(nextCd.title) + ' · 还有 ' + nextCd.left + ' 天</p>' : '')
+    }));
+
+    sec.innerHTML = '<div class="ov-grid">' + cards.join('') + '</div>';
+
+    $$('[data-ov-go]', sec).forEach(function (el) {
+      function open() {
+        var anchor = el.dataset.ovAnchor || '';
+        var go = el.dataset.ovGo || '';
+        if (go && go !== state.current) { ovGo(go); return; }
+        if (anchor) {
+          /* 同页：滚动到对应区块 */
+          if (state.current !== go && go) { ovGo(go); }
+          setTimeout(function () { ovScrollTo(anchor); }, 60);
+        }
+      }
+      el.addEventListener('click', open);
+      el.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+      });
+    });
+    return sec;
+  }
   function pageIntro(page) {
     var now = new Date();
     var name = userName();
@@ -1608,6 +2168,29 @@
   /* ---------------------------------------------------------
      渲染：卡片
      --------------------------------------------------------- */
+  /* 单张卡片渲染失败时的降级卡：给标题、原因与「重建内容」入口，保证同页其它卡片照常渲染 */
+  function renderCardError(m, err) {
+    var el = document.createElement('article');
+    el.className = 'card mod card-error';
+    el.style.setProperty('--c', (m && m.color) || '#6b4ca8');
+    el.dataset.id = (m && m.id) || '';
+    el.innerHTML = '<header class="card-head">' +
+      '<span class="card-ico">' + icon((m && m.icon) || 'note') + '</span>' +
+      '<div class="card-titles"><h3>' + esc((m && m.title) || '这个模块') + '</h3>' +
+      '<p class="card-sub">内容结构异常，已单独隔离，不影响其它卡片</p></div></header>' +
+      '<div class="card-body"><p class="ov-empty">错误：' + esc(String((err && err.message) || err || '未知')) + '</p></div>' +
+      '<footer class="card-foot"><button class="ghost-btn" data-fix="' + esc((m && m.id) || '') + '">重建内容</button></footer>';
+    el.querySelector('[data-fix]').addEventListener('click', function () {
+      var target = (currentPage().modules || []).filter(function (x) { return x && x.id === (m && m.id); })[0];
+      if (!target) return;
+      target.data = blankData(target.type);
+      save();
+      renderPage();
+      toast('已重建「' + (target.title || '模块') + '」的默认内容');
+    });
+    return el;
+  }
+
   function renderCard(m) {
     var el = document.createElement('article');
     el.className = 'card' + (m.w === 'full' ? ' w-full' : '');
@@ -2884,69 +3467,632 @@
     document.documentElement.classList.remove('dialog-open');
   }
 
+  /* ========= 新增的模块类型渲染器（14 种里新增的 10 种） ========= */
+  /* 两个日期相差几天（b - a，字符串 YYYY-MM-DD） */
+  function dayDiff(a, b) {
+    var da = parseISO(a), db = parseISO(b);
+    if (!da || !db) return 0;
+    return Math.round((db - da) / 86400000);
+  }
+
+  /* -------- 目标进度条 -------- */
+  renderers.goal = {
+    html: function (m) {
+      var items = m.data.items || [];
+      return '<div class="goal-list">' + (items.length ? items.map(function (g) {
+        var pct = g.target > 0 ? clamp(Math.round(g.cur / g.target * 100), 0, 100) : 0;
+        return '<div class="goal-row" data-item="' + esc(g.id) + '">' +
+          '<div class="goal-head"><span class="goal-title">' + esc(g.title) + '</span>' +
+          '<span class="goal-num"><b>' + g.cur + '</b> / ' + g.target + (g.unit ? ' ' + esc(g.unit) : '') +
+          ' · ' + pct + '%</span></div>' +
+          '<div class="mini-progress"><i style="width:' + pct + '%"></i></div>' +
+          '<div class="goal-ops">' +
+          '<button class="icon-mini" type="button" data-dec aria-label="减">' + icon('x') + '</button>' +
+          '<button class="icon-mini" type="button" data-inc aria-label="加">' + icon('check') + '</button>' +
+          '<button class="todo-del" type="button" data-del aria-label="删除">' + icon('x') + '</button>' +
+          '</div></div>';
+      }).join('') : '<p class="empty-line">还没有目标，先写下一个想推进的数字。</p>') + '</div>' +
+      '<div class="inline-add"><input class="field" data-new placeholder="添加目标，回车确认">' +
+      '<button class="add-btn" data-add type="button">添加</button></div>';
+    },
+    bind: function (body, card, m) {
+      var d = m.data;
+      var input = $('[data-new]', body);
+      function add() {
+        var v = (input.value || '').trim();
+        if (!v) { input.focus(); return; }
+        d.items.push({ id: uid('g'), title: v, cur: 0, target: 10, unit: '' });
+        save(); refreshCard(m);
+      }
+      $('[data-add]', body).addEventListener('click', add);
+      input.addEventListener('keydown', function (e) { if (e.key === 'Enter') add(); });
+      $$('[data-item]', body).forEach(function (row) {
+        var g = d.items.filter(function (x) { return x.id === row.dataset.item; })[0];
+        if (!g) return;
+        $('[data-inc]', row).addEventListener('click', function () {
+          g.cur = Math.min(g.target || 999999, g.cur + 1); save(); refreshCard(m);
+        });
+        $('[data-dec]', row).addEventListener('click', function () {
+          g.cur = Math.max(0, g.cur - 1); save(); refreshCard(m);
+        });
+        $('[data-del]', row).addEventListener('click', function () {
+          d.items = d.items.filter(function (x) { return x !== g; }); save(); refreshCard(m);
+        });
+      });
+    }
+  };
+
+  /* -------- 计数器（喝水杯数这类） -------- */
+  renderers.counter = {
+    html: function (m) {
+      var items = m.data.items || [];
+      return '<div class="counter-list">' + (items.length ? items.map(function (c) {
+        var pct = c.goal > 0 ? clamp(Math.round(c.val / c.goal * 100), 0, 100) : 0;
+        return '<div class="counter-row" data-item="' + esc(c.id) + '">' +
+          '<div class="counter-main"><span class="counter-name">' + esc(c.name) + '</span>' +
+          '<span class="counter-val"><b>' + c.val + '</b><i>' + esc(c.unit || '次') + '</i>' +
+          (c.goal > 0 ? '<em>/ ' + c.goal + '</em>' : '') + '</span></div>' +
+          (c.goal > 0 ? '<div class="mini-progress"><i style="width:' + pct + '%"></i></div>' : '') +
+          '<div class="counter-ops"><button class="ghost-btn sm" type="button" data-minus>-</button>' +
+          '<button class="solid-btn sm" type="button" data-plus>+ ' + (c.step || 1) + '</button>' +
+          '<button class="todo-del" type="button" data-del aria-label="删除">' + icon('x') + '</button></div>' +
+          '</div>';
+      }).join('') : '<p class="empty-line">还没有计数器，比如「喝水 8 杯」「抽空练琴 3 次」。</p>') + '</div>' +
+      '<div class="inline-add"><input class="field" data-new placeholder="添加计数项，回车确认">' +
+      '<button class="add-btn" data-add type="button">添加</button></div>';
+    },
+    bind: function (body, card, m) {
+      var d = m.data;
+      var input = $('[data-new]', body);
+      function add() {
+        var v = (input.value || '').trim();
+        if (!v) { input.focus(); return; }
+        d.items.push({ id: uid('c'), name: v, unit: '次', val: 0, step: 1, goal: 0 });
+        save(); refreshCard(m);
+      }
+      $('[data-add]', body).addEventListener('click', add);
+      input.addEventListener('keydown', function (e) { if (e.key === 'Enter') add(); });
+      $$('[data-item]', body).forEach(function (row) {
+        var c = d.items.filter(function (x) { return x.id === row.dataset.item; })[0];
+        if (!c) return;
+        $('[data-plus]', row).addEventListener('click', function () {
+          c.val += c.step || 1; save(); refreshCard(m);
+        });
+        $('[data-minus]', row).addEventListener('click', function () {
+          c.val = Math.max(0, c.val - (c.step || 1)); save(); refreshCard(m);
+        });
+        $('[data-del]', row).addEventListener('click', function () {
+          d.items = d.items.filter(function (x) { return x !== c; }); save(); refreshCard(m);
+        });
+      });
+    }
+  };
+
+  /* -------- 里程碑进度 -------- */
+  renderers.milestone = {
+    html: function (m) {
+      var items = (m.data.items || []).slice().sort(function (a, b) {
+        return (a.date || '9999').localeCompare(b.date || '9999');
+      });
+      var done = items.filter(function (i) { return i.done; }).length;
+      var pct = items.length ? Math.round(done / items.length * 100) : 0;
+      return '<div class="ms-head"><div class="mini-progress"><i style="width:' + pct + '%"></i></div>' +
+        '<span class="ms-count"><b>' + done + '</b>/' + items.length + ' 节点</span></div>' +
+        '<ul class="ms-list">' + (items.length ? items.map(function (i) {
+          var left = i.date ? dayDiff(today(), i.date) : null;
+          var state = i.done ? 'done' : (left != null && left < 0 ? 'late' : '');
+          return '<li class="ms-row ' + state + '" data-item="' + esc(i.id) + '">' +
+            '<button class="check' + (i.done ? ' on' : '') + '" type="button" data-toggle aria-label="完成">' + icon('check') + '</button>' +
+            '<span class="ms-title">' + esc(i.title) + '</span>' +
+            '<input class="date-mini" type="date" data-date value="' + esc(i.date) + '">' +
+            '<span class="ms-date">' +
+            (i.done ? '已完成' : (left == null ? '未排期' : (left >= 0 ? '还有 ' + left + ' 天' : '逾期 ' + (-left) + ' 天'))) + '</span>' +
+            '<button class="todo-del" type="button" data-del aria-label="删除">' + icon('x') + '</button></li>';
+        }).join('') : '<li class="empty-line">把一个大目标拆成几个节点，进度就看得见了。</li>') + '</ul>' +
+        '<div class="inline-add"><input class="field" data-new placeholder="添加里程碑，回车确认">' +
+        '<button class="add-btn" data-add type="button">添加</button></div>';
+    },
+    bind: function (body, card, m) {
+      var d = m.data;
+      var input = $('[data-new]', body);
+      function add() {
+        var v = (input.value || '').trim();
+        if (!v) { input.focus(); return; }
+        d.items.push({ id: uid('ms'), title: v, date: '', done: false });
+        save(); refreshCard(m);
+      }
+      $('[data-add]', body).addEventListener('click', add);
+      input.addEventListener('keydown', function (e) { if (e.key === 'Enter') add(); });
+      $$('[data-item]', body).forEach(function (row) {
+        var i = d.items.filter(function (x) { return x.id === row.dataset.item; })[0];
+        if (!i) return;
+        $('[data-toggle]', row).addEventListener('click', function () {
+          i.done = !i.done; save(); refreshCard(m);
+        });
+        var di = $('[data-date]', row);
+        if (di) di.addEventListener('change', function () {
+          i.date = isDateStr(di.value) ? di.value : ''; save(); refreshCard(m);
+        });
+        $('[data-del]', row).addEventListener('click', function () {
+          d.items = d.items.filter(function (x) { return x !== i; }); save(); refreshCard(m);
+        });
+      });
+    }
+  };
+
+  /* -------- 阅读清单 -------- */
+  var READ_STATUS = { want: '想读', reading: '在读', done: '读完' };
+  renderers.reading = {
+    html: function (m) {
+      var items = m.data.items || [];
+      var reading = items.filter(function (b) { return b.status === 'reading'; }).length;
+      var done = items.filter(function (b) { return b.status === 'done'; }).length;
+      return '<div class="read-head"><span>在读 <b>' + reading + '</b></span><span>读完 <b>' + done + '</b></span>' +
+        '<span>共 <b>' + items.length + '</b> 本</span></div>' +
+        '<ul class="read-list">' + (items.length ? items.map(function (b) {
+          var pct = b.total > 0 ? clamp(Math.round(b.cur / b.total * 100), 0, 100) : 0;
+          return '<li class="read-row" data-item="' + esc(b.id) + '">' +
+            '<button class="read-tag ' + b.status + '" type="button" data-cycle>' + READ_STATUS[b.status] + '</button>' +
+            '<span class="read-title">' + esc(b.title) + (b.author ? '<i>' + esc(b.author) + '</i>' : '') + '</span>' +
+            (b.total > 0 ? '<input class="num-mini" type="number" min="0" data-cur value="' + b.cur + '" aria-label="已读页数">' +
+              '<span class="read-pct">' + pct + '%</span>' : '') +
+            '<button class="todo-del" type="button" data-del aria-label="删除">' + icon('x') + '</button></li>';
+        }).join('') : '<li class="empty-line">想读的书先记下来，读到哪也记一下。</li>') + '</ul>' +
+        '<div class="inline-add"><input class="field" data-new placeholder="添加书名，回车确认">' +
+        '<button class="add-btn" data-add type="button">添加</button></div>';
+    },
+    bind: function (body, card, m) {
+      var d = m.data;
+      var input = $('[data-new]', body);
+      function add() {
+        var v = (input.value || '').trim();
+        if (!v) { input.focus(); return; }
+        d.items.push({ id: uid('bk'), title: v, author: '', status: 'want', cur: 0, total: 0, note: '' });
+        save(); refreshCard(m);
+      }
+      $('[data-add]', body).addEventListener('click', add);
+      input.addEventListener('keydown', function (e) { if (e.key === 'Enter') add(); });
+      $$('[data-item]', body).forEach(function (row) {
+        var b = d.items.filter(function (x) { return x.id === row.dataset.item; })[0];
+        if (!b) return;
+        $('[data-cycle]', row).addEventListener('click', function () {
+          b.status = b.status === 'want' ? 'reading' : (b.status === 'reading' ? 'done' : 'want');
+          save(); refreshCard(m);
+        });
+        var ci = $('[data-cur]', row);
+        if (ci) ci.addEventListener('change', function () {
+          b.cur = b.total > 0 ? clamp(Math.round(Number(ci.value) || 0), 0, b.total) : Math.max(0, Math.round(Number(ci.value) || 0));
+          save(); refreshCard(m);
+        });
+        $('[data-del]', row).addEventListener('click', function () {
+          d.items = d.items.filter(function (x) { return x !== b; }); save(); refreshCard(m);
+        });
+      });
+    }
+  };
+
+  /* -------- 周看板 -------- */
+  renderers.kanban = {
+    html: function (m) {
+      var d = m.data;
+      var cols = d.cols || ['待办', '进行中', '已完成'];
+      var items = d.items || [];
+      return '<div class="kb-board">' + cols.map(function (name, ci) {
+        var list = items.filter(function (i) { return i.col === ci; });
+        return '<div class="kb-col"><div class="kb-colhead"><span>' + esc(name) + '</span><b>' + list.length + '</b></div>' +
+          list.map(function (i) {
+            return '<div class="kb-card" data-item="' + esc(i.id) + '">' +
+              '<span>' + esc(i.text) + '</span>' +
+              '<span class="kb-ops">' +
+              (ci > 0 ? '<button type="button" data-move="-1" aria-label="左移">‹</button>' : '') +
+              (ci < cols.length - 1 ? '<button type="button" data-move="1" aria-label="右移">›</button>' : '') +
+              '<button type="button" data-del aria-label="删除">' + icon('x') + '</button></span></div>';
+          }).join('') + '</div>';
+      }).join('') + '</div>' +
+      '<div class="inline-add"><input class="field" data-new placeholder="加一张卡片到「' + esc(cols[0]) + '」，回车确认">' +
+      '<button class="add-btn" data-add type="button">添加</button></div>';
+    },
+    bind: function (body, card, m) {
+      var d = m.data;
+      var cols = d.cols || [];
+      var input = $('[data-new]', body);
+      function add() {
+        var v = (input.value || '').trim();
+        if (!v) { input.focus(); return; }
+        d.items.push({ id: uid('kb'), text: v, col: 0 });
+        save(); refreshCard(m);
+      }
+      $('[data-add]', body).addEventListener('click', add);
+      input.addEventListener('keydown', function (e) { if (e.key === 'Enter') add(); });
+      $$('[data-item]', body).forEach(function (el) {
+        var it = d.items.filter(function (x) { return x.id === el.dataset.item; })[0];
+        if (!it) return;
+        $$('[data-move]', el).forEach(function (b) {
+          b.addEventListener('click', function () {
+            it.col = clamp(it.col + Number(b.dataset.move), 0, (cols.length || 3) - 1);
+            save(); refreshCard(m);
+          });
+        });
+        $('[data-del]', el).addEventListener('click', function () {
+          d.items = d.items.filter(function (x) { return x !== it; }); save(); refreshCard(m);
+        });
+      });
+    }
+  };
+
+  /* -------- 指标仪表盘 -------- */
+  renderers.dashboard = {
+    html: function (m) {
+      var metrics = m.data.metrics || [];
+      return '<div class="dash-grid">' + (metrics.length ? metrics.map(function (k) {
+        var pct = k.target > 0 ? clamp(Math.round(k.value / k.target * 100), 0, 100) : 0;
+        return '<div class="dash-cell" data-item="' + esc(k.id) + '">' +
+          '<span class="dash-label">' + esc(k.label) + '</span>' +
+          '<span class="dash-value"><b>' + k.value + '</b>' + (k.unit ? '<i>' + esc(k.unit) + '</i>' : '') + '</span>' +
+          (k.target > 0 ? '<span class="dash-target">目标 ' + k.target + ' · ' + pct + '%</span>' +
+            '<div class="mini-progress"><i style="width:' + pct + '%"></i></div>' : '') +
+          '<span class="dash-ops"><button type="button" data-dec>-</button>' +
+          '<button type="button" data-inc>+</button>' +
+          '<button type="button" data-del aria-label="删除">' + icon('x') + '</button></span>' +
+          '</div>';
+      }).join('') : '<p class="empty-line">把最关心的几个数字放上来，一眼能看到趋势。</p>') + '</div>' +
+      '<div class="inline-add"><input class="field" data-new placeholder="添加指标名，回车确认">' +
+      '<button class="add-btn" data-add type="button">添加</button></div>';
+    },
+    bind: function (body, card, m) {
+      var d = m.data;
+      var input = $('[data-new]', body);
+      function add() {
+        var v = (input.value || '').trim();
+        if (!v) { input.focus(); return; }
+        d.metrics.push({ id: uid('kpi'), label: v, value: 0, unit: '', target: 0 });
+        save(); refreshCard(m);
+      }
+      $('[data-add]', body).addEventListener('click', add);
+      input.addEventListener('keydown', function (e) { if (e.key === 'Enter') add(); });
+      $$('[data-item]', body).forEach(function (el) {
+        var k = d.metrics.filter(function (x) { return x.id === el.dataset.item; })[0];
+        if (!k) return;
+        $('[data-inc]', el).addEventListener('click', function () { k.value += 1; save(); refreshCard(m); });
+        $('[data-dec]', el).addEventListener('click', function () { k.value -= 1; save(); refreshCard(m); });
+        $('[data-del]', el).addEventListener('click', function () {
+          d.metrics = d.metrics.filter(function (x) { return x !== k; }); save(); refreshCard(m);
+        });
+      });
+    }
+  };
+
+  /* -------- 每日一句话 -------- */
+  renderers.diary = {
+    html: function (m) {
+      var entries = m.data.entries || {};
+      var keys = Object.keys(entries).sort().reverse();
+      var t = today();
+      var todayText = entries[t] || '';
+      return '<div class="diary-today"><span class="diary-date">' + esc(cnShort(parseISO(t))) + '</span>' +
+        '<textarea class="field diary-input" data-today rows="2" maxlength="120" placeholder="今天用一句话概括……">' + esc(todayText) + '</textarea>' +
+        '</div>' +
+        '<ul class="diary-list">' + (keys.length ? keys.slice(0, 8).map(function (k) {
+          var d = parseISO(k);
+          return '<li class="diary-row"><span class="diary-md">' + (d ? (d.getMonth() + 1) + '/' + d.getDate() : k) + '</span>' +
+            '<span class="diary-text">' + esc(entries[k]) + '</span>' +
+            '<button class="todo-del" type="button" data-del="' + esc(k) + '" aria-label="删除">' + icon('x') + '</button></li>';
+        }).join('') : '<li class="empty-line">还没写过一句话，从今天开始。</li>') + '</ul>' +
+        (keys.length ? '<p class="diary-foot">已连续记录 ' + streakOf(Object.keys(entries)) + ' 天</p>' : '');
+    },
+    bind: function (body, card, m) {
+      var d = m.data;
+      d.entries = objMap(d.entries);
+      var ta = $('[data-today]', body);
+      function commit() {
+        var v = (ta.value || '').trim();
+        var t = today();
+        if (v) d.entries[t] = v.slice(0, 120); else delete d.entries[t];
+        save();
+      }
+      ta.addEventListener('blur', commit);
+      ta.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commit(); refreshCard(m); }
+      });
+      $$('[data-del]', body).forEach(function (b) {
+        b.addEventListener('click', function () {
+          delete d.entries[b.dataset.del]; save(); refreshCard(m);
+        });
+      });
+    }
+  };
+
+  /* 连续记录天数（由日期键数组算） */
+  function streakOf(dates) {
+    var set = {};
+    (dates || []).forEach(function (k) { if (isDateStr(k)) set[k] = true; });
+    var n = 0, cur = today();
+    if (!set[cur]) cur = shiftISO(cur, -1);
+    while (set[cur]) { n += 1; cur = shiftISO(cur, -1); }
+    return n;
+  }
+
+  /* -------- 阅读摘录 -------- */
+  renderers.excerpt = {
+    html: function (m) {
+      var items = (m.data.items || []).slice().reverse().slice(0, 6);
+      return '<div class="ex-list">' + (items.length ? items.map(function (q) {
+        return '<figure class="ex-item" data-item="' + esc(q.id) + '">' +
+          '<blockquote>' + esc(q.text) + '</blockquote>' +
+          '<figcaption>' + (q.source ? '— ' + esc(q.source) : '') + (q.page ? ' · ' + esc(q.page) : '') +
+          '<button class="todo-del" type="button" data-del aria-label="删除">' + icon('x') + '</button></figcaption></figure>';
+      }).join('') : '<p class="empty-line">读到好句子就存进来，配一句出处。</p>') + '</div>' +
+      '<div class="inline-add"><input class="field" data-new placeholder="粘贴一句摘录，回车保存">' +
+      '<button class="add-btn" data-add type="button">添加</button></div>';
+    },
+    bind: function (body, card, m) {
+      var d = m.data;
+      var input = $('[data-new]', body);
+      function add() {
+        var v = (input.value || '').trim();
+        if (!v) { input.focus(); return; }
+        d.items.push({ id: uid('ex'), text: v, source: '', page: '', at: today() });
+        save(); refreshCard(m);
+      }
+      $('[data-add]', body).addEventListener('click', add);
+      input.addEventListener('keydown', function (e) { if (e.key === 'Enter') add(); });
+      $$('[data-item]', body).forEach(function (el) {
+        var q = d.items.filter(function (x) { return x.id === el.dataset.item; })[0];
+        if (!q) return;
+        $('[data-del]', el).addEventListener('click', function () {
+          d.items = d.items.filter(function (x) { return x !== q; }); save(); refreshCard(m);
+        });
+      });
+    }
+  };
+
+  /* -------- 四象限待办 -------- */
+  var QUAD_META = [
+    { key: 'q1', name: '重要且紧急', hint: '马上做' },
+    { key: 'q2', name: '重要不紧急', hint: '排进计划' },
+    { key: 'q3', name: '紧急不重要', hint: '尽量委托' },
+    { key: 'q4', name: '不重要不紧急', hint: '可以放下' }
+  ];
+  function quadKeyOf(i) {
+    if (i.important && i.urgent) return 'q1';
+    if (i.important) return 'q2';
+    if (i.urgent) return 'q3';
+    return 'q4';
+  }
+  renderers.quadrant = {
+    html: function (m) {
+      var items = m.data.items || [];
+      return '<div class="quad-grid">' + QUAD_META.map(function (q) {
+        var list = items.filter(function (i) { return quadKeyOf(i) === q.key; });
+        return '<div class="quad-cell"><div class="quad-head"><span>' + q.name + '</span><i>' + q.hint + '</i></div>' +
+          list.map(function (i) {
+            return '<div class="quad-item' + (i.done ? ' done' : '') + '" data-item="' + esc(i.id) + '">' +
+              '<button class="check' + (i.done ? ' on' : '') + '" type="button" data-toggle aria-label="完成">' + icon('check') + '</button>' +
+              '<span>' + esc(i.text) + '</span>' +
+              '<button class="todo-del" type="button" data-del aria-label="删除">' + icon('x') + '</button></div>';
+          }).join('') + '</div>';
+      }).join('') + '</div>' +
+      '<div class="inline-add"><input class="field" data-new placeholder="添加任务到第一象限，回车确认">' +
+      '<button class="add-btn" data-add type="button">添加</button></div>';
+    },
+    bind: function (body, card, m) {
+      var d = m.data;
+      var input = $('[data-new]', body);
+      function add() {
+        var v = (input.value || '').trim();
+        if (!v) { input.focus(); return; }
+        d.items.push({ id: uid('q'), text: v, urgent: true, important: true, done: false });
+        save(); refreshCard(m);
+      }
+      $('[data-add]', body).addEventListener('click', add);
+      input.addEventListener('keydown', function (e) { if (e.key === 'Enter') add(); });
+      $$('[data-item]', body).forEach(function (el) {
+        var it = d.items.filter(function (x) { return x.id === el.dataset.item; })[0];
+        if (!it) return;
+        $('[data-toggle]', el).addEventListener('click', function () {
+          it.done = !it.done; save(); refreshCard(m);
+        });
+        $('[data-del]', el).addEventListener('click', function () {
+          d.items = d.items.filter(function (x) { return x !== it; }); save(); refreshCard(m);
+        });
+      });
+    }
+  };
+
+  /* -------- 倒计时 / 纪念日 -------- */
+  renderers.countdown = {
+    html: function (m) {
+      var items = m.data.items || [];
+      return '<div class="cd-list">' + (items.length ? items.map(function (c) {
+        var left = c.date ? dayDiff(today(), c.date) : null;
+        var label = left == null ? '未设日期' : (left === 0 ? '就是今天' : (left > 0 ? '还有 ' + left + ' 天' : '已过 ' + (-left) + ' 天'));
+        return '<div class="cd-item" data-item="' + esc(c.id) + '">' +
+          '<span class="cd-days">' + (left == null ? '—' : Math.abs(left)) + '</span>' +
+          '<input class="date-mini" type="date" data-date value="' + esc(c.date) + '">' +
+          '<span class="cd-body"><b>' + esc(c.title) + '</b>' +
+          '<i>' + label + '</i></span>' +
+          '<button class="todo-del" type="button" data-del aria-label="删除">' + icon('x') + '</button></div>';
+      }).join('') : '<p class="empty-line">纪念日、截止日放进来，心里有个数。</p>') + '</div>' +
+      '<div class="inline-add"><input class="field" data-new placeholder="添加纪念日，回车确认">' +
+      '<button class="add-btn" data-add type="button">添加</button></div>';
+    },
+    bind: function (body, card, m) {
+      var d = m.data;
+      var input = $('[data-new]', body);
+      function add() {
+        var v = (input.value || '').trim();
+        if (!v) { input.focus(); return; }
+        d.items.push({ id: uid('cd'), title: v, date: '', repeat: '' });
+        save(); refreshCard(m);
+      }
+      $('[data-add]', body).addEventListener('click', add);
+      input.addEventListener('keydown', function (e) { if (e.key === 'Enter') add(); });
+      $$('[data-item]', body).forEach(function (el) {
+        var c = d.items.filter(function (x) { return x.id === el.dataset.item; })[0];
+        if (!c) return;
+        var di = $('[data-date]', el);
+        if (di) di.addEventListener('change', function () {
+          c.date = isDateStr(di.value) ? di.value : ''; save(); refreshCard(m);
+        });
+        $('[data-del]', el).addEventListener('click', function () {
+          d.items = d.items.filter(function (x) { return x !== c; }); save(); refreshCard(m);
+        });
+      });
+    }
+  };
+
   /* -------- 添加模块 -------- */
+  /* ========= 图标 / 配色 / 推荐组合 选择器（添加模块与改样式共用） ========= */
+
+  function pickerHTML(sel) {
+    var iconGroups = ICON_GROUPS.map(function (g) {
+      return '<div class="icon-group" data-group>' +
+        '<div class="ig-title">' + esc(g.name) + '</div>' +
+        '<div class="icon-grid">' + g.icons.map(function (n) {
+          return '<button class="icon-opt' + (n === sel.icon ? ' active' : '') + '" type="button" data-icon="' + n +
+            '" title="' + esc(ICON_ALIAS[n] || n) + '" aria-label="' + esc(ICON_ALIAS[n] || n) + '">' + icon(n) + '</button>';
+        }).join('') + '</div></div>';
+    }).join('');
+
+    var presets = COLOR_PRESETS.map(function (p, i) {
+      return '<button class="preset' + (sel.icon === p.icon && sel.color === p.color ? ' active' : '') +
+        '" type="button" data-preset="' + i + '" title="' + esc(p.desc) + '">' +
+        '<span class="pre-ic" style="border-color:' + p.color + '">' + icon(p.icon) + '</span>' +
+        '<span class="pre-tx"><b>' + esc(p.name) + '</b><small>' + esc(p.desc) + '</small></span></button>';
+    }).join('');
+
+    var colorGroups = PALETTE_GROUPS.map(function (g) {
+      return '<div class="color-group"><span class="cg-title">' + esc(g.name) + '</span>' +
+        '<span class="cg-swatches">' + g.colors.map(function (c) {
+          return '<button class="swatch' + (c === sel.color ? ' active' : '') + '" type="button" data-color="' + c +
+            '" style="background:' + c + '" aria-label="配色 ' + c + '"></button>';
+        }).join('') + '</span></div>';
+    }).join('');
+
+    /* 顺序：推荐组合置顶（直接可见可点）→ 图标（分组 + 搜索）→ 配色（分组） */
+    return '<div class="sheet-label">推荐组合<small>一键套用类型 + 图标 + 配色</small></div>' +
+      '<div class="presets">' + presets + '</div>' +
+      '<div class="pick-tools"><span class="sheet-label">图标</span>' +
+      '<input class="field pick-search" data-icon-search placeholder="搜索图标：书 / 钱 / 跑步 / book" aria-label="搜索图标"></div>' +
+      '<div class="icon-groups" data-icon-groups>' + iconGroups +
+      '<p class="pick-none" data-icon-none hidden>没有匹配的图标，换个词试试。</p></div>' +
+      '<div class="sheet-label">配色<small>24 色 · 按色系分组</small></div>' +
+      '<div class="color-groups">' + colorGroups + '</div>';
+  }
+
+  /* 绑定选择器：sel 对象就地更新，onPreset 可选（用于同时改名称） */
+  function bindPicker(sheet, sel, onPreset) {
+    function markIcon() {
+      $$('[data-icon]', sheet).forEach(function (b) { b.classList.toggle('active', b.dataset.icon === sel.icon); });
+    }
+    function markColor() {
+      $$('.swatch', sheet).forEach(function (b) { b.classList.toggle('active', b.dataset.color === sel.color); });
+    }
+    function markPreset() {
+      $$('[data-preset]', sheet).forEach(function (b) {
+        var p = COLOR_PRESETS[Number(b.dataset.preset)];
+        b.classList.toggle('active', !!p && p.icon === sel.icon && p.color === sel.color);
+      });
+    }
+
+    $$('[data-icon]', sheet).forEach(function (b) {
+      b.addEventListener('click', function () { sel.icon = b.dataset.icon; markIcon(); markPreset(); });
+    });
+    $$('.swatch', sheet).forEach(function (b) {
+      b.addEventListener('click', function () { sel.color = b.dataset.color; markColor(); markPreset(); });
+    });
+    $$('[data-preset]', sheet).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var p = COLOR_PRESETS[Number(b.dataset.preset)];
+        if (!p) return;
+        sel.icon = p.icon;
+        sel.color = p.color;
+        markIcon(); markColor(); markPreset();
+        if (onPreset) onPreset(p);
+      });
+    });
+
+    /* 图标搜索：英文 key + 中文别名都能命中，空分组自动隐藏 */
+    var search = $('[data-icon-search]', sheet);
+    var none = $('[data-icon-none]', sheet);
+    if (search) {
+      search.addEventListener('input', function () {
+        var q = (search.value || '').trim().toLowerCase();
+        var any = false;
+        $$('.icon-group', sheet).forEach(function (g) {
+          var hit = 0;
+          $$('.icon-opt', g).forEach(function (b) {
+            var key = (b.dataset.icon || '').toLowerCase();
+            var alias = (ICON_ALIAS[b.dataset.icon] || '').toLowerCase();
+            var on = !q || key.indexOf(q) >= 0 || alias.indexOf(q) >= 0;
+            b.classList.toggle('hide', !on);
+            if (on) hit += 1;
+          });
+          g.hidden = hit === 0 && !!q;
+          if (hit) any = true;
+        });
+        if (none) none.hidden = !!any || !q;
+      });
+    }
+  }
+
+  /* -------- 添加模块（17 种类型 + 分组图标 + 24 色 + 推荐组合） -------- */
   function dialogAddModule() {
-    var sel = { type: 'todo', icon: 'check', color: PALETTE[0] };
+    var first = MODULE_TYPES[0];
+    var sel = { type: first.type, icon: first.icon, color: first.color };
 
     openDialog(
       '<h3>添加模块</h3>' +
-      '<p class="sub">模块是画布的最小单元：可以先加一个类型试试，名字、图标、配色之后都能改。</p>' +
-      '<div class="sheet-label">类型</div>' +
-      '<div class="type-grid">' + MODULE_TYPES.map(function (t) {
+      '<p class="sub">模块是画布的最小单元：选一个类型，名字、图标、配色都能马上改。</p>' +
+      '<div class="sheet-label">类型<small>' + MODULE_TYPES.length + ' 种 · 都能直接记东西</small></div>' +
+      '<div class="type-grid type-grid-tall">' + MODULE_TYPES.map(function (t) {
         return '<button class="type-opt' + (t.type === sel.type ? ' active' : '') + '" type="button" data-type="' + t.type + '">' +
           '<span class="to-icon">' + icon(t.icon) + '</span>' +
           '<span><b>' + t.name + '</b><small>' + t.desc + '</small></span></button>';
       }).join('') + '</div>' +
       '<div class="sheet-label">名称</div>' +
-      '<input class="field" data-title style="width:100%" maxlength="40" value="待办清单" placeholder="例如：每周复盘">' +
-      '<div class="sheet-label">图标</div>' +
-      '<div class="icon-grid">' + ICON_CHOICES.map(function (n) {
-        return '<button class="icon-opt' + (n === sel.icon ? ' active' : '') + '" type="button" data-icon="' + n + '">' + icon(n) + '</button>';
-      }).join('') + '</div>' +
-      '<div class="sheet-label">配色</div>' +
-      '<div class="swatches">' + PALETTE.map(function (c, i) {
-        return '<button class="swatch' + (i === 0 ? ' active' : '') + '" type="button" data-color="' + c + '" style="background:' + c + '"></button>';
-      }).join('') + '</div>' +
+      '<input class="field" style="width:100%" data-title maxlength="40" value="' + esc(first.title) + '" placeholder="例如：每周复盘">' +
+      pickerHTML(sel) +
       '<div class="sheet-actions"><button class="ghost-btn" data-close>取消</button>' +
       '<button class="solid-btn" data-ok>添加到当前页</button></div>',
       function (sheet, close) {
         var titleInput = $('[data-title]', sheet);
-        var iconGrid = $('.icon-grid', sheet);
-        var swatches = $('.swatches', sheet);
-
-        function setType(tp) {
-          sel.type = tp;
-          $$('.type-opt', sheet).forEach(function (b) { b.classList.toggle('active', b.dataset.type === tp); });
-          var meta = MODULE_TYPES.filter(function (t) { return t.type === tp; })[0];
-          titleInput.value = meta.name;
-          sel.icon = meta.icon;
-          $$('.icon-opt', iconGrid).forEach(function (b) { b.classList.toggle('active', b.dataset.icon === sel.icon); });
-        }
 
         $$('.type-opt', sheet).forEach(function (b) {
-          b.addEventListener('click', function () { setType(b.dataset.type); });
-        });
-        $$('.icon-opt', sheet).forEach(function (b) {
           b.addEventListener('click', function () {
-            sel.icon = b.dataset.icon;
-            $$('.icon-opt', sheet).forEach(function (x) { x.classList.toggle('active', x === b); });
+            var tp = b.dataset.type;
+            var meta = MODULE_TYPES.filter(function (t) { return t.type === tp; })[0];
+            if (!meta) return;
+            sel.type = tp;
+            /* 类型切换：默认名称与默认图标跟着走，配色保持用户选择 */
+            sel.icon = meta.icon;
+            titleInput.value = meta.title || meta.name;
+            $$('.type-opt', sheet).forEach(function (x) { x.classList.toggle('active', x === b); });
+            $$('[data-icon]', sheet).forEach(function (x) { x.classList.toggle('active', x.dataset.icon === sel.icon); });
+            $$('[data-preset]', sheet).forEach(function (x) {
+              var p = COLOR_PRESETS[Number(x.dataset.preset)];
+              x.classList.toggle('active', !!p && p.icon === sel.icon && p.color === sel.color);
+            });
           });
         });
-        $$('.swatch', sheet).forEach(function (b) {
-          b.addEventListener('click', function () {
-            sel.color = b.dataset.color;
-            $$('.swatch', sheet).forEach(function (x) { x.classList.toggle('active', x === b); });
-          });
+
+        bindPicker(sheet, sel, function (p) {
+          titleInput.value = p.name;
+          if (p.type) {
+            sel.type = p.type;
+            $$('.type-opt', sheet).forEach(function (x) { x.classList.toggle('active', x.dataset.type === p.type); });
+          }
         });
 
         $('[data-ok]', sheet).addEventListener('click', function () {
+          var meta = MODULE_TYPES.filter(function (t) { return t.type === sel.type; })[0] || first;
           var m = {
             id: uid('m'),
             type: sel.type,
-            title: (titleInput.value || '').trim() || '未命名模块',
+            title: (titleInput.value || '').trim() || meta.title || meta.name,
             icon: sel.icon,
             color: sel.color,
-            w: sel.type === 'habit' ? 'full' : 'half',
+            w: meta.w || (sel.type === 'habit' || sel.type === 'kanban' || sel.type === 'timeline' ? 'full' : 'half'),
             data: blankData(sel.type)
           };
           currentPage().modules.push(m);
@@ -2959,57 +4105,24 @@
     );
   }
 
-  /* -------- 重命名 -------- */
-  function dialogRename(m) {
-    openDialog(
-      '<h3>重命名模块</h3><p class="sub">只改标题，不影响内容。</p>' +
-      '<input class="field" style="width:100%" maxlength="40" value="' + esc(m.title) + '">' +
-      '<div class="sheet-actions"><button class="ghost-btn" data-close>取消</button><button class="solid-btn" data-ok>保存</button></div>',
-      function (sheet, close) {
-        var inp = $('input', sheet);
-        $('[data-ok]', sheet).addEventListener('click', function () {
-          m.title = (inp.value || '').trim() || m.title;
-          save(); close(); refreshCard(m);
-        });
-      }
-    );
-  }
-
-  /* -------- 图标与配色 -------- */
+  /* -------- 图标与配色（同一套选择器） -------- */
   function dialogStyle(m) {
-    var color = m.color;
+    var sel = { icon: m.icon, color: m.color };
     openDialog(
-      '<h3>图标与配色</h3><p class="sub">模块的图标和颜色会用在标题、进度条和打卡格上。</p>' +
-      '<div class="sheet-label">图标</div>' +
-      '<div class="icon-grid">' + ICON_CHOICES.map(function (n) {
-        return '<button class="icon-opt' + (n === m.icon ? ' active' : '') + '" type="button" data-icon="' + n + '">' + icon(n) + '</button>';
-      }).join('') + '</div>' +
-      '<div class="sheet-label">配色</div>' +
-      '<div class="swatches">' + PALETTE.map(function (c) {
-        return '<button class="swatch' + (c === m.color ? ' active' : '') + '" type="button" data-color="' + c + '" style="background:' + c + '"></button>';
-      }).join('') + '</div>' +
-      '<div class="sheet-actions"><button class="ghost-btn" data-close>取消</button><button class="solid-btn" data-ok>保存</button></div>',
+      '<h3>图标与配色</h3><p class="sub">图标和颜色会用在标题、进度条和打卡格上；推荐组合可以先一键套用。</p>' +
+      pickerHTML(sel) +
+      '<div class="sheet-actions"><button class="ghost-btn" data-close>取消</button>' +
+      '<button class="solid-btn" data-ok>保存</button></div>',
       function (sheet, close) {
-        $$('[data-icon]', sheet).forEach(function (b) {
-          b.addEventListener('click', function () {
-            m.icon = b.dataset.icon;
-            $$('[data-icon]', sheet).forEach(function (x) { x.classList.toggle('active', x === b); });
-          });
-        });
-        $$('.swatch', sheet).forEach(function (b) {
-          b.addEventListener('click', function () {
-            color = b.dataset.color;
-            $$('.swatch', sheet).forEach(function (x) { x.classList.toggle('active', x === b); });
-          });
-        });
+        bindPicker(sheet, sel);
         $('[data-ok]', sheet).addEventListener('click', function () {
-          m.color = color;
+          m.icon = sel.icon;
+          m.color = sel.color;
           save(); close(); refreshCard(m);
         });
       }
     );
   }
-
   /* -------- 页签设置（仅系统页：可改名，不可删除） -------- */
   function dialogPages() {
     var list = state.pages.filter(function (p) { return p.builtin; });
@@ -3393,7 +4506,10 @@
     var query = (q || '').trim().toLowerCase();
     var all = searchEntries();
     if (!query) {
-      cmdkResults = all.filter(function (e) { return e.kind !== 'item'; }).slice(0, 12);
+      /* 空查询：先按 PAGE_ORDER 列出全部系统页签（顺序与侧栏一致），再补最近可跳转的模块 */
+      var pageRows = all.filter(function (e) { return e.kind === 'page'; });
+      var modRows = all.filter(function (e) { return e.kind === 'module'; }).slice(0, Math.max(4, 12 - pageRows.length));
+      cmdkResults = pageRows.concat(modRows);
     } else {
       cmdkResults = all.map(function (e) { return { e: e, s: scoreEntry(e, query) }; })
         .filter(function (x) { return x.s > 0; })
@@ -4482,13 +5598,19 @@
   function cloudSnapClear() { safeDel(cloudSnapKey()); }
 
   /* ---------- 指纹：稳定序列化 + 哈希，用于判断两端是否改动 ---------- */
-  function cloudStable(v) {
+  /* 稳定序列化：键排序 + 递归展开，用于两端内容比对。
+     带环引用保护（seen 集合）与深度上限，任何异常的循环结构都不会把页面打崩。 */
+  function cloudStable(v, _seen) {
+    var seen = _seen || [];
     if (v === null || typeof v !== 'object') return JSON.stringify(v === undefined ? null : v);
+    if (seen.indexOf(v) >= 0) return '"@cycle"';
+    if (seen.length > 40) return '"@deep"';
+    seen = seen.concat([v]);
     if (Array.isArray(v)) {
-      return '[' + v.map(cloudStable).join(',') + ']';
+      return '[' + v.map(function (x) { return cloudStable(x, seen); }).join(',') + ']';
     }
     return '{' + Object.keys(v).sort().map(function (k) {
-      return JSON.stringify(k) + ':' + cloudStable(v[k]);
+      return JSON.stringify(k) + ':' + cloudStable(v[k], seen);
     }).join(',') + '}';
   }
   function cloudFp(obj) {
