@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#fbfbfd" id="theme-color" />
 <meta name="description" content="Life OS · 人生管理系统：把生活拆成可执行的模块，记录、推进、复盘。数据只保存在本机浏览器。" />
 <title>Life OS · 人生管理系统</title>
-<link rel="stylesheet" href="style.css?v=20261122f" />
+<link rel="stylesheet" href="style.css?v=20261122h" />
 <script>
 /* 强制 HTTPS：仅在 http 且非本地地址时跳转，file:// 与 localhost 预览不受影响 */
 (function () {
@@ -152,6 +152,10 @@
         </div>
 
         <div class="topbar-actions" id="topbar-actions">
+          <button class="ghost-btn guide-btn" id="btn-guide-sample" type="button" data-act="sample" hidden
+                  title="载入一套示例内容：年度目标、月度规划、每日日程、打卡与复盘都齐了，载入后可以随时改或清空">载入示例</button>
+          <button class="ghost-btn guide-btn" id="btn-guide-blank" type="button" data-act="add" hidden
+                  title="从空白开始：不加载示例数据，自己一个个添加模块搭起来">空白搭建</button>
           <button class="ghost-btn" id="btn-page-menu" type="button">页签设置</button>
           <button class="solid-btn" id="btn-add-module" type="button">添加模块</button>
         </div>
@@ -186,6 +190,6 @@
   <input type="file" id="file-import" accept="application/json,.json" hidden />
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-  <script src="app.js?v=20261122f"></script>
+  <script src="app.js?v=20261122h"></script>
 </body>
 </html>
