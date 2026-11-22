@@ -378,6 +378,8 @@
     s.pages.forEach(function (pg) { normalizeOkrPage(pg); });
     /* 旧数据兼容：为每日日程里的每条任务补稳定唯一 id 与所属日期，供月度计划引用 */
     s.pages.forEach(function (pg) { migrateDailyTasks(pg, s); });
+    /* V5：今日三件事 / 心情精力 / 人生轮盘 / 周复盘 / OKR 归档 / 习惯周目标 */
+    normalizeCoach(s);
     s.pages = orderBuiltinPages(s.pages);
     /* 侧栏已不再展示自定义页：当前页若指向隐藏页，回退到系统页首页 */
     var visible = s.pages.filter(function (p) { return p.builtin; });
@@ -830,11 +832,21 @@
       (intro.actions || '');
     canvas.appendChild(hero);
 
+    /* 今日聚焦：概览页顶部，三件事 + 容量 + 逾期 */
+    if (page.builtin === 'overview') canvas.appendChild(focusBlock());
     if (page.builtin === 'overview') canvas.appendChild(kpisBlock());
     if (page.builtin === 'daily') canvas.appendChild(dailyBarBlock());
     if (page.builtin === 'monthly') canvas.appendChild(agendaBlock());
     if (page.builtin === 'life8') canvas.appendChild(boardBlock());
+    /* 人生轮盘：八大领域雷达图 + 季度快照对比 */
+    if (page.builtin === 'life8') canvas.appendChild(wheelBlock());
     if (page.builtin === 'review') canvas.appendChild(loopBlock());
+    /* 周复盘：自动汇总 + 四栏手填 + 历史 */
+    if (page.builtin === 'review') canvas.appendChild(weeklyBlock());
+    /* OKR 等权汇总 + 季度归档 */
+    if (page.builtin === 'yearly') canvas.appendChild(okrBlock());
+    /* 心情与精力：每日打分 + 近 30 天双曲线 */
+    if (page.builtin === 'overview') canvas.appendChild(moodBlock());
 
     // 模块区（整块可折叠）
     var modsWrap = document.createElement('section');
@@ -1528,6 +1540,8 @@
         bar.dataset.w = d.score * 10;
         bar.style.width = (d.score * 10) + '%';
         save();
+        /* 让同页的人生轮盘雷达图跟随分数即时重绘 */
+        try { document.dispatchEvent(new CustomEvent('life8:change')); } catch (e) { }
       });
       note.addEventListener('input', debounce(function () {
         d.note = note.value;
@@ -3108,6 +3122,7 @@
         $('[data-ok]', sheet).addEventListener('click', function () {
           state = buildSample();
           (state.pages || []).forEach(function (pg) { migrateDailyTasks(pg, state); });
+          normalizeCoach(state);
           save();
           close();
           renderNav();
@@ -5465,6 +5480,7 @@
           else {
             state = buildSample();
             (state.pages || []).forEach(function (pg) { migrateDailyTasks(pg, state); });
+            normalizeCoach(state);
             save(); renderNav(); renderPage(); toast('示例数据已载入');
           }
         }
@@ -6056,6 +6072,1220 @@
       }
     );
   }
+
+
+  /* =========================================================
+     V5 · 六项体验补强
+     今日聚焦 / 习惯升级 / 人生轮盘 / 周复盘 / 心情与精力 / OKR 汇总
+     所有新数据都挂在 state 上，随 Supabase 静默同步与导入导出一起走
+     ========================================================= */
+  function isPlainObj(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
+
+  function normalizeCoach(s) {
+    s.settings = s.settings || {};
+    s.settings.capacityH = clamp(Number(s.settings.capacityH) || 8, 1, 16);
+    if (!isDateStr(s.settings.reviewWeek)) s.settings.reviewWeek = weekStartISO(today());
+
+    /* 今日三件事：{ 'YYYY-MM-DD': [{id,text,done}] } */
+    s.mits = isPlainObj(s.mits) ? s.mits : {};
+    Object.keys(s.mits).forEach(function (k) {
+      if (!isDateStr(k) || !Array.isArray(s.mits[k])) { delete s.mits[k]; return; }
+      s.mits[k] = s.mits[k].filter(Boolean).slice(0, 3).map(function (x) {
+        return {
+          id: x.id || uid('mit'),
+          text: typeof x.text === 'string' ? x.text : '',
+          done: !!x.done
+        };
+      });
+    });
+
+    /* 心情与精力：{ 'YYYY-MM-DD': { mood:1-5, energy:1-5, note } } */
+    s.mood = isPlainObj(s.mood) ? s.mood : {};
+    Object.keys(s.mood).forEach(function (k) {
+      var r = s.mood[k];
+      if (!isDateStr(k) || !isPlainObj(r)) { delete s.mood[k]; return; }
+      r.mood = clamp(Number(r.mood) || 0, 0, 5);
+      r.energy = clamp(Number(r.energy) || 0, 0, 5);
+      r.note = typeof r.note === 'string' ? r.note : '';
+    });
+
+    /* 人生轮盘：{ history: [{id, at, quarter, scores:{life8.id:0-10}}] } */
+    if (!isPlainObj(s.wheel)) s.wheel = {};
+    s.wheel.history = Array.isArray(s.wheel.history) ? s.wheel.history.filter(Boolean).map(function (x) {
+      var sc = isPlainObj(x.scores) ? x.scores : {};
+      var out = {};
+      LIFE8.forEach(function (d) { out[d.id] = clamp(Number(sc[d.id]) || 0, 0, 10); });
+      return {
+        id: x.id || uid('wh'),
+        at: isDateStr(x.at) ? x.at : today(),
+        quarter: typeof x.quarter === 'string' ? x.quarter : quarterKey(x.at || today()),
+        scores: out
+      };
+    }) : [];
+
+    /* 周复盘：{ '2026-W47': { fields:{...}, savedAt, okrPct } } */
+    s.weekly = isPlainObj(s.weekly) ? s.weekly : {};
+    Object.keys(s.weekly).forEach(function (k) {
+      var r = s.weekly[k];
+      if (!isPlainObj(r)) { delete s.weekly[k]; return; }
+      var f = isPlainObj(r.fields) ? r.fields : {};
+      r.fields = {
+        highlight: typeof f.highlight === 'string' ? f.highlight : '',
+        blocker: typeof f.blocker === 'string' ? f.blocker : '',
+        learn: typeof f.learn === 'string' ? f.learn : '',
+        next: typeof f.next === 'string' ? f.next : ''
+      };
+      r.savedAt = isDateStr(r.savedAt) ? r.savedAt : '';
+      r.okrPct = clamp(Number(r.okrPct) || 0, 0, 100);
+    });
+
+    /* OKR 季度归档快照 */
+    s.okrArchive = Array.isArray(s.okrArchive) ? s.okrArchive.filter(Boolean).map(function (x) {
+      return {
+        id: x.id || uid('oa'),
+        at: isDateStr(x.at) ? x.at : today(),
+        quarter: typeof x.quarter === 'string' ? x.quarter : quarterKey(x.at || today()),
+        pct: clamp(Number(x.pct) || 0, 0, 100),
+        objs: Array.isArray(x.objs) ? x.objs.map(function (o) {
+          return { title: typeof o.title === 'string' ? o.title : '目标', pct: clamp(Number(o.pct) || 0, 0, 100) };
+        }) : []
+      };
+    }) : [];
+
+    /* 连续 7 / 30 天里程碑只提示一次：{ habitId: { d7:'YYYY-MM-DD', d30:'YYYY-MM-DD' } } */
+    s.habitNotice = isPlainObj(s.habitNotice) ? s.habitNotice : {};
+
+    /* 习惯结构升级：补 goal（每周目标频次）与 checks 兜底，旧记录原样保留 */
+    s.pages.forEach(function (pg) {
+      (pg.modules || []).forEach(function (m) {
+        if (!m || m.type !== 'habit') return;
+        m.data = isPlainObj(m.data) ? m.data : {};
+        if (!isMonthStr(m.data.month)) m.data.month = monthKey(new Date());
+        m.data.habits = (Array.isArray(m.data.habits) ? m.data.habits : []).filter(Boolean).map(function (h) {
+          h.id = h.id || uid('h');
+          h.name = typeof h.name === 'string' ? h.name : '习惯';
+          h.checks = isPlainObj(h.checks) ? h.checks : {};
+          Object.keys(h.checks).forEach(function (k) {
+            if (!isDateStr(k)) delete h.checks[k]; else h.checks[k] = true;
+          });
+          h.goal = isPlainObj(h.goal) ? h.goal : {};
+          h.goal.per = 'week';
+          h.goal.times = clamp(Number(h.goal.times) || 3, 1, 7);
+          return h;
+        });
+      });
+    });
+  }
+
+  /* ---------- 日期工具 ---------- */
+  function weekStartISO(s) {
+    var d = parseISO(isDateStr(s) ? s : today());
+    var back = (d.getDay() + 6) % 7;            /* 周一 = 0 */
+    return shiftISO(iso(d), -back);
+  }
+
+  function isoWeekKey(s) {
+    var d = parseISO(isDateStr(s) ? s : today());
+    var t = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    t.setDate(t.getDate() + 4 - (t.getDay() || 7));
+    var jan1 = new Date(t.getFullYear(), 0, 1);
+    var week = Math.ceil(((t - jan1) / 86400000 + 1) / 7);
+    return t.getFullYear() + '-W' + (week < 10 ? '0' + week : String(week));
+  }
+
+  function quarterKey(s) {
+    var d = parseISO(isDateStr(s) ? s : today());
+    return d.getFullYear() + '-Q' + (Math.floor(d.getMonth() / 3) + 1);
+  }
+
+  /* =========================================================
+     一、今日聚焦
+     ========================================================= */
+  function mitsOf(key) {
+    if (!isPlainObj(state.mits)) state.mits = {};
+    if (!Array.isArray(state.mits[key])) state.mits[key] = [];
+    return state.mits[key];
+  }
+
+  function overdueList() {
+    var t = today(), out = [];
+    allModules().forEach(function (m) {
+      if (!m || (m.type !== 'todo' && m.type !== 'timeline')) return;
+      ((m.data && m.data.items) || []).forEach(function (it) {
+        if (!it || it.done || !isDateStr(it.date) || it.date >= t) return;
+        out.push({ module: m, item: it });
+      });
+    });
+    out.sort(function (a, b) { return a.item.date < b.item.date ? -1 : (a.item.date > b.item.date ? 1 : 0); });
+    return out;
+  }
+
+  function todayLoad() {
+    var t = today(), min = 0, seg = 0;
+    allModules().forEach(function (m) {
+      if (!m || m.type !== 'timeline') return;
+      ((m.data && m.data.items) || []).forEach(function (it) {
+        if (!it || it.done || it.date !== t) return;
+        min += tlDur(it);
+        seg++;
+      });
+    });
+    return { min: min, seg: seg };
+  }
+
+  function focusBlock() {
+    if (!isPlainObj(state.mits)) normalizeCoach(state);
+    var key = today();
+    var cap = clamp(Number(state.settings.capacityH) || 8, 1, 16);
+    var load = todayLoad();
+    var useH = load.min / 60;
+    var pct = cap ? Math.round(useH / cap * 100) : 0;
+    var over = pct > 100;
+    var od = overdueList();
+
+    var sec = document.createElement('section');
+    sec.className = 'focus-card reveal';
+
+    function mitRows() {
+      var mits = mitsOf(key);
+      return [0, 1, 2].map(function (i) {
+        var it = mits[i] || null;
+        var has = !!(it && String(it.text || '').trim());
+        return '<div class="mit' + (it && it.done ? ' done' : '') + '">' +
+          '<button class="mit-check' + (it && it.done ? ' on' : '') + '" type="button" data-mit-check="' + i + '"' +
+          (has ? '' : ' disabled') + ' aria-label="完成第 ' + (i + 1) + ' 件事">' + icon('check') + '</button>' +
+          '<input class="mit-in" data-mit-in="' + i + '" maxlength="40" aria-label="第 ' + (i + 1) +
+          ' 件最重要的事" placeholder="第 ' + (i + 1) + ' 件最重要的事" value="' + esc((it && it.text) || '') + '">' +
+          '</div>';
+      }).join('');
+    }
+
+    function mitMeta() {
+      var mits = mitsOf(key);
+      var real = mits.filter(function (x) { return String(x.text || '').trim(); }).length;
+      var done = mits.filter(function (x) { return x.done && String(x.text || '').trim(); }).length;
+      return '三件事 ' + done + '/' + real;
+    }
+
+    sec.innerHTML =
+      '<div class="fc-head">' +
+      '<div class="fc-title"><span class="fc-ico">' + icon('target') + '</span>今日聚焦</div>' +
+      '<div class="fc-meta">' + esc(cnDate(parseISO(key))) + ' · 周' + WEEK[parseISO(key).getDay()] +
+      ' · <span data-mit-meta>' + mitMeta() + '</span></div>' +
+      '</div>' +
+      '<div class="fc-grid">' +
+      '<div class="fc-mits" data-mits>' + mitRows() + '</div>' +
+      '<div class="fc-side">' +
+      '<div class="fc-cap' + (over ? ' over' : '') + '">' +
+      '<div class="fc-cap-top"><span>今日容量</span><b>' + useH.toFixed(1) + 'h<small> / ' + cap + 'h</small></b></div>' +
+      '<span class="fc-bar"><i style="width:' + clamp(pct, 0, 100) + '%"></i></span>' +
+      '<p class="fc-cap-note">' + (over
+        ? '超载 ' + (useH - cap).toFixed(1) + 'h · 建议压缩或顺延低优先的 ' + load.seg + ' 段安排'
+        : '已排 ' + load.seg + ' 段 · 余量 ' + Math.max(0, cap - useH).toFixed(1) + 'h') + '</p>' +
+      '</div>' +
+      '<div class="fc-od' + (od.length ? ' has' : '') + '">' +
+      '<div class="fc-od-top"><span>逾期未完成</span><b>' + od.length + ' 项</b></div>' +
+      '<p class="fc-od-list">' + (od.length
+        ? od.slice(0, 3).map(function (o) { return esc(o.item.text || '未命名'); }).join(' · ') + (od.length > 3 ? ' 等' : '')
+        : '没有逾期，节奏刚好。') + '</p>' +
+      '<button class="ghost-btn tiny" type="button" data-od-move' + (od.length ? '' : ' disabled') + '>一键顺延到今天</button>' +
+      '</div>' +
+      '</div>' +
+      '</div>';
+
+    var mitsBox = $('[data-mits]', sec);
+    var saveLazy = debounce(function () { save(); }, 320);
+
+    function onMitInput(inp) {
+      var i = Number(inp.dataset.mitIn);
+      var list = mitsOf(key);
+      while (list.length <= i) list.push({ id: uid('mit'), text: '', done: false });
+      var rec = list[i] || (list[i] = { id: uid('mit'), text: '', done: false });
+      rec.text = inp.value;
+      if (!String(rec.text).trim()) rec.done = false;
+      saveLazy();
+      var meta = $('[data-mit-meta]', sec);
+      if (meta) meta.textContent = mitMeta();
+      var row = inp.closest('.mit');
+      var btn = row ? $('.mit-check', row) : null;
+      if (btn) {
+        var ready = !!String(rec.text).trim();
+        btn.disabled = !ready;
+        if (!ready) { btn.classList.remove('on'); row.classList.remove('done'); }
+      }
+    }
+
+    $$('[data-mit-in]', mitsBox).forEach(function (inp) {
+      inp.addEventListener('input', function () { onMitInput(inp); });
+      inp.addEventListener('blur', function () { save(); });
+    });
+
+    $$('[data-mit-check]', mitsBox).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var i = Number(b.dataset.mitCheck);
+        var list = mitsOf(key);
+        var rec = list[i];
+        if (!rec || !String(rec.text || '').trim()) return;
+        rec.done = !rec.done;
+        save();
+        var row = b.closest('.mit');
+        if (row) row.classList.toggle('done', rec.done);
+        b.classList.toggle('on', rec.done);
+        var meta = $('[data-mit-meta]', sec);
+        if (meta) meta.textContent = mitMeta();
+      });
+    });
+
+    var mv = $('[data-od-move]', sec);
+    if (mv) mv.addEventListener('click', function () {
+      var list = overdueList();
+      if (!list.length) return;
+      var t = today();
+      list.forEach(function (o) { o.item.date = t; });
+      save();
+      toast('已把 ' + list.length + ' 项逾期顺延到今天');
+      renderPage();
+    });
+    return sec;
+  }
+
+  /* =========================================================
+     二、习惯升级：连续天数 / 周目标 / 补打卡 / 月完成率 / 热力图
+     ========================================================= */
+  function habitStreak(h) {
+    var checks = h.checks || {};
+    var d = today(), n = 0;
+    if (!checks[d]) d = shiftISO(d, -1);   /* 今天还没打，不算断 */
+    while (checks[d]) { n++; d = shiftISO(d, -1); }
+    return n;
+  }
+
+  function habitLongest(h) {
+    var keys = Object.keys(h.checks || {}).filter(isDateStr).sort();
+    var best = 0, run = 0, prev = '';
+    keys.forEach(function (k) {
+      run = (prev && k === shiftISO(prev, 1)) ? run + 1 : 1;
+      prev = k;
+      if (run > best) best = run;
+    });
+    return best;
+  }
+
+  function habitWeekCount(h, ans) {
+    var from = weekStartISO(ans || today()), to = shiftISO(from, 6), n = 0;
+    Object.keys(h.checks || {}).forEach(function (k) { if (k >= from && k <= to) n++; });
+    return n;
+  }
+
+  function habitMonthStats(h, month) {
+    var parts = month.split('-'), y = Number(parts[0]), mo = Number(parts[1]);
+    var days = new Date(y, mo, 0).getDate();
+    var tKey = today();
+    var elapsed = 0, done = 0;
+    for (var i = 1; i <= days; i++) {
+      var k = y + '-' + pad(mo) + '-' + pad(i);
+      if (k <= tKey) elapsed++;
+      if ((h.checks || {})[k]) done++;
+    }
+    var goal = clamp(Number(h.goal && h.goal.times) || 3, 1, 7);
+    var expect = Math.max(1, Math.round(goal * Math.max(elapsed, 1) / 7));
+    var rate = Math.min(100, Math.round(done / expect * 100));
+    return { days: days, elapsed: elapsed, done: done, expect: expect, rate: rate };
+  }
+
+  function heatLevel(d, month) {
+    var habits = d.habits || [];
+    if (!habits.length) return [];
+    var parts = month.split('-'), y = Number(parts[0]), mo = Number(parts[1]);
+    var days = new Date(y, mo, 0).getDate();
+    var out = [];
+    for (var i = 1; i <= days; i++) {
+      var k = y + '-' + pad(mo) + '-' + pad(i);
+      var c = habits.filter(function (h) { return h.checks && h.checks[k]; }).length;
+      out.push({ key: k, num: i, count: c, level: c ? Math.min(4, Math.ceil(c / habits.length * 4)) : 0 });
+    }
+    return out;
+  }
+
+  function habitExtraHtml(m) {
+    var d = m.data || {};
+    var month = d.month || monthKey(new Date());
+    var habits = d.habits || [];
+    var tKey = today();
+    if (!habits.length) return '';
+
+    var rows = habits.map(function (h) {
+      var st = habitStreak(h);
+      var lg = habitLongest(h);
+      var wk = habitWeekCount(h, tKey);
+      var goal = clamp(Number(h.goal && h.goal.times) || 3, 1, 7);
+      var ms = habitMonthStats(h, month);
+      return '<div class="hb-row" data-h="' + h.id + '">' +
+        '<span class="hb-name" title="' + esc(h.name) + '">' + esc(h.name) + '</span>' +
+        '<span class="hb-chip" data-chip="streak"><b>' + st + '</b> 天连续<small>最长 ' + lg + '</small></span>' +
+        '<button class="hb-goal' + (wk >= goal ? ' ok' : '') + '" type="button" data-goal="' + h.id +
+        '" title="点击修改每周目标频次">每周 ' + goal + ' 次 · 本周 ' + wk + '</button>' +
+        '<span class="hb-rate" data-chip="rate">本月 ' + ms.done + '/' + ms.expect + ' · ' + ms.rate + '%</span>' +
+        '</div>';
+    }).join('');
+
+    var cells = heatLevel(d, month);
+    var parts = month.split('-'), y = Number(parts[0]), mo = Number(parts[1]);
+    var lead = new Date(y, mo - 1, 1).getDay();
+    var blanks = '';
+    for (var b = 0; b < lead; b++) blanks += '<span class="heat-cell blank"></span>';
+    var cellHtml = cells.map(function (c) {
+      return '<span class="heat-cell l' + c.level + '" data-heat="' + c.key + '" title="' +
+        esc(c.key) + ' · 完成 ' + c.count + ' 个习惯">' + c.num + '</span>';
+    }).join('');
+
+    return '<div class="hb-extra" data-hb>' +
+      '<div class="hb-rows">' + rows + '</div>' +
+      '<div class="hb-heat">' +
+      '<div class="hb-heat-head"><span>' + mo + ' 月热力图</span><span>颜色越深，当天完成的习惯越多</span></div>' +
+      '<div class="hb-heat-grid">' + blanks + cellHtml + '</div>' +
+      '<div class="hb-legend"><span>少</span><i class="heat-cell l1"></i><i class="heat-cell l2"></i><i class="heat-cell l3"></i><i class="heat-cell l4"></i><span>多</span></div>' +
+      '</div>' +
+      '<div class="hb-tools">' +
+      '<button class="ghost-btn tiny" type="button" data-backfill>补打卡（过去 7 天）</button>' +
+      '</div>' +
+      '</div>';
+  }
+
+  function paintHabitStats(body, m) {
+    var d = m.data || {};
+    var month = d.month || monthKey(new Date());
+    (d.habits || []).forEach(function (h) {
+      var row = $('.hb-row[data-h="' + h.id + '"]', body);
+      if (!row) return;
+      var st = habitStreak(h), lg = habitLongest(h), wk = habitWeekCount(h, today());
+      var goal = clamp(Number(h.goal && h.goal.times) || 3, 1, 7);
+      var ms = habitMonthStats(h, month);
+      var cs = $('[data-chip="streak"]', row);
+      if (cs) cs.innerHTML = '<b>' + st + '</b> 天连续<small>最长 ' + lg + '</small>';
+      var gb = $('[data-goal]', row);
+      if (gb) {
+        gb.textContent = '每周 ' + goal + ' 次 · 本周 ' + wk;
+        gb.classList.toggle('ok', wk >= goal);
+      }
+      var rt = $('[data-chip="rate"]', row);
+      if (rt) rt.textContent = '本月 ' + ms.done + '/' + ms.expect + ' · ' + ms.rate + '%';
+    });
+    var cells = heatLevel(d, month);
+    cells.forEach(function (c) {
+      var el = $('[data-heat="' + c.key + '"]', body);
+      if (!el) return;
+      el.className = 'heat-cell l' + c.level;
+      el.title = c.key + ' · 完成 ' + c.count + ' 个习惯';
+    });
+  }
+
+  function openHabitGoal(m, habit, after) {
+    openDialog(
+      '<h3>每周目标频次</h3>' +
+      '<p class="sub">「' + esc(habit.name) + '」每周想完成几次？完成率与热力图都会按这个目标折算。</p>' +
+      '<div class="goal-grid">' + [1, 2, 3, 4, 5, 6, 7].map(function (n) {
+        return '<button class="goal-opt' + ((Number(habit.goal && habit.goal.times) || 3) === n ? ' active' : '') +
+          '" type="button" data-n="' + n + '">' + n + ' 次</button>';
+      }).join('') + '</div>' +
+      '<div class="sheet-actions"><button class="ghost-btn" data-close>取消</button>' +
+      '<button class="solid-btn" data-ok>保存</button></div>',
+      function (sheet, close) {
+        var pick = Number(habit.goal && habit.goal.times) || 3;
+        $$('[data-n]', sheet).forEach(function (b) {
+          b.addEventListener('click', function () {
+            pick = Number(b.dataset.n);
+            $$('[data-n]', sheet).forEach(function (x) { x.classList.toggle('active', x === b); });
+          });
+        });
+        $('[data-close]', sheet).addEventListener('click', close);
+        $('[data-ok]', sheet).addEventListener('click', function () {
+          habit.goal = habit.goal || {};
+          habit.goal.per = 'week';
+          habit.goal.times = pick;
+          save();
+          close();
+          if (after) after();
+          toast('每周目标已更新为 ' + pick + ' 次');
+        });
+      }
+    );
+  }
+
+  function openBackfill(m, after) {
+    var d = m.data || {};
+    var habits = d.habits || [];
+    if (!habits.length) { toast('先加一个习惯'); return; }
+    var days = [];
+    for (var i = 6; i >= 0; i--) days.push(shiftISO(today(), -i));
+    openDialog(
+      '<h3>补打卡 · 过去 7 天</h3>' +
+      '<p class="sub">点一下切换当天状态，保存后计入连续天数、完成率与热力图；不影响其它日期的记录。</p>' +
+      '<div class="bf-list">' + days.map(function (k) {
+        var dt = parseISO(k);
+        return '<div class="bf-day"><span class="bf-date">' + (dt.getMonth() + 1) + '/' + dt.getDate() +
+          ' 周' + WEEK[dt.getDay()] + '</span><div class="bf-habits">' +
+          habits.map(function (h) {
+            var on = !!(h.checks && h.checks[k]);
+            return '<button class="bf-chip' + (on ? ' on' : '') + '" type="button" data-bf="' + h.id + '" data-d="' + k + '">' +
+              esc(h.name) + '</button>';
+          }).join('') + '</div></div>';
+      }).join('') + '</div>' +
+      '<div class="sheet-actions"><button class="ghost-btn" data-close>取消</button>' +
+      '<button class="solid-btn" data-ok>保存补打卡</button></div>',
+      function (sheet, close) {
+        $$('[data-bf]', sheet).forEach(function (b) {
+          b.addEventListener('click', function () { b.classList.toggle('on'); });
+        });
+        $('[data-close]', sheet).addEventListener('click', close);
+        $('[data-ok]', sheet).addEventListener('click', function () {
+          var n = 0;
+          $$('[data-bf]', sheet).forEach(function (b) {
+            var h = habits.filter(function (x) { return x.id === b.dataset.bf; })[0];
+            if (!h) return;
+            h.checks = h.checks || {};
+            var on = b.classList.contains('on');
+            if (on && !h.checks[b.dataset.d]) { h.checks[b.dataset.d] = true; n++; }
+            else if (!on && h.checks[b.dataset.d]) { delete h.checks[b.dataset.d]; n++; }
+          });
+          save();
+          close();
+          if (after) after();
+          toast(n ? '已更新 ' + n + ' 条打卡记录' : '没有变化');
+        });
+      }
+    );
+  }
+
+  function habitMilestone(m, h) {
+    var st = habitStreak(h);
+    state.habitNotice = isPlainObj(state.habitNotice) ? state.habitNotice : {};
+    var rec = state.habitNotice[h.id] = state.habitNotice[h.id] || {};
+    var t = today();
+    if (st >= 30 && rec.d30 !== t) { rec.d30 = t; save(); toast('连续 30 天达成 · ' + h.name); return; }
+    if (st >= 7 && rec.d7 !== t) { rec.d7 = t; save(); toast('连续 7 天达成 · ' + h.name); return; }
+  }
+
+  /* 在既有习惯渲染器上做增量包装：不改原有打卡逻辑，只追加统计区与热力图 */
+  (function () {
+    var baseHtml = renderers.habit.html;
+    var baseBind = renderers.habit.bind;
+
+    renderers.habit.html = function (m) {
+      return baseHtml(m) + habitExtraHtml(m);
+    };
+
+    renderers.habit.bind = function (body, card, m) {
+      baseBind(body, card, m);
+      var d = m.data || {};
+      var extra = $('[data-hb]', body);
+      if (!extra) return;
+
+      $$('[data-goal]', body).forEach(function (b) {
+        b.addEventListener('click', function () {
+          var h = (d.habits || []).filter(function (x) { return x.id === b.dataset.goal; })[0];
+          if (!h) return;
+          openHabitGoal(m, h, function () { refreshCard(m); });
+        });
+      });
+
+      var bf = $('[data-backfill]', body);
+      if (bf) bf.addEventListener('click', function () { openBackfill(m, function () { refreshCard(m); }); });
+
+      /* 打卡后即时刷新统计与热力图（保留原打卡弹跳动画，不整卡重绘） */
+      $$('.cell', body).forEach(function (c) {
+        c.addEventListener('click', function () {
+          var h = (d.habits || []).filter(function (x) { return x.id === c.dataset.h; })[0];
+          if (!h || !extra.isConnected) return;
+          paintHabitStats(body, m);
+          if (h.checks && h.checks[c.dataset.d]) habitMilestone(m, h);
+        });
+      });
+    };
+  })();
+
+  /* =========================================================
+     三、人生轮盘：八大领域雷达图 + 季度快照
+     ========================================================= */
+  function wheelScores() {
+    var out = {};
+    state.life8.forEach(function (d) { out[d.id] = clamp(Number(d.score) || 0, 0, 10); });
+    return out;
+  }
+
+  function radarSVG(cur, prev) {
+    var n = LIFE8.length;
+    var cx = 170, cy = 148, R = 100;
+    function pt(i, v) {
+      var a = (-90 + i * (360 / n)) * Math.PI / 180;
+      var r = R * clamp(v, 0, 10) / 10;
+      return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+    }
+    function poly(get) {
+      var p = [];
+      for (var i = 0; i < n; i++) { var q = pt(i, get(i)); p.push(q[0].toFixed(1) + ',' + q[1].toFixed(1)); }
+      return p.join(' ');
+    }
+    var rings = [2.5, 5, 7.5, 10].map(function (lv) {
+      return '<polygon class="radar-ring' + (lv === 10 ? ' outer' : '') + '" points="' + poly(function () { return lv; }) + '"></polygon>';
+    }).join('');
+
+    var axes = '', labels = '';
+    for (var i = 0; i < n; i++) {
+      var q = pt(i, 10);
+      axes += '<line class="radar-axis" x1="' + cx + '" y1="' + cy + '" x2="' + q[0].toFixed(1) + '" y2="' + q[1].toFixed(1) + '"></line>';
+      var a = (-90 + i * (360 / n)) * Math.PI / 180;
+      var lx = cx + (R + 17) * Math.cos(a), ly = cy + (R + 17) * Math.sin(a);
+      var cos = Math.cos(a);
+      var anchor = Math.abs(cos) < 0.28 ? 'middle' : (cos > 0 ? 'start' : 'end');
+      labels += '<text class="radar-label" x="' + lx.toFixed(1) + '" y="' + (ly + 3.6).toFixed(1) +
+        '" text-anchor="' + anchor + '">' + esc(LIFE8[i].name) + '</text>';
+    }
+
+    var prevPoly = prev ? '<polygon class="radar-prev" points="' + poly(function (i) {
+      return clamp(Number(prev[LIFE8[i].id]) || 0, 0, 10);
+    }) + '"></polygon>' : '';
+
+    var dots = LIFE8.map(function (d, i) {
+      var q = pt(i, clamp(Number(cur[d.id]) || 0, 0, 10));
+      return '<circle class="radar-dot" cx="' + q[0].toFixed(1) + '" cy="' + q[1].toFixed(1) + '" r="2.6"></circle>';
+    }).join('');
+
+    return '<svg class="radar" viewBox="0 0 340 300" role="img" aria-label="人生轮盘雷达图">' +
+      rings + axes + prevPoly +
+      '<polygon class="radar-cur" points="' + poly(function (i) {
+        return clamp(Number(cur[LIFE8[i].id]) || 0, 0, 10);
+      }) + '"></polygon>' +
+      dots + labels + '</svg>';
+  }
+
+  function wheelBlock() {
+    if (!isPlainObj(state.wheel)) normalizeCoach(state);
+    var sec = document.createElement('section');
+    sec.className = 'wheel-card reveal';
+
+    function paint() {
+      var cur = wheelScores();
+      var last = (state.wheel.history || []).slice(-1)[0] || null;
+      var diff = LIFE8.map(function (d) {
+        var now = cur[d.id];
+        var old = last ? clamp(Number(last.scores[d.id]) || 0, 0, 10) : null;
+        return { name: d.name, color: d.color, now: now, old: old, delta: old == null ? null : now - old };
+      });
+      var avgNow = LIFE8.reduce(function (a, d) { return a + cur[d.id]; }, 0) / LIFE8.length;
+      var avgOld = last ? LIFE8.reduce(function (a, d) { return a + (Number(last.scores[d.id]) || 0); }, 0) / LIFE8.length : null;
+
+      sec.innerHTML =
+        '<div class="section-head"><h2>人生轮盘</h2><p>八个领域 1 – 10 打分，和上一季对比看偏科</p></div>' +
+        '<div class="wheel-body">' +
+        '<div class="wheel-canvas">' + radarSVG(cur, last ? last.scores : null) + '</div>' +
+        '<div class="wheel-side">' +
+        '<div class="wheel-sum">' +
+        '<span class="wheel-avg">' + avgNow.toFixed(1) + '<small> / 10 均值</small></span>' +
+        '<span class="wheel-when">' + (last
+          ? '对比 ' + esc(last.quarter) + ' 快照（' + avgOld.toFixed(1) + '，' +
+            (avgNow - avgOld >= 0 ? '+' : '') + (avgNow - avgOld).toFixed(1) + '）'
+          : '还没有季度快照，先记录一次') + '</span>' +
+        '</div>' +
+        '<ul class="wheel-diff">' + diff.map(function (x) {
+          return '<li><i style="background:' + x.color + '"></i><span>' + esc(x.name) + '</span>' +
+            '<b>' + x.now + '</b>' +
+            '<em class="' + (x.delta == null ? 'flat' : (x.delta > 0 ? 'up' : (x.delta < 0 ? 'down' : 'flat'))) + '">' +
+            (x.delta == null ? '—' : (x.delta > 0 ? '+' + x.delta : String(x.delta))) + '</em></li>';
+        }).join('') + '</ul>' +
+        '<div class="wheel-actions">' +
+        '<button class="solid-btn tiny" type="button" data-wheel-save>记录本季快照</button>' +
+        '<button class="ghost-btn tiny" type="button" data-wheel-hist>历史快照 · ' + (state.wheel.history || []).length + '</button>' +
+        '</div>' +
+        '</div>' +
+        '</div>';
+
+      var saveBtn = $('[data-wheel-save]', sec);
+      if (saveBtn) saveBtn.addEventListener('click', function () {
+        var q = quarterKey(today());
+        var scores = wheelScores();
+        if (!LIFE8.some(function (d) { return scores[d.id] > 0; })) { toast('先把下方八个抽屉的分数调一调'); return; }
+        state.wheel.history = state.wheel.history || [];
+        state.wheel.history.push({ id: uid('wh'), at: today(), quarter: q, scores: scores });
+        save();
+        paint();
+        toast('已记录 ' + q + ' 快照');
+      });
+
+      var histBtn = $('[data-wheel-hist]', sec);
+      if (histBtn) histBtn.addEventListener('click', function () {
+        var list = (state.wheel.history || []).slice().reverse();
+        openDialog(
+          '<h3>季度快照</h3>' +
+          '<p class="sub">每次记录都会存下八个领域的分值，用来和本季对比。</p>' +
+          (list.length ? '<div class="hist-list">' + list.map(function (h) {
+            var avg = LIFE8.reduce(function (a, d) { return a + (Number(h.scores[d.id]) || 0); }, 0) / LIFE8.length;
+            return '<div class="hist-row"><span>' + esc(h.quarter) + '<small>' + esc(h.at) + '</small></span>' +
+              '<b>' + avg.toFixed(1) + ' 均值</b></div>';
+          }).join('') + '</div>' : '<p class="empty-line">还没有快照。</p>') +
+          '<div class="sheet-actions"><button class="ghost-btn" data-close>关闭</button></div>',
+          function (sheet, close) {
+            $$('[data-close]', sheet).forEach(function (b) { b.addEventListener('click', close); });
+          }
+        );
+      });
+    }
+
+    paint();
+    document.addEventListener('life8:change', function () { if (sec.isConnected) paint(); });
+    return sec;
+  }
+
+  /* =========================================================
+     四、周复盘：自动汇总 + 四栏手填 + 纯文本周报
+     ========================================================= */
+  function tasksInRange(from, to) {
+    var out = [];
+    allModules().forEach(function (m) {
+      if (!m || (m.type !== 'todo' && m.type !== 'timeline')) return;
+      ((m.data && m.data.items) || []).forEach(function (it) {
+        if (!it || !isDateStr(it.date)) return;
+        if (it.date < from || it.date > to) return;
+        out.push(it);
+      });
+    });
+    return out;
+  }
+
+  function okrSummary() {
+    var objs = [], pcts = [], krTotal = 0;
+    allModules().forEach(function (m) {
+      if (!m || m.type !== 'okr') return;
+      ((m.data && m.data.objectives) || []).forEach(function (o) {
+        var krs = o.krs || [];
+        var p = krs.length ? Math.round(krs.reduce(function (a, k) {
+          return a + clamp(k.target ? (k.cur / k.target) * 100 : 0, 0, 100);
+        }, 0) / krs.length) : 0;
+        krTotal += krs.length;
+        objs.push({ title: o.title, pct: p, krs: krs.length, module: m.title });
+        if (krs.length) pcts.push(p);
+      });
+    });
+    return {
+      pct: pcts.length ? Math.round(pcts.reduce(function (a, b) { return a + b; }, 0) / pcts.length) : 0,
+      objs: objs,
+      krCount: krTotal,
+      objCount: objs.length
+    };
+  }
+
+  function weekStats(anchor) {
+    var from = weekStartISO(anchor || today());
+    var to = shiftISO(from, 6);
+    var tk = tasksInRange(from, to);
+    var tDone = tk.filter(function (t) { return t.done; }).length;
+
+    var hGoal = 0, hDone = 0, hRows = [];
+    allModules().forEach(function (m) {
+      if (!m || m.type !== 'habit') return;
+      ((m.data && m.data.habits) || []).forEach(function (h) {
+        var goal = clamp(Number(h.goal && h.goal.times) || 3, 1, 7);
+        var n = 0;
+        Object.keys(h.checks || {}).forEach(function (k) { if (k >= from && k <= to) n++; });
+        hGoal += goal;
+        hDone += Math.min(n, goal);
+        hRows.push({ name: h.name, n: n, goal: goal });
+      });
+    });
+
+    var mitTotal = 0, mitDone = 0;
+    for (var i = 0; i < 7; i++) {
+      var k = shiftISO(from, i);
+      (state.mits[k] || []).forEach(function (x) {
+        if (!String(x.text || '').trim()) return;
+        mitTotal++;
+        if (x.done) mitDone++;
+      });
+    }
+
+    var okr = okrSummary();
+    return {
+      from: from, to: to, weekKey: isoWeekKey(from),
+      taskTotal: tk.length, taskDone: tDone,
+      taskRate: tk.length ? Math.round(tDone / tk.length * 100) : 0,
+      habitGoal: hGoal, habitDone: hDone,
+      habitRate: hGoal ? Math.round(hDone / hGoal * 100) : 0,
+      habitRows: hRows,
+      mitTotal: mitTotal, mitDone: mitDone,
+      okrPct: okr.pct
+    };
+  }
+
+  function weeklyRecord(key) {
+    state.weekly = isPlainObj(state.weekly) ? state.weekly : {};
+    var r = state.weekly[key];
+    if (!isPlainObj(r)) {
+      r = state.weekly[key] = { fields: { highlight: '', blocker: '', learn: '', next: '' }, savedAt: '', okrPct: 0 };
+    }
+    return r;
+  }
+
+  function weekReportText(st, rec, prevOkr) {
+    var d1 = parseISO(st.from), d2 = parseISO(st.to);
+    var lines = [];
+    lines.push('【周复盘】' + d1.getFullYear() + ' 年 ' + (d1.getMonth() + 1) + ' 月 ' + d1.getDate() + ' 日 – ' +
+      (d2.getMonth() + 1) + ' 月 ' + d2.getDate() + ' 日（' + st.weekKey + '）');
+    lines.push('');
+    lines.push('一、本周数据');
+    lines.push('· 任务：完成 ' + st.taskDone + ' / ' + st.taskTotal + '（' + st.taskRate + '%）');
+    lines.push('· 习惯：达成 ' + st.habitDone + ' / ' + st.habitGoal + ' 次目标（' + st.habitRate + '%）');
+    lines.push('· 三件事：完成 ' + st.mitDone + ' / ' + st.mitTotal);
+    lines.push('· OKR：总进度 ' + st.okrPct + '%' +
+      (prevOkr == null ? '（首次记录）' : '（较上次 ' + prevOkr + '%，' + (st.okrPct - prevOkr >= 0 ? '+' : '') + (st.okrPct - prevOkr) + '）'));
+    if (st.habitRows.length) {
+      lines.push('  - ' + st.habitRows.map(function (h) { return h.name + ' ' + h.n + '/' + h.goal; }).join('；'));
+    }
+    lines.push('');
+    lines.push('二、本周高光');
+    lines.push((rec.fields.highlight || '（未填写）').trim());
+    lines.push('');
+    lines.push('三、卡点');
+    lines.push((rec.fields.blocker || '（未填写）').trim());
+    lines.push('');
+    lines.push('四、学到什么');
+    lines.push((rec.fields.learn || '（未填写）').trim());
+    lines.push('');
+    lines.push('五、下周三件事');
+    var nx = (rec.fields.next || '').trim();
+    if (nx) {
+      nx.split(/\n+/).forEach(function (x, i) { lines.push((i + 1) + '. ' + x.trim()); });
+    } else {
+      lines.push('1. \n2. \n3. ');
+    }
+    return lines.join('\n');
+  }
+
+  function copyPlain(text) {
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      ta.remove();
+      toast(ok ? '已复制周报' : '复制失败，请手动选中复制');
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { toast('已复制周报'); }, fallback);
+    } else fallback();
+  }
+
+  function weeklyBlock() {
+    if (!isPlainObj(state.weekly)) normalizeCoach(state);
+    var anchor = isDateStr(state.settings.reviewWeek) ? state.settings.reviewWeek : weekStartISO(today());
+    var st = weekStats(anchor);
+    var key = st.weekKey;
+    var rec = weeklyRecord(key);
+    var isNow = weekStartISO(today()) === st.from;
+    var prevKeys = Object.keys(state.weekly || {}).filter(function (k) { return k < key; }).sort();
+    var prevOkr = null;
+    if (prevKeys.length) prevOkr = clamp(Number(state.weekly[prevKeys[prevKeys.length - 1]].okrPct) || 0, 0, 100);
+
+    var sec = document.createElement('section');
+    sec.className = 'wk-card reveal';
+    sec.innerHTML =
+      '<div class="section-head"><h2>周复盘</h2><p>本周数据自动汇总，四栏手填后一键生成可复制的纯文本周报</p></div>' +
+      '<div class="wk-week">' +
+      '<button class="icon-btn" type="button" data-wk-nav="-1" aria-label="上一周">' + icon('chevronLeft') + '</button>' +
+      '<span>' + esc(st.weekKey) + ' · ' + st.from + ' → ' + st.to + (isNow ? ' · 本周' : '') + '</span>' +
+      '<button class="icon-btn" type="button" data-wk-nav="1" aria-label="下一周"' + (isNow ? ' disabled' : '') + '>' + icon('chevronRight') + '</button>' +
+      '</div>' +
+      '<div class="wk-auto">' +
+      '<div class="wk-stat"><span>任务完成</span><b>' + st.taskDone + '<small>/' + st.taskTotal + '</small></b><i><em style="width:' + st.taskRate + '%"></em></i><u>' + st.taskRate + '%</u></div>' +
+      '<div class="wk-stat"><span>习惯达成</span><b>' + st.habitDone + '<small>/' + st.habitGoal + '</small></b><i><em style="width:' + st.habitRate + '%"></em></i><u>' + st.habitRate + '%</u></div>' +
+      '<div class="wk-stat"><span>三件事</span><b>' + st.mitDone + '<small>/' + st.mitTotal + '</small></b><i><em style="width:' +
+      (st.mitTotal ? Math.round(st.mitDone / st.mitTotal * 100) : 0) + '%"></em></i><u>' +
+      (st.mitTotal ? Math.round(st.mitDone / st.mitTotal * 100) : 0) + '%</u></div>' +
+      '<div class="wk-stat"><span>OKR 进度</span><b>' + st.okrPct + '<small>%</small></b><i><em style="width:' + st.okrPct + '%"></em></i><u>' +
+      (prevOkr == null ? '首次' : (st.okrPct - prevOkr >= 0 ? '+' : '') + (st.okrPct - prevOkr) + ' pt') + '</u></div>' +
+      '</div>' +
+      '<div class="wk-fields">' +
+      '<label class="wk-field"><span>本周高光</span>' +
+      '<textarea class="field ta" data-wk-f="highlight" rows="3" placeholder="这周最值得记下的一件事">' + esc(rec.fields.highlight) + '</textarea></label>' +
+      '<label class="wk-field"><span>卡点</span>' +
+      '<textarea class="field ta" data-wk-f="blocker" rows="3" placeholder="哪一步卡住了，为什么">' + esc(rec.fields.blocker) + '</textarea></label>' +
+      '<label class="wk-field"><span>学到什么</span>' +
+      '<textarea class="field ta" data-wk-f="learn" rows="3" placeholder="一个以后能复用的判断">' + esc(rec.fields.learn) + '</textarea></label>' +
+      '<label class="wk-field"><span>下周三件事</span>' +
+      '<textarea class="field ta" data-wk-f="next" rows="3" placeholder="一行一件，最多三件">' + esc(rec.fields.next) + '</textarea></label>' +
+      '</div>' +
+      '<div class="wk-actions">' +
+      '<button class="solid-btn tiny" type="button" data-wk-save>保存复盘</button>' +
+      '<button class="ghost-btn tiny" type="button" data-wk-report>生成周报</button>' +
+      '<button class="ghost-btn tiny" type="button" data-wk-hist>历史复盘 · ' + Object.keys(state.weekly || {}).length + '</button>' +
+      '<span class="wk-saved" data-wk-saved>' + (rec.savedAt ? '上次保存 ' + esc(rec.savedAt) : '尚未保存') + '</span>' +
+      '</div>';
+
+    var form = {};
+    $$('[data-wk-f]', sec).forEach(function (ta) {
+      form[ta.dataset.wkF] = ta;
+      ta.addEventListener('input', function () {
+        rec.fields[ta.dataset.wkF] = ta.value;
+        var sv = $('[data-wk-saved]', sec);
+        if (sv) sv.textContent = '编辑中…';
+      });
+      ta.addEventListener('blur', function () {
+        rec.fields[ta.dataset.wkF] = ta.value;
+        rec.savedAt = today();
+        rec.okrPct = st.okrPct;
+        save();
+        var sv = $('[data-wk-saved]', sec);
+        if (sv) sv.textContent = '已自动保存 · ' + today();
+      });
+    });
+
+    $$('[data-wk-nav]', sec).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var next = shiftISO(st.from, Number(b.dataset.wkNav) * 7);
+        if (weekStartISO(next) > weekStartISO(today())) return;
+        state.settings.reviewWeek = next;
+        save();
+        renderPage();
+      });
+    });
+
+    var sb = $('[data-wk-save]', sec);
+    if (sb) sb.addEventListener('click', function () {
+      Object.keys(form).forEach(function (k) { rec.fields[k] = form[k].value; });
+      rec.savedAt = today();
+      rec.okrPct = st.okrPct;
+      save();
+      var sv = $('[data-wk-saved]', sec);
+      if (sv) sv.textContent = '已保存 · ' + today();
+      toast('周复盘已保存');
+    });
+
+    var rb = $('[data-wk-report]', sec);
+    if (rb) rb.addEventListener('click', function () {
+      Object.keys(form).forEach(function (k) { rec.fields[k] = form[k].value; });
+      rec.savedAt = today();
+      rec.okrPct = st.okrPct;
+      save();
+      var text = weekReportText(st, rec, prevOkr);
+      openDialog(
+        '<h3>本周周报</h3>' +
+        '<p class="sub">纯文本，可直接粘贴到任意笔记或群里。</p>' +
+        '<textarea class="field ta wk-pre" data-report readonly rows="14" style="width:100%">' + esc(text) + '</textarea>' +
+        '<div class="sheet-actions"><button class="ghost-btn" data-close>关闭</button>' +
+        '<button class="solid-btn" data-copy>复制全文</button></div>',
+        function (sheet, close) {
+          $('[data-close]', sheet).addEventListener('click', close);
+          var ta = $('[data-report]', sheet);
+          $('[data-copy]', sheet).addEventListener('click', function () { copyPlain(text); });
+          setTimeout(function () { try { ta.focus(); ta.select(); } catch (e) { } }, 80);
+        }
+      );
+    });
+
+    var hb = $('[data-wk-hist]', sec);
+    if (hb) hb.addEventListener('click', function () {
+      var keys = Object.keys(state.weekly || {}).sort().reverse();
+      if (!keys.length) { toast('还没有保存过复盘'); return; }
+      openDialog(
+        '<h3>历史复盘</h3><p class="sub">点开任意一周，可回看当时的自动数据与手填内容。</p>' +
+        '<div class="hist-list">' + keys.map(function (k) {
+          var r = state.weekly[k];
+          var f = r.fields || {};
+          var has = (f.highlight || f.blocker || f.learn || f.next) ? '已填写' : '仅自动数据';
+          return '<button class="hist-row hist-btn" type="button" data-hist="' + esc(k) + '">' +
+            '<span>' + esc(k) + '<small>' + esc(r.savedAt || '—') + ' · ' + has + '</small></span>' +
+            '<b>' + (Number(r.okrPct) || 0) + '%</b></button>';
+        }).join('') + '</div>' +
+        '<div class="sheet-actions"><button class="ghost-btn" data-close>关闭</button></div>',
+        function (sheet, close) {
+          $$('[data-close]', sheet).forEach(function (b) { b.addEventListener('click', close); });
+          $$('[data-hist]', sheet).forEach(function (b) {
+            b.addEventListener('click', function () {
+              var k2 = b.dataset.hist;
+              var r2 = state.weekly[k2];
+              var anchor2 = weekKeyToDate(k2);
+              var st2 = weekStats(anchor2);
+              var pKeys = Object.keys(state.weekly || {}).filter(function (x) { return x < k2; }).sort();
+              var pOkr2 = pKeys.length ? clamp(Number(state.weekly[pKeys[pKeys.length - 1]].okrPct) || 0, 0, 100) : null;
+              openDialog(
+                '<h3>' + esc(k2) + ' 复盘</h3>' +
+                '<p class="sub">' + st2.from + ' → ' + st2.to + (r2.savedAt ? ' · 保存于 ' + esc(r2.savedAt) : '') + '</p>' +
+                '<textarea class="field ta wk-pre" readonly rows="16" style="width:100%">' +
+                esc(weekReportText(st2, r2, pOkr2)) + '</textarea>' +
+                '<div class="sheet-actions"><button class="ghost-btn" data-close>关闭</button>' +
+                '<button class="solid-btn" data-copy2>复制</button></div>',
+                function (sheet2, close2) {
+                  $('[data-close]', sheet2).addEventListener('click', close2);
+                  var txt = weekReportText(st2, r2, pOkr2);
+                  $('[data-copy2]', sheet2).addEventListener('click', function () { copyPlain(txt); });
+                }
+              );
+            });
+          });
+        }
+      );
+    });
+
+    return sec;
+  }
+
+  /* ISO 周键 → 那一周的周一 */
+  function weekKeyToDate(key) {
+    var m = /^(\d{4})-W(\d{2})$/.exec(String(key || ''));
+    if (!m) return weekStartISO(today());
+    var y = Number(m[1]), w = Number(m[2]);
+    var jan4 = new Date(y, 0, 4);
+    var monday = shiftISO(iso(jan4), -((jan4.getDay() + 6) % 7));
+    return shiftISO(monday, (w - 1) * 7);
+  }
+
+  /* =========================================================
+     五、心情与精力：每日双打分 + 近 30 天双曲线
+     ========================================================= */
+  var MOOD_SCALE = [
+    { v: 1, t: '很低' }, { v: 2, t: '偏低' }, { v: 3, t: '一般' }, { v: 4, t: '不错' }, { v: 5, t: '很好' }
+  ];
+  var ENERGY_SCALE = [
+    { v: 1, t: '耗尽' }, { v: 2, t: '偏低' }, { v: 3, t: '够用' }, { v: 4, t: '充沛' }, { v: 5, t: '满格' }
+  ];
+
+  function moodOf(key) {
+    if (!isPlainObj(state.mood)) state.mood = {};
+    var r = state.mood[key];
+    if (!isPlainObj(r)) r = state.mood[key] = { mood: 0, energy: 0, note: '' };
+    return r;
+  }
+
+  function moodSeries(days) {
+    var out = [];
+    for (var i = days - 1; i >= 0; i--) {
+      var k = shiftISO(today(), -i);
+      var r = state.mood[k] || {};
+      out.push({ key: k, mood: Number(r.mood) || 0, energy: Number(r.energy) || 0 });
+    }
+    return out;
+  }
+
+  function linePath(data, getV, x0, w, yTop, h) {
+    /* 只连有值的相邻点，缺数据自然断开 */
+    var seg = [], paths = [];
+    data.forEach(function (d, i) {
+      var v = getV(d);
+      if (!v) { if (seg.length) { paths.push(seg); seg = []; } return; }
+      var x = x0 + (data.length > 1 ? i * (w / (data.length - 1)) : w / 2);
+      var y = yTop + h - ((v - 1) / 4) * h;
+      seg.push([x, y]);
+    });
+    if (seg.length) paths.push(seg);
+    return paths.map(function (p) {
+      if (p.length === 1) return 'M' + p[0][0].toFixed(1) + ' ' + p[0][1].toFixed(1) + 'L' + (p[0][0] + 0.1).toFixed(1) + ' ' + p[0][1].toFixed(1);
+      return 'M' + p.map(function (q) { return q[0].toFixed(1) + ' ' + q[1].toFixed(1); }).join('L');
+    }).join(' ');
+  }
+
+  function moodSVG(days) {
+    var data = moodSeries(days);
+    var W = 560, H = 150, x0 = 26, w = W - 52, yTop = 14, h = H - 34;
+    var grid = [1, 2, 3, 4, 5].map(function (v) {
+      var y = yTop + h - ((v - 1) / 4) * h;
+      return '<line class="mood-grid' + (v === 3 ? ' mid' : '') + '" x1="' + x0 + '" y1="' + y.toFixed(1) +
+        '" x2="' + (x0 + w) + '" y2="' + y.toFixed(1) + '"></line>';
+    }).join('');
+    var dots = data.map(function (d, i) {
+      if (!d.mood && !d.energy) return '';
+      var x = x0 + (data.length > 1 ? i * (w / (data.length - 1)) : w / 2);
+      var s = '';
+      if (d.mood) s += '<circle class="dot-mood" cx="' + x.toFixed(1) + '" cy="' + (yTop + h - ((d.mood - 1) / 4) * h).toFixed(1) + '" r="2.2"></circle>';
+      if (d.energy) s += '<circle class="dot-energy" cx="' + x.toFixed(1) + '" cy="' + (yTop + h - ((d.energy - 1) / 4) * h).toFixed(1) + '" r="2.2"></circle>';
+      return s;
+    }).join('');
+    var xs = data.filter(function (d, i) { return i === 0 || i === data.length - 1; });
+    var labels = xs.map(function (d, idx) {
+      var x = idx === 0 ? x0 : x0 + w;
+      var dt = parseISO(d.key);
+      return '<text class="mood-axis" x="' + x + '" y="' + (H - 4) + '" text-anchor="' + (idx === 0 ? 'start' : 'end') + '">' +
+        (dt.getMonth() + 1) + '/' + dt.getDate() + '</text>';
+    }).join('');
+    return '<svg class="mood-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="近 ' + days + ' 天心情与精力曲线">' +
+      grid +
+      '<path class="line-mood" d="' + linePath(data, function (d) { return d.mood; }, x0, w, yTop, h) + '"></path>' +
+      '<path class="line-energy" d="' + linePath(data, function (d) { return d.energy; }, x0, w, yTop, h) + '"></path>' +
+      dots + labels + '</svg>';
+  }
+
+  function moodStats(days) {
+    var data = moodSeries(days).filter(function (d) { return d.mood || d.energy; });
+    if (!data.length) return { mv: 0, ev: 0, low: null, n: 0 };
+    var ms = data.filter(function (d) { return d.mood; });
+    var es = data.filter(function (d) { return d.energy; });
+    var mv = ms.length ? ms.reduce(function (a, d) { return a + d.mood; }, 0) / ms.length : 0;
+    var ev = es.length ? es.reduce(function (a, d) { return a + d.energy; }, 0) / es.length : 0;
+    var low = null;
+    ms.forEach(function (d) { if (!low || d.mood < low.mood) low = d; });
+    return { mv: mv, ev: ev, low: low, n: data.length };
+  }
+
+  function moodBlock() {
+    var key = today();
+    var sec = document.createElement('section');
+    sec.className = 'mood-card reveal';
+
+    function chips(field, scale, rec) {
+      return scale.map(function (s) {
+        return '<button class="md-chip' + (Number(rec[field]) === s.v ? ' active' : '') + '" type="button" data-md="' +
+          field + '" data-v="' + s.v + '" aria-label="' + esc(s.t) + ' ' + s.v + ' 分">' +
+          '<b>' + s.v + '</b><small>' + s.t + '</small></button>';
+      }).join('');
+    }
+
+    function paint() {
+      var rec = moodOf(key);
+      var stt = moodStats(30);
+      sec.innerHTML =
+        '<div class="section-head"><h2>心情与精力</h2><p>每天两个 1 – 5 打分，一句话备忘；下面看近 30 天的走势</p></div>' +
+        '<div class="mood-body">' +
+        '<div class="mood-today">' +
+        '<div class="mood-row"><span class="mood-label">心情</span><div class="mood-chips">' + chips('mood', MOOD_SCALE, rec) + '</div></div>' +
+        '<div class="mood-row"><span class="mood-label">精力</span><div class="mood-chips">' + chips('energy', ENERGY_SCALE, rec) + '</div></div>' +
+        '<input class="field mood-note" data-mood-note maxlength="60" placeholder="一句话备忘（例如：会后有点虚，明天先写文档）" value="' + esc(rec.note || '') + '">' +
+        '</div>' +
+        '<div class="mood-chart">' +
+        '<div class="mood-legend"><span class="lg-mood">心情</span><span class="lg-energy">精力</span>' +
+        '<span class="mood-when">近 30 天 · 有记录 ' + stt.n + ' 天</span></div>' +
+        moodSVG(30) +
+        '<div class="mood-figures">' +
+        '<div><span>心情均值</span><b>' + (stt.mv ? stt.mv.toFixed(1) : '—') + '</b></div>' +
+        '<div><span>精力均值</span><b>' + (stt.ev ? stt.ev.toFixed(1) : '—') + '</b></div>' +
+        '<div><span>最低谷</span><b>' + (stt.low ? (parseISO(stt.low.key).getMonth() + 1) + '/' + parseISO(stt.low.key).getDate() + '（' + stt.low.mood + '）' : '—') + '</b></div>' +
+        '</div>' +
+        '</div>' +
+        '</div>';
+
+      $$('[data-md]', sec).forEach(function (b) {
+        b.addEventListener('click', function () {
+          var r = moodOf(key);
+          var f = b.dataset.md, v = Number(b.dataset.v);
+          r[f] = Number(r[f]) === v ? 0 : v;
+          save();
+          paint();
+        });
+      });
+      var note = $('[data-mood-note]', sec);
+      if (note) {
+        var lazy = debounce(function () { save(); }, 300);
+        note.addEventListener('input', function () {
+          moodOf(key).note = note.value;
+          lazy();
+        });
+        note.addEventListener('blur', function () { moodOf(key).note = note.value; save(); });
+      }
+    }
+
+    paint();
+    return sec;
+  }
+
+  /* =========================================================
+     六、OKR 自动汇总与季度归档
+     ========================================================= */
+  function okrBlock() {
+    var sec = document.createElement('section');
+    sec.className = 'okr-card reveal';
+
+    function paint() {
+      var sum = okrSummary();
+      var hist = (state.okrArchive || []).slice().sort(function (a, b) {
+        return a.quarter < b.quarter ? 1 : (a.quarter > b.quarter ? -1 : 0);
+      });
+      var lastQ = hist[0] || null;
+
+      sec.innerHTML =
+        '<div class="section-head"><h2>目标汇总</h2><p>每个 KR 按当前值 / 目标值折算，目标内 KR 等权，多个目标再等权平均</p></div>' +
+        '<div class="okr-body">' +
+        '<div class="okr-total">' +
+        '<span class="okr-num">' + sum.pct + '<small>%</small></span>' +
+        '<span class="okr-cap">全部目标等权总进度 · ' + sum.objCount + ' 个目标 / ' + sum.krCount + ' 个 KR</span>' +
+        '<span class="okr-bar"><i style="width:' + sum.pct + '%"></i></span>' +
+        '<div class="okr-acts">' +
+        '<button class="ghost-btn tiny" type="button" data-okr-arch>归档本季（' + esc(quarterKey(today())) + '）</button>' +
+        '<button class="ghost-btn tiny" type="button" data-okr-hist>历史快照 · ' + hist.length + '</button>' +
+        '</div>' +
+        '</div>' +
+        '<ul class="okr-list">' +
+        (sum.objs.length ? sum.objs.map(function (o) {
+          return '<li><span class="okr-o-title" title="' + esc(o.module || '') + '">' + esc(o.title) + '</span>' +
+            '<span class="okr-o-bar"><i style="width:' + o.pct + '%"></i></span>' +
+            '<b>' + o.pct + '%</b></li>';
+        }).join('') : '<li class="okr-empty">还没有 OKR 模块，先在页面里加一个「OKR」模块。</li>') +
+        '</ul>' +
+        (lastQ ? '<p class="okr-lastq">上次归档：' + esc(lastQ.quarter) + ' 总进度 ' + lastQ.pct + '% · 当前较其 ' +
+          (sum.pct - lastQ.pct >= 0 ? '+' : '') + (sum.pct - lastQ.pct) + ' pt</p>' : '') +
+        '</div>';
+
+      var arch = $('[data-okr-arch]', sec);
+      if (arch) arch.addEventListener('click', function () {
+        var s2 = okrSummary();
+        if (!s2.objs.length) { toast('还没有目标可以归档'); return; }
+        state.okrArchive = state.okrArchive || [];
+        state.okrArchive.push({
+          id: uid('oa'), at: today(), quarter: quarterKey(today()),
+          pct: s2.pct,
+          objs: s2.objs.map(function (o) { return { title: o.title, pct: o.pct }; })
+        });
+        save();
+        paint();
+        toast('已归档 ' + quarterKey(today()) + ' 快照');
+      });
+
+      var hb = $('[data-okr-hist]', sec);
+      if (hb) hb.addEventListener('click', function () {
+        var list = (state.okrArchive || []).slice().sort(function (a, b) { return a.quarter < b.quarter ? 1 : -1; });
+        if (!list.length) { toast('还没有归档快照'); return; }
+        openDialog(
+          '<h3>OKR 历史快照</h3><p class="sub">按季度归档的目标进度，用来对照季度冲刺效果。</p>' +
+          '<div class="hist-list">' + list.map(function (x, i) {
+            var next = list[i + 1];
+            var delta = next ? x.pct - next.pct : null;
+            return '<div class="hist-row"><span>' + esc(x.quarter) + '<small>' + esc(x.at) + ' · ' + x.objs.length + ' 个目标</small></span>' +
+              '<b>' + x.pct + '%<em class="' + (delta == null ? 'flat' : (delta > 0 ? 'up' : (delta < 0 ? 'down' : 'flat'))) + '">' +
+              (delta == null ? '—' : (delta > 0 ? '+' + delta : String(delta))) + '</em></b></div>';
+          }).join('') + '</div>' +
+          '<div class="sheet-actions"><button class="ghost-btn" data-close>关闭</button></div>',
+          function (sheet, close) {
+            $$('[data-close]', sheet).forEach(function (b) { b.addEventListener('click', close); });
+          }
+        );
+      });
+    }
+
+    paint();
+    return sec;
+  }
+
+  /* 时间轴里的逾期条目不篡改数据，只加轻标记 */
+  (function () {
+    var baseBind = renderers.timeline.bind;
+    renderers.timeline.bind = function (body, card, m) {
+      baseBind(body, card, m);
+      var items = (m.data && m.data.items) || [];
+      var t = today();
+      $$('.tl-item[data-tl]', body).forEach(function (row) {
+        var it = items.filter(function (x) { return x && x.id === row.dataset.tl; })[0];
+        if (!it || it.done || !isDateStr(it.date) || it.date >= t) return;
+        row.classList.add('is-overdue');
+        var timeBtn = $('.tl-time', row);
+        if (!timeBtn || $('.tl-od-tag', row)) return;
+        var tag = document.createElement('span');
+        tag.className = 'tl-od-tag';
+        tag.textContent = '逾期 ' + (Number(it.date.slice(5, 7))) + '/' + (Number(it.date.slice(8, 10)));
+        tag.title = '这条安排原定 ' + it.date + '，未完成；需要时可到「今日聚焦」一键顺延';
+        row.insertBefore(tag, timeBtn.nextSibling);
+      });
+    };
+  })();
 
   /* ---------------------------------------------------------
      启动
