@@ -2100,3 +2100,143 @@ html[data-theme="dark"] { --warn: #dfae5c; --warn-soft: rgba(223, 174, 92, .12);
   .sb-row { font-size: var(--t-11); }
   .sb-actions > * { flex: 1 1 46%; }
 }
+
+/* ---------- 时间轴：时间范围 / 引用某天行程 / 顶栏引导胶囊 ---------- */
+
+/* 顶栏引导胶囊：只在真正没有数据时出现，与「页签设置」同款浅灰胶囊缩小一号 */
+.guide-btn[hidden] { display: none !important; }
+.guide-btn { padding: 7px 13px; font-size: var(--t-12); color: var(--ink-2); }
+.guide-btn:hover { color: var(--ink); }
+
+/* 时间轴头部：引用入口 */
+.tl-quote {
+  margin-left: 8px; display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px 3px 7px; border-radius: var(--r-pill);
+  border: 1px solid var(--line-2); background: transparent;
+  color: var(--ink-2); font-size: var(--t-11); cursor: pointer;
+  transition: background-color var(--dur-1), border-color var(--dur-1), color var(--dur-1);
+}
+.tl-quote:hover { background: var(--elev-2); border-color: var(--line-2); color: var(--ink); }
+.tl-quote svg { width: 12px; height: 12px; opacity: .85; }
+
+/* 时间轴条目：时间范围可点开编辑 */
+.tl-item .tl-time {
+  border: 0; background: transparent; padding: 0; cursor: pointer;
+  text-align: left; border-radius: 5px;
+  transition: color var(--dur-1), background-color var(--dur-1);
+}
+.tl-item .tl-time:hover { color: var(--ink); background: var(--elev-2); }
+.tl-item .tl-time:focus-visible { outline: none; color: var(--ink); box-shadow: 0 0 0 2px var(--ring); }
+
+/* 引用来源标记 */
+.tl-src-line { display: block; margin-top: 3px; }
+.tl-src {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 7px 1px 5px; border-radius: var(--r-pill);
+  border: 1px solid var(--line); background: var(--elev-2);
+  color: var(--faint); font-size: 10.5px; line-height: 1.5; cursor: pointer;
+  transition: color var(--dur-1), border-color var(--dur-1), background-color var(--dur-1);
+}
+.tl-src svg { width: 10px; height: 10px; opacity: .8; }
+.tl-src:hover { color: var(--ink-2); border-color: var(--line-2); }
+.tl-src.is-stale { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft); }
+.tl-src.is-stale:hover { color: var(--accent); border-color: currentColor; }
+.tl-src.is-gone { color: var(--danger); border-color: var(--danger-soft); background: var(--danger-soft); }
+
+/* 添加行：开始 / 结束两个时间输入 */
+.tl-add { gap: 6px; }
+.tl-add .tl-add-times { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.tl-add .tl-time-in {
+  width: auto; min-width: 0; flex: none;
+  padding: 8px 8px; font-size: var(--t-12); font-variant-numeric: tabular-nums;
+}
+.tl-add .tl-add-text { flex: 1 1 100px; min-width: 90px; }
+.tl-dash { color: var(--faint); font-size: var(--t-11); }
+
+/* 编辑 / 引用弹窗内的表单 */
+.tl-form-row { display: flex; align-items: center; gap: 8px; }
+.tl-form-row .field { flex: 1 1 auto; min-width: 0; font-variant-numeric: tabular-nums; }
+.tl-f-wide { width: 100%; }
+.tl-f-date { flex: 0 0 auto; width: 100%; }
+.tl-hint { margin: 7px 0 0; font-size: var(--t-11); color: var(--faint); }
+.tl-hint.is-cross { color: var(--accent); }
+.tl-hint.is-bad { color: var(--danger); }
+.tl-src-note {
+  margin: 10px 0 0; padding: 9px 11px; border-radius: 10px;
+  background: var(--elev-2); font-size: var(--t-11); color: var(--muted); line-height: 1.6;
+}
+
+/* 引用面板：日期快捷选择 */
+.qt-days { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.qt-day {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 5px 10px; border-radius: var(--r-pill);
+  border: 1px solid var(--line-2); background: transparent;
+  color: var(--ink-2); font-size: var(--t-11); cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  transition: background-color var(--dur-1), border-color var(--dur-1), color var(--dur-1);
+}
+.qt-day i { font-style: normal; color: var(--faint); font-size: 10px; }
+.qt-day:hover { background: var(--elev-2); }
+.qt-day.active { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.qt-day.active i { color: var(--bg); opacity: .7; }
+.qt-day.is-wait { opacity: .55; }
+.qt-none { font-size: var(--t-11); color: var(--faint); }
+
+/* 引用面板：全选条 + 条目列表 */
+.qt-bar {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: var(--s-4); padding-bottom: 7px;
+  border-bottom: 1px solid var(--line);
+}
+.qt-all { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-12); color: var(--ink-2); cursor: pointer; }
+.qt-all input { accent-color: var(--accent); }
+.qt-hint { margin-left: auto; font-size: var(--t-11); color: var(--faint); }
+.qt-hint.is-warn { color: var(--danger); }
+.qt-list { display: grid; gap: 1px; margin-top: 4px; max-height: 42vh; overflow: auto; }
+.qt-row {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 8px; border-radius: var(--r-xs); cursor: pointer;
+  transition: background-color var(--dur-1);
+}
+.qt-row:hover { background: var(--elev-2); }
+.qt-row input { accent-color: var(--accent); flex: none; }
+.qt-row .qt-time {
+  font-family: var(--font-mono); font-size: var(--t-11); color: var(--faint);
+  font-variant-numeric: tabular-nums; flex: none;
+}
+.qt-row .qt-text { font-size: var(--t-12); flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.qt-row.is-off { opacity: .5; cursor: default; }
+.qt-row.is-off:hover { background: transparent; }
+.qt-badge {
+  flex: none; padding: 1px 6px; border-radius: 5px;
+  background: var(--elev-2); color: var(--faint); font-size: 10px;
+}
+
+@media (max-width: 620px) {
+  .tl-add .tl-add-times { width: 100%; }
+  .tl-add .tl-time-in { flex: 1 1 0; }
+  .tl-add .tl-add-text { flex: 1 1 100px; }
+  .qt-list { max-height: 38vh; }
+}
+
+/* 窄屏：引导胶囊仍然保留（页签设置此时收起），额外压缩一档 */
+@media (max-width: 420px) {
+  .topbar-actions .ghost-btn.guide-btn {
+    display: inline-flex; padding: 6px 9px; font-size: var(--t-11);
+  }
+}
+
+/* 窄屏（≤430）：顶栏分两行——图标与标题在上，操作胶囊整排换到第二行右侧，避免横向溢出 */
+@media (max-width: 430px) {
+  .topbar {
+    flex-wrap: wrap; height: auto; min-height: 56px;
+    padding-top: 7px; padding-bottom: 7px; row-gap: 7px;
+  }
+  .actions-toggle { order: 2; }
+  .topbar-actions {
+    order: 3; flex: 1 1 100%;
+    margin-left: 0; justify-content: flex-end; gap: 6px;
+  }
+  .topbar-actions:not([hidden]) { display: flex; }
+}
