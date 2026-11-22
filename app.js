@@ -466,6 +466,26 @@
   }
 
   /* ---------------------------------------------------------
+     顶栏引导胶囊：仅在真正没有任何数据时出现
+     --------------------------------------------------------- */
+  function hasUserData() {
+    if (state.seeded) return true;
+    if (state.lines && Object.keys(state.lines).length) return true;
+    if (allModules().length) return true;
+    return false;
+  }
+
+  function updateGuideButtons() {
+    var show = !hasUserData();
+    ['#btn-guide-sample', '#btn-guide-blank'].forEach(function (sel) {
+      var el = $(sel);
+      if (!el) return;
+      if (show) el.removeAttribute('hidden');
+      else el.setAttribute('hidden', '');
+    });
+  }
+
+  /* ---------------------------------------------------------
      渲染：侧栏
      --------------------------------------------------------- */
   function renderNav() {
@@ -788,6 +808,7 @@
     var canvas = $('#canvas');
     renderBrand();
     applyActions(state.settings.actionsOpen !== false);
+    updateGuideButtons();
     $('#page-title').textContent = page.name;
     $('#page-title').title = page.name + '（点击可重命名）';
     $('#page-title').setAttribute('aria-label', '当前页：' + page.name + '，点击重命名');
@@ -869,11 +890,8 @@
           eyebrow: cnDate(now) + ' · 周' + WEEK[now.getDay()],
           h1: greeting() + '，' + esc(name) + '。',
           lede: '把生活拆成一个个可执行的模块 —— 记录、推进、复盘。所有数据都留在你自己的浏览器里，刷新不丢。',
-          actions: state.seeded ? '' :
-            '<div class="hero-actions">' +
-            '<button class="solid-btn" data-act="sample">载入示例数据</button>' +
-            '<button class="ghost-btn" data-act="add">从空白开始搭建</button>' +
-            '</div>'
+          /* 引导按钮已收进顶栏（载入示例 / 空白搭建），这里只留一句轻提示 */
+          actions: ''
         };
       case 'yearly':
         return {
@@ -957,6 +975,15 @@
         if (m.type === 'timeline') {
           it.time = it.time || '09:00';
           it.tag = typeof it.tag === 'string' ? it.tag : '';
+          /* 时间范围升级：只有单一时间的旧数据，自动补 end = start + 30 分钟 */
+          if (!isTimeStr(it.start)) { it.start = it.time; dailyMigrated = true; }
+          if (!isTimeStr(it.end)) { it.end = fromMin(toMin(it.start) + tlDefMin()); dailyMigrated = true; }
+          if (it.src && typeof it.src === 'object') {
+            if (!it.src.ref || !isDateStr(it.src.date)) delete it.src;
+            else if (typeof it.src.fp !== 'string') it.src.fp = tlFp(it);
+          } else if ('src' in it) {
+            delete it.src;
+          }
         }
       });
       m.data.items = items;
@@ -965,6 +992,156 @@
   }
 
   function taskRef(pageId, moduleId, itemId) { return pageId + '::' + moduleId + '::' + itemId; }
+
+  /* ---------------------------------------------------------
+     日程时间范围（start / end）
+     旧数据只有单一 time：读取时自动补成「原时间 → 原时间 + 30 分钟」，
+     原 time 字段保留不丢，保证月度计划、搜索等旧逻辑继续可用。
+     --------------------------------------------------------- */
+  function tlDefMin() { return 30; }
+
+  function isTimeStr(v) {
+    return typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
+  }
+
+  function toMin(v) {
+    if (!isTimeStr(v)) return null;
+    var p = v.split(':');
+    return Number(p[0]) * 60 + Number(p[1]);
+  }
+
+  function fromMin(n) {
+    n = ((Math.round(n) % 1440) + 1440) % 1440;
+    return ('0' + Math.floor(n / 60)).slice(-2) + ':' + ('0' + (n % 60)).slice(-2);
+  }
+
+  function tlStart(it) {
+    if (it && isTimeStr(it.start)) return it.start;
+    if (it && isTimeStr(it.time)) return it.time;
+    return '09:00';
+  }
+
+  function tlEnd(it) {
+    if (it && isTimeStr(it.end)) return it.end;
+    var s = toMin(tlStart(it));
+    return fromMin(s + tlDefMin());
+  }
+
+  /* 结束早于开始 = 跨零点，按次日处理 */
+  function tlCross(it) { return toMin(tlEnd(it)) < toMin(tlStart(it)); }
+
+  function tlDur(it) {
+    var s = toMin(tlStart(it)), e = toMin(tlEnd(it));
+    return e >= s ? e - s : 1440 - s + e;
+  }
+
+  function tlRangeText(it) {
+    return tlStart(it) + ' – ' + (tlCross(it) ? '次日 ' : '') + tlEnd(it);
+  }
+
+  /* 把 start/end 写回条目，并同步旧的单时间字段 */
+  function tlFix(it) {
+    it.start = tlStart(it);
+    it.end = tlEnd(it);
+    it.time = it.start;
+    return it;
+  }
+
+  /* ---------------------------------------------------------
+     引用某天行程
+     --------------------------------------------------------- */
+  function tlFp(it) {
+    return [String((it && it.text) || ''), tlStart(it), tlEnd(it), String((it && it.tag) || '')].join('\u0001');
+  }
+
+  function dayOfModule(m) {
+    if (dailyView) return dailyView;
+    var d = m && m.data && m.data.date;
+    return isDateStr(d) ? d : today();
+  }
+
+  function tlItemsOf(m) {
+    m.data = (m.data && typeof m.data === 'object') ? m.data : {};
+    if (!Array.isArray(m.data.items)) m.data.items = [];
+    return m.data.items;
+  }
+
+  function findTimelineItem(ref) {
+    var parts = String(ref || '').split('::');
+    if (parts.length !== 3) return null;
+    var pg = pageById(parts[0]);
+    if (!pg) return null;
+    var m = (pg.modules || []).filter(function (x) { return x && x.id === parts[1]; })[0];
+    if (!m || !m.data || !Array.isArray(m.data.items)) return null;
+    var it = m.data.items.filter(function (x) { return x && x.id === parts[2]; })[0];
+    return it ? { page: pg, module: m, item: it } : null;
+  }
+
+  /* 某一天的全部时间轴条目（跨所有页签的时间轴模块） */
+  function dayTimelineItems(date) {
+    var out = [];
+    if (!isDateStr(date)) return out;
+    (state.pages || []).forEach(function (pg) {
+      (pg.modules || []).forEach(function (m) {
+        if (!m || m.type !== 'timeline' || !m.data || !Array.isArray(m.data.items)) return;
+        var modDay = isDateStr(m.data.date) ? m.data.date : '';
+        m.data.items.forEach(function (it) {
+          if (!it) return;
+          var d = isDateStr(it.date) ? it.date : modDay;
+          if (d !== date) return;
+          out.push({ ref: taskRef(pg.id, m.id, it.id), pageId: pg.id, moduleId: m.id, item: it, date: date });
+        });
+      });
+    });
+    out.sort(function (a, b) { return toMin(tlStart(a.item)) - toMin(tlStart(b.item)); });
+    return out;
+  }
+
+  /* 日期 → 已引用的来源日期集合，用于防循环 */
+  function dayQuoteMap() {
+    var map = {};
+    (state.pages || []).forEach(function (pg) {
+      (pg.modules || []).forEach(function (m) {
+        if (!m || m.type !== 'timeline' || !m.data || !Array.isArray(m.data.items)) return;
+        m.data.items.forEach(function (it) {
+          if (!it || !it.src || !isDateStr(it.src.date) || !isDateStr(it.date)) return;
+          if (it.date === it.src.date) return;
+          (map[it.date] = map[it.date] || {})[it.src.date] = 1;
+        });
+      });
+    });
+    return map;
+  }
+
+  function dayReaches(map, from, to, seen) {
+    if (from === to) return true;
+    seen = seen || {};
+    if (seen[from]) return false;
+    seen[from] = 1;
+    var next = map[from] || {};
+    var keys = Object.keys(next);
+    for (var i = 0; i < keys.length; i++) {
+      if (dayReaches(map, keys[i], to, seen)) return true;
+    }
+    return false;
+  }
+
+  function srcLabel(src) {
+    var d = src && isDateStr(src.date) ? src.date : '';
+    return d ? '引自 ' + d.slice(5) : '引自其他日期';
+  }
+
+  /* 引用状态：missing 来源已删 / stale 来源已更新 / 一致 */
+  function srcState(it) {
+    if (!it || !it.src || !it.src.ref) return null;
+    var found = findTimelineItem(it.src.ref);
+    if (!found) return { missing: true, label: srcLabel(it.src) };
+    return {
+      label: srcLabel(it.src),
+      found: found,
+      stale: tlFp(found.item) !== String(it.src.fp || '')
+    };
+  }
 
   /* 汇总某个月份（'YYYY-MM'）全部日程任务，按日期、时间排序 */
   function collectDayTasks(month) {
@@ -982,13 +1159,16 @@
         out.push({
           key: key, date: it.date, text: it.text || '', done: !!it.done,
           time: it.time || '', tag: it.tag || '', type: m.type,
+          start: tlStart(it), end: tlEnd(it),
           pageId: pg.id, moduleId: m.id, item: it
         });
       });
     });
     out.sort(function (a, b) {
       if (a.date !== b.date) return a.date < b.date ? -1 : 1;
-      if (a.time !== b.time) return (a.time || '') < (b.time || '') ? -1 : 1;
+      var am = (a.type === 'timeline' ? toMin(a.start) : toMin(a.time));
+      var bm = (b.type === 'timeline' ? toMin(b.start) : toMin(b.time));
+      if (am !== bm) return am - bm;
       return (a.text || '') < (b.text || '') ? -1 : 1;
     });
     return out;
@@ -1133,7 +1313,7 @@
               '<button class="check' + (t.done ? ' on' : '') + '" type="button" data-check' +
               ' aria-label="' + (t.done ? '标记为未完成' : '标记为完成') + '">' + icon('check') + '</button>' +
               '<button class="agenda-text" type="button" data-jump="' + t.date + '" title="点击跳到当天">' + esc(t.text || '（未命名任务）') + '</button>' +
-              (t.time && t.type === 'timeline' ? '<span class="agenda-time">' + esc(t.time) + '</span>' : '') +
+              (t.type === 'timeline' ? '<span class="agenda-time">' + esc(tlRangeText(t.item)) + '</span>' : '') +
               (t.tag ? '<span class="agenda-tag">' + esc(t.tag) + '</span>' : '') +
               '<button class="pick-btn' + (inPlan ? ' on' : '') + '" type="button" data-pick title="' +
               (inPlan ? '点击移出本月计划' : '加入本月计划（引用，不复制）') + '">' +
@@ -1378,14 +1558,12 @@
     sec.className = 'empty reveal';
     sec.innerHTML =
       '<div class="empty-mark">' + icon(welcome ? 'sparkle' : 'layers') + '</div>' +
-      '<h3>' + (welcome ? '先看看它长什么样' : '这个页签还没有模块') + '</h3>' +
+      '<h3>' + (welcome ? '这里还很空' : '这个页签还没有模块') + '</h3>' +
       '<p>' + (welcome
-        ? '一键载入一套示例内容（年度目标、月度规划、日程、打卡、复盘都齐了），再按自己的方式改。也可以从空白开始。'
+        ? '先从一个小模块开始就好 —— 想看完整的样子，点顶栏的「载入示例」；想自己搭，点「空白搭建」就够了。'
         : '模块是这个系统的最小单元。选一个类型，写个名字，就能开始用。') + '</p>' +
-      '<div class="empty-actions">' +
-      (welcome ? '<button class="solid-btn" data-act="sample">载入示例数据</button>' : '') +
-      '<button class="' + (welcome ? 'ghost-btn' : 'solid-btn') + '" data-act="add">添加模块</button>' +
-      '</div>';
+      (welcome ? '' :
+        '<div class="empty-actions"><button class="solid-btn" data-act="add">添加模块</button></div>');
     return sec;
   }
 
@@ -2081,62 +2259,424 @@
   renderers.timeline = {
     html: function (m) {
       var d = m.data;
-      var day = dailyView || (isDateStr(d.date) ? d.date : today());
-      var items = visibleDailyItems(d.items).slice().sort(function (a, b) { return (a.time || '') < (b.time || '') ? -1 : 1; });
+      var day = dayOfModule(m);
+      var items = visibleDailyItems(d.items).slice().sort(function (a, b) {
+        var x = toMin(tlStart(a)), y = toMin(tlStart(b));
+        return (x == null ? 0 : x) - (y == null ? 0 : y);
+      });
       var doneN = items.filter(function (i) { return i.done; }).length;
       return '<div class="tl-head">' +
         icon('calendar') + '<span>' + esc(cnShort(parseISO(day))) + '</span>' +
-        '<span class="tl-count">' + items.length + ' 项安排' + (doneN ? ' · 完成 ' + doneN : '') + '</span></div>' +
+        '<span class="tl-count">' + items.length + ' 项安排' + (doneN ? ' · 完成 ' + doneN : '') + '</span>' +
+        '<button class="tl-quote" type="button" data-tl-quote title="引用某天行程：选一个历史日期，勾选那天要搬过来的安排，一次复制到这一天">' +
+        icon('copy') + '<span>引用某天</span></button>' +
+        '</div>' +
         '<div class="tl">' +
         (items.length ? items.map(function (i, idx) {
+          var st = srcState(i);
           return '<div class="tl-item' + (idx === 0 && !i.done ? ' is-now' : '') + (i.done ? ' done' : '') + '" data-tl="' + esc(i.id) + '">' +
             (dailyView
               ? '<button class="check tl-check' + (i.done ? ' on' : '') + '" type="button" data-tl-check aria-label="完成">' + icon('check') + '</button>'
               : '<span class="tl-dot"></span>') +
-            '<span class="tl-time">' + esc(i.time || '--:--') + '</span>' +
+            '<button class="tl-time" type="button" data-tl-edit title="点击修改时间范围">' + esc(tlRangeText(i)) + '</button>' +
             '<span class="tl-body"><span class="tl-text">' + esc(i.text) +
-            (i.tag ? '<span class="tl-tag">' + esc(i.tag) + '</span>' : '') + '</span></span>' +
+            (i.tag ? '<span class="tl-tag">' + esc(i.tag) + '</span>' : '') + '</span>' +
+            (st ? '<span class="tl-src-line"><button class="tl-src' +
+              (st.stale ? ' is-stale' : '') + (st.missing ? ' is-gone' : '') + '" type="button" data-tl-src title="' +
+              (st.missing ? '来源条目已被删除，点击可取消引用' : (st.stale ? '来源已更新，点击同步最新内容' : '点开可取消引用，或跳到来源那天')) + '">' +
+              icon('cornerDown') + '<span>' + esc(st.label) +
+              (st.stale ? ' · 来源已更新' : '') + (st.missing ? ' · 来源已删除' : '') + '</span></button></span>' : '') +
+            '</span>' +
             '<button class="todo-del" type="button" aria-label="删除">' + icon('x') + '</button>' +
             '</div>';
         }).join('') : '<p class="empty-line">' + (dailyView ? '这一天还没有安排。' : '今天还没有安排。') + '</p>') +
         '</div>' +
-        '<div class="inline-add">' +
-        '<input class="field" type="time" data-time style="max-width:104px;flex:none" value="09:00">' +
-        '<input class="field" data-text placeholder="做什么">' +
+        '<div class="inline-add tl-add">' +
+        '<span class="tl-add-times">' +
+        '<input class="field tl-time-in" type="time" data-start aria-label="开始时间" value="09:00">' +
+        '<span class="tl-dash">–</span>' +
+        '<input class="field tl-time-in" type="time" data-end aria-label="结束时间" value="09:30">' +
+        '</span>' +
+        '<input class="field tl-add-text" data-text placeholder="做什么">' +
         '<button class="add-btn" data-add type="button">加入</button></div>';
     },
     bind: function (body, card, m) {
       var d = m.data;
       d.items = d.items || [];
-      var day = dailyView || (isDateStr(d.date) ? d.date : today());
+      var day = dayOfModule(m);
       function add() {
-        var t = $('[data-time]', body).value || '09:00';
-        var text = ($('[data-text]', body).value || '').trim();
-        if (!text) { $('[data-text]', body).focus(); return; }
-        d.items.push({ id: uid('e'), time: t, text: text, tag: '', date: day, done: false });
+        var sIn = $('[data-start]', body), eIn = $('[data-end]', body), tIn = $('[data-text]', body);
+        var text = (tIn.value || '').trim();
+        if (!text) { tIn.focus(); return; }
+        var s = isTimeStr(sIn.value) ? sIn.value : '09:00';
+        var e = isTimeStr(eIn.value) ? eIn.value : fromMin(toMin(s) + tlDefMin());
+        if (e === s) { toast('结束时间和开始时间一样，先改成更晚（或跨零点更早）的时间'); eIn.focus(); return; }
+        d.items.push({ id: uid('e'), start: s, end: e, time: s, text: text, tag: '', date: day, done: false });
         save();
         refreshCard(m);
+        tIn.value = '';
+        sIn.value = e === s ? s : e;
+        eIn.value = fromMin(toMin(e) + tlDefMin());
       }
       $('[data-add]', body).addEventListener('click', add);
       $('[data-text]', body).addEventListener('keydown', function (e) { if (e.key === 'Enter') add(); });
+      var qb = $('[data-tl-quote]', body);
+      if (qb) qb.addEventListener('click', function () { openQuotePanel(m, day); });
       $$('[data-tl]', body).forEach(function (row) {
+        var id = row.dataset.tl;
+        function pick() { return d.items.filter(function (x) { return x && x.id === id; })[0]; }
         var del = $('.todo-del', row);
         if (del) del.addEventListener('click', function () {
-          d.items = d.items.filter(function (x) { return x.id !== row.dataset.tl; });
+          var it = pick();
+          var hadSrc = !!(it && it.src);
+          d.items = d.items.filter(function (x) { return !x || x.id !== id; });
           save();
           refreshCard(m);
+          if (hadSrc) toast('已删除这一条（它原本是一条例程引用，来源那天不受影响）');
         });
         var ck = $('[data-tl-check]', row);
         if (ck) ck.addEventListener('click', function () {
-          var it = d.items.filter(function (x) { return x.id === row.dataset.tl; })[0];
+          var it = pick();
           if (!it) return;
           it.done = !it.done;
           save();
           refreshCard(m);
         });
+        var ed = $('[data-tl-edit]', row);
+        if (ed) ed.addEventListener('click', function () {
+          var it = pick();
+          if (it) openTlEdit(m, it);
+        });
+        var sr = $('[data-tl-src]', row);
+        if (sr) sr.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var it = pick();
+          if (it) openSrcActions(m, it);
+        });
       });
     }
   };
+
+  /* -------- 时间轴：时间范围 + 引用某天行程 -------- */
+  function fmtDur(min) {
+    var n = Math.max(0, Math.round(Number(min) || 0));
+    var h = Math.floor(n / 60), mm = n % 60;
+    if (!h) return mm + ' 分钟';
+    return h + ' 小时' + (mm ? ' ' + mm + ' 分钟' : '');
+  }
+
+  /* 有行程的历史日期（不含当天），最近的排前面 */
+  function recentDaysWithItems(target, limit) {
+    var cnt = {};
+    (state.pages || []).forEach(function (pg) {
+      (pg.modules || []).forEach(function (m) {
+        if (!m || m.type !== 'timeline' || !m.data || !Array.isArray(m.data.items)) return;
+        var modDay = isDateStr(m.data.date) ? m.data.date : '';
+        m.data.items.forEach(function (it) {
+          if (!it) return;
+          var dt = isDateStr(it.date) ? it.date : modDay;
+          if (!dt || dt >= target) return;
+          cnt[dt] = (cnt[dt] || 0) + 1;
+        });
+      });
+    });
+    return Object.keys(cnt).sort().reverse().slice(0, limit || 6).map(function (dt) {
+      return { date: dt, n: cnt[dt] };
+    });
+  }
+
+  /* 某天的全部时间轴条目（用于引用预览） */
+  function dayItemsAll(date) {
+    var list = dayTimelineItems(date).filter(function (x) {
+      /* 被隐藏（删除但保留历史）的条目不再参与引用 */
+      return !(x.item && x.item.hidden);
+    });
+    return list;
+  }
+
+  function openTlEdit(m, it) {
+    var day = isDateStr(it.date) ? it.date : dayOfModule(m);
+    var st = srcState(it);
+    openDialog(
+      '<h3>编辑安排</h3>' +
+      '<p class="sub">' + esc(cnDate(parseISO(day))) + ' · 结束早于开始会按次日处理</p>' +
+      '<div class="sheet-label">时间范围</div>' +
+      '<div class="tl-form-row">' +
+      '<input class="field" type="time" data-f-start value="' + esc(tlStart(it)) + '" aria-label="开始时间">' +
+      '<span class="tl-dash">–</span>' +
+      '<input class="field" type="time" data-f-end value="' + esc(tlEnd(it)) + '" aria-label="结束时间">' +
+      '</div>' +
+      '<p class="tl-hint" data-f-hint></p>' +
+      '<div class="sheet-label">内容</div>' +
+      '<input class="field tl-f-wide" data-f-text maxlength="80" placeholder="做什么" value="' + esc(it.text || '') + '">' +
+      '<div class="sheet-label">标签</div>' +
+      '<input class="field tl-f-wide" data-f-tag maxlength="12" placeholder="可选，例如 晨间" value="' + esc(it.tag || '') + '">' +
+      (st && !st.missing ? '<p class="tl-src-note">这一条' + esc(st.label) + '，改这里不会影响来源那天。</p>' : '') +
+      (st && st.missing ? '<p class="tl-src-note">来源条目已被删除，这一条现在是独立安排。</p>' : '') +
+      '<div class="sheet-actions">' +
+      '<button class="ghost-btn" data-close>取消</button>' +
+      '<button class="solid-btn" data-ok>保存</button></div>',
+      function (sheet, close) {
+        var sIn = $('[data-f-start]', sheet), eIn = $('[data-f-end]', sheet), hint = $('[data-f-hint]', sheet);
+        function sync() {
+          var s = isTimeStr(sIn.value) ? sIn.value : tlStart(it);
+          var e = isTimeStr(eIn.value) ? eIn.value : tlEnd(it);
+          if (s === e) {
+            hint.className = 'tl-hint is-bad';
+            hint.textContent = '结束时间不能和开始时间相同';
+            return;
+          }
+          var probe = { start: s, end: e };
+          var cross = tlCross(probe);
+          hint.className = 'tl-hint' + (cross ? ' is-cross' : '');
+          hint.textContent = '时长 ' + fmtDur(tlDur(probe)) + (cross ? ' · 跨零点，结束算作次日' : '');
+        }
+        [sIn, eIn].forEach(function (inp) {
+          inp.addEventListener('input', sync);
+          inp.addEventListener('change', sync);
+        });
+        sync();
+        $('[data-ok]', sheet).addEventListener('click', function () {
+          var s = sIn.value, e = eIn.value;
+          if (!isTimeStr(s) || !isTimeStr(e)) { toast('开始和结束时间都要填完整'); return; }
+          if (s === e) { toast('结束时间需要晚于开始时间，跨零点可直接选更早的时间'); return; }
+          it.start = s; it.end = e; it.time = s;
+          var txt = ($('[data-f-text]', sheet).value || '').trim();
+          it.text = txt || it.text || '未命名安排';
+          it.tag = ($('[data-f-tag]', sheet).value || '').trim();
+          save();
+          close();
+          refreshCard(m);
+          toast('已更新「' + it.text + '」· ' + tlRangeText(it));
+        });
+      }
+    );
+  }
+
+  function openSrcActions(m, it) {
+    var st = srcState(it);
+    if (!st) return;
+    if (st.stale && st.found) {
+      syncFromSrc(m, it, st.found);
+      return;
+    }
+    var day = it.src && isDateStr(it.src.date) ? it.src.date : '';
+    openDialog(
+      '<h3>这条例程' + esc(st.label) + '</h3>' +
+      '<p class="sub">' + (st.missing
+        ? '来源那天的那一条已经被删掉了，这里只剩复制过来的一份。'
+        : '它当初从来源那天整条复制过来，之后两边各自独立；来源那天的改动不会自动影响到这里。') + '</p>' +
+      (day ? '<p class="tl-src-note">来源日期：' + esc(cnDate(parseISO(day))) + '</p>' : '') +
+      '<div class="sheet-actions">' +
+      '<button class="ghost-btn" data-close>关闭</button>' +
+      (day ? '<button class="ghost-btn" data-jump>跳到那天</button>' : '') +
+      '<button class="solid-btn" data-unlink>取消引用</button></div>',
+      function (sheet, close) {
+        var jump = $('[data-jump]', sheet);
+        if (jump) jump.addEventListener('click', function () {
+          close();
+          goToDate(day);
+        });
+        $('[data-unlink]', sheet).addEventListener('click', function () {
+          delete it.src;
+          save();
+          close();
+          renderPage();
+          toast('已取消引用，这一条现在是独立安排');
+        });
+      }
+    );
+  }
+
+  /* 来源更新：一键把内容同步成来源最新 */
+  function syncFromSrc(m, it, found) {
+    var s = found.item;
+    it.text = String(s.text || '');
+    it.tag = String(s.tag || '');
+    it.start = tlStart(s);
+    it.end = tlEnd(s);
+    it.time = it.start;
+    it.src = it.src || {};
+    it.src.fp = tlFp(s);
+    if (isDateStr(s.date)) it.src.date = s.date;
+    save();
+    renderPage();
+    toast('已同步为来源最新内容 · ' + tlRangeText(it));
+  }
+
+  function openQuotePanel(m, day) {
+    var target = day;
+    var picked = {};
+    var days = recentDaysWithItems(target, 6);
+    var srcDay = days.length ? days[0].date : shiftISO(target, -1);
+    var targetItems = tlItemsOf(m);
+
+    function itemDay(x) {
+      return isDateStr(x && x.date) ? x.date : dayOfModule(m);
+    }
+
+    function listOf() {
+      return dayItemsAll(srcDay).filter(function (x) {
+        return !!(x.item && String(x.item.text || '').trim());
+      });
+    }
+
+    openDialog(
+      '<h3>引用某天行程</h3>' +
+      '<p class="sub">选一天，把那天要用的安排勾过来，一次复制到' + esc(cnShort(parseISO(target))) +
+      '；复制后条目上会留「引自 X」标记，来源那天的改动会在标记处提示。</p>' +
+      '<div class="sheet-label">来源日期</div>' +
+      '<div class="tl-form-row"><input class="field tl-f-date" type="date" data-src max="' + shiftISO(target, -1) + '" value="' + esc(srcDay) + '"></div>' +
+      '<div class="qt-days" data-days></div>' +
+      '<div class="qt-bar"><label class="qt-all"><input type="checkbox" data-all><span>全选</span></label>' +
+      '<span class="qt-hint" data-hint></span></div>' +
+      '<div class="qt-list" data-list></div>' +
+      '<div class="sheet-actions">' +
+      '<button class="ghost-btn" data-close>取消</button>' +
+      '<button class="solid-btn" data-ok disabled>添加 0 项</button></div>',
+      function (sheet, close) {
+        var dateIn = $('[data-src]', sheet);
+        var daysBox = $('[data-days]', sheet);
+        var listBox = $('[data-list]', sheet);
+        var hint = $('[data-hint]', sheet);
+        var allBox = $('[data-all]', sheet);
+        var okBtn = $('[data-ok]', sheet);
+
+        function blocked() {
+          if (srcDay === target) return '不能引用当天，请选择更早的日期。';
+          if (dayReaches(dayQuoteMap(), srcDay, target)) {
+            return '「' + srcDay.slice(5) + '」已经引用了这一天的安排，再反向引用会绕成循环，换一天吧。';
+          }
+          return '';
+        }
+
+        function pickedCount() {
+          return Object.keys(picked).filter(function (k) { return picked[k]; }).length;
+        }
+
+        function renderDays() {
+          daysBox.innerHTML = days.length ? days.map(function (x) {
+            var wait = dayReaches(dayQuoteMap(), x.date, target);
+            return '<button class="qt-day' + (x.date === srcDay ? ' active' : '') + (wait ? ' is-wait' : '') +
+              '" type="button" data-day="' + esc(x.date) + '" title="' + esc(cnDate(parseISO(x.date))) + '">' +
+              x.date.slice(5) + '<i>' + x.n + '</i></button>';
+          }).join('') : '<span class="qt-none">最近没有可引用的历史行程</span>';
+          $$('[data-day]', daysBox).forEach(function (b) {
+            b.addEventListener('click', function () {
+              srcDay = b.dataset.day;
+              dateIn.value = srcDay;
+              picked = {};
+              renderDays();
+              renderList();
+            });
+          });
+        }
+
+        function renderList() {
+          var why = blocked();
+          allBox.checked = false;
+          allBox.disabled = !!why;
+          okBtn.textContent = '添加 0 项';
+          okBtn.disabled = true;
+          if (why) {
+            hint.className = 'qt-hint is-warn';
+            hint.textContent = why;
+            listBox.innerHTML = '<p class="empty-line">' + esc(why) + '</p>';
+            return;
+          }
+          var list = listOf();
+          if (!list.length) {
+            hint.className = 'qt-hint';
+            hint.textContent = '';
+            listBox.innerHTML = '<p class="empty-line">这一天没有可复制的安排。</p>';
+            return;
+          }
+          hint.className = 'qt-hint';
+          hint.textContent = '共 ' + list.length + ' 项';
+          listBox.innerHTML = list.map(function (x) {
+            var it = x.item;
+            var ref = x.ref;
+            var dup = targetItems.some(function (y) {
+              if (!y || itemDay(y) !== target) return false;
+              return String(y.text || '') === String(it.text || '') &&
+                tlStart(y) === tlStart(it) && tlEnd(y) === tlEnd(it);
+            });
+            var dis = dup || !!it.hidden;
+            return '<label class="qt-row' + (dis ? ' is-off' : '') + '">' +
+              '<input type="checkbox" data-ref="' + esc(ref) + '"' + (dis ? ' disabled' : '') + '>' +
+              '<span class="qt-time">' + esc(tlRangeText(it)) + '</span>' +
+              '<span class="qt-text">' + esc(it.text) + '</span>' +
+              (dup ? '<span class="qt-badge">当天已有</span>' : '') +
+              '</label>';
+          }).join('');
+          $$('[data-ref]', listBox).forEach(function (box) {
+            box.addEventListener('change', function () {
+              picked[box.dataset.ref] = box.checked;
+              var n = pickedCount();
+              okBtn.textContent = '添加 ' + n + ' 项';
+              okBtn.disabled = !n;
+            });
+          });
+          allBox.onchange = function () {
+            var on = allBox.checked;
+            $$('[data-ref]', listBox).forEach(function (box) {
+              if (box.disabled) return;
+              box.checked = on;
+              picked[box.dataset.ref] = on;
+            });
+            var n = pickedCount();
+            okBtn.textContent = '添加 ' + n + ' 项';
+            okBtn.disabled = !n;
+          };
+        }
+
+        dateIn.addEventListener('change', function () {
+          srcDay = isDateStr(dateIn.value) ? dateIn.value : srcDay;
+          picked = {};
+          renderDays();
+          renderList();
+        });
+
+        okBtn.addEventListener('click', function () {
+          var refs = Object.keys(picked).filter(function (k) { return picked[k]; });
+          if (!refs.length) return;
+          var added = 0, skipped = 0;
+          refs.forEach(function (ref) {
+            var found = findTimelineItem(ref);
+            if (!found) { skipped++; return; }
+            var s = found.item;
+            if (!String(s.text || '').trim()) { skipped++; return; }
+            var dup = targetItems.some(function (y) {
+              if (!y || itemDay(y) !== target) return false;
+              return String(y.text || '') === String(s.text || '') &&
+                tlStart(y) === tlStart(s) && tlEnd(y) === tlEnd(s);
+            });
+            if (dup) { skipped++; return; }
+            var rec = {
+              id: uid('e'),
+              start: tlStart(s),
+              end: tlEnd(s),
+              time: tlStart(s),
+              text: String(s.text || ''),
+              tag: String(s.tag || ''),
+              date: target,
+              done: false,
+              src: { ref: ref, date: srcDay, fp: tlFp(s) }
+            };
+            targetItems.push(rec);
+            added++;
+          });
+          save();
+          close();
+          renderPage();
+          toast('已从 ' + srcDay.slice(5) + ' 复制 ' + added + ' 项' + (skipped ? '，跳过 ' + skipped + ' 项重复或失效条目' : ''));
+        });
+
+        renderDays();
+        renderList();
+      }
+    );
+  }
 
   /* -------- 数字指标 -------- */
   renderers.metric = {
@@ -2567,6 +3107,7 @@
       function (sheet, close) {
         $('[data-ok]', sheet).addEventListener('click', function () {
           state = buildSample();
+          (state.pages || []).forEach(function (pg) { migrateDailyTasks(pg, state); });
           save();
           close();
           renderNav();
@@ -2701,12 +3242,15 @@
       mkMod('timeline', '今日时间轴', 'clock', '#3f8f63', 'full', {
         date: t,
         items: [
-          { id: uid('e'), time: '07:20', text: '起床 · 拉伸 10 分钟 · 一杯水', tag: '晨间' },
-          { id: uid('e'), time: '09:00', text: '深度工作：模块引擎与拖拽排序', tag: '专注' },
-          { id: uid('e'), time: '12:30', text: '午饭 + 楼下走一圈', tag: '休息' },
-          { id: uid('e'), time: '14:00', text: '11 月复盘会，过一遍关键结果', tag: '工作' },
-          { id: uid('e'), time: '19:00', text: '读《深度工作》30 页', tag: '阅读' },
-          { id: uid('e'), time: '22:30', text: '关电脑，写 3 行日记', tag: '收尾' }
+          { id: uid('e'), date: t, time: '07:20', text: '起床 · 拉伸 10 分钟 · 一杯水', tag: '晨间' },
+          { id: uid('e'), date: t, time: '09:00', text: '深度工作：模块引擎与拖拽排序', tag: '专注' },
+          { id: uid('e'), date: t, time: '12:30', text: '午饭 + 楼下走一圈', tag: '休息' },
+          { id: uid('e'), date: t, time: '14:00', text: '11 月复盘会，过一遍关键结果', tag: '工作' },
+          { id: uid('e'), date: t, time: '19:00', text: '读《深度工作》30 页', tag: '阅读' },
+          { id: uid('e'), date: t, time: '22:30', text: '关电脑，写 3 行日记', tag: '收尾' },
+          /* 前一天的两条，用来演示「引用某天行程」：在今天的页面上把它们复制过来 */
+          { id: uid('e'), date: shiftISO(t, -1), start: '07:30', end: '07:50', time: '07:30', text: '晨间拉伸 + 冥想', tag: '晨间' },
+          { id: uid('e'), date: shiftISO(t, -1), start: '20:00', end: '21:00', time: '20:00', text: '跑步 5 公里', tag: '运动' }
         ]
       }),
       mkMod('todo', '三件大事', 'check', '#c98b5e', 'half', {
@@ -4918,7 +5462,11 @@
         if (a === 'reset') resetAll();
         if (a === 'sample') {
           if (state.seeded || allModules().length) loadSample();
-          else { state = buildSample(); save(); renderNav(); renderPage(); toast('示例数据已载入'); }
+          else {
+            state = buildSample();
+            (state.pages || []).forEach(function (pg) { migrateDailyTasks(pg, state); });
+            save(); renderNav(); renderPage(); toast('示例数据已载入');
+          }
         }
         if (a === 'home') {
           state.current = 'overview';
