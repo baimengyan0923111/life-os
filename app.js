@@ -145,7 +145,7 @@
     applyTheme(next);
   }
 
-  var PALETTE = ['#3f8f63', '#6fae8b', '#5b93bf', '#c98b5e', '#b07cb5', '#d9a13d', '#6f7ba8', '#c96b6b', '#7a8b6f'];
+  var PALETTE = ['#6b4ca8', '#8a6fc7', '#a98ad6', '#7f6bb5', '#b07cb5', '#c48fb4', '#6f7ba8', '#9c8fc0', '#b3a1d9'];
 
   var MODULE_TYPES = [
     { type: 'habit', name: '习惯打卡', desc: '按天打钩的网格', icon: 'grid' },
@@ -163,7 +163,7 @@
   };
 
   var LIFE8 = [
-    { id: 'career', name: '主业', icon: 'brief', color: '#3f8f63' },
+    { id: 'career', name: '主业', icon: 'brief', color: '#6b4ca8' },
     { id: 'workplace', name: '职场', icon: 'users', color: '#5b93bf' },
     { id: 'solo', name: '一人公司', icon: 'sparkle', color: '#b07cb5' },
     { id: 'finance', name: '财务管理', icon: 'wallet', color: '#c98b5e' },
@@ -220,7 +220,7 @@
     });
   }
   function hexA(hex, a) {
-    var h = (hex || '#3f8f63').replace('#', '');
+    var h = (hex || '#6b4ca8').replace('#', '');
     if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
     var n = parseInt(h, 16);
     return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
@@ -1444,7 +1444,7 @@
 
     var cards = [
       {
-        label: '今日待办', icon: 'check', tone: '#3f8f63',
+        label: '今日待办', icon: 'check', tone: '#6b4ca8',
         num: todoDone, unit: '/ ' + todoTotal,
         note: todoTotal ? '完成度 ' + Math.round(todoDone / todoTotal * 100) + '%' : '还没有待办模块',
         bar: todoTotal ? Math.round(todoDone / todoTotal * 100) : 0
@@ -1512,11 +1512,11 @@
       card.className = 'board-card';
       card.innerHTML =
         '<div class="board-top">' +
-        '<span class="board-icon" style="background:' + hexA(d.color, 0.13) + ';color:' + d.color + '">' + icon(d.icon) + '</span>' +
+        '<span class="board-icon" style="--m-color:' + d.color + '">' + icon(d.icon) + '</span>' +
         '<span class="board-name">' + esc(d.name) + '</span>' +
         '</div>' +
         '<div class="board-score">' + d.score + '<small> / 10</small></div>' +
-        '<div class="board-bar"><i data-w="' + (d.score * 10) + '" style="width:0;background:' + d.color + '"></i></div>' +
+        '<div class="board-bar"><i data-w="' + (d.score * 10) + '" style="width:0;--m-color:' + d.color + '"></i></div>' +
         '<input class="board-range" type="range" min="0" max="10" step="1" value="' + d.score + '" aria-label="' + esc(d.name) + ' 评分">' +
         '<input class="board-note" placeholder="一句话备注" value="' + esc(d.note || '') + '">';
       var range = $('.board-range', card);
@@ -1598,11 +1598,11 @@
     var el = document.createElement('article');
     el.className = 'card' + (m.w === 'full' ? ' w-full' : '');
     el.dataset.mod = m.id;
-    el.style.setProperty('--accent', m.color);
+    el.style.setProperty('--m-color', m.color || 'var(--brand-accent)');
 
     el.innerHTML =
       '<div class="card-head">' +
-      '<span class="card-icon" style="background:' + hexA(m.color, 0.13) + ';color:' + m.color + '">' + icon(m.icon) + '</span>' +
+      '<span class="card-icon" style="--m-color:' + (m.color || '#6b4ca8') + '">' + icon(m.icon) + '</span>' +
       '<span class="card-title">' + esc(m.title) + '</span>' +
       '<span class="card-type">' + (TYPE_NAME[m.type] || '') + '</span>' +
       '<span class="card-tools">' +
@@ -3145,7 +3145,7 @@
     var t = today();
 
     s.life8 = [
-      { id: 'career', name: '主业', icon: 'brief', color: '#3f8f63', score: 8, note: '做深一条主线' },
+      { id: 'career', name: '主业', icon: 'brief', color: '#6b4ca8', score: 8, note: '做深一条主线' },
       { id: 'workplace', name: '职场', icon: 'users', color: '#5b93bf', score: 7, note: '少说，多做，留痕' },
       { id: 'solo', name: '一人公司', icon: 'sparkle', color: '#b07cb5', score: 6, note: '先跑通最小闭环' },
       { id: 'finance', name: '财务管理', icon: 'wallet', color: '#c98b5e', score: 7, note: '每月 1 号对账' },
@@ -3157,7 +3157,7 @@
 
     /* ---- 概览 ---- */
     pageByIdIn(s, 'overview').modules = [
-      mkMod('todo', '今天的三件大事', 'check', '#3f8f63', 'half', {
+      mkMod('todo', '今天的三件大事', 'check', '#6b4ca8', 'half', {
         items: [
           { id: uid('t'), text: '把人生管理系统的模块引擎跑通', done: true },
           { id: uid('t'), text: '给 12 月排一版内容日历', done: false },
@@ -3188,7 +3188,7 @@
           ]
         }]
       }),
-      mkMod('okr', '工作 · 把专业做成资产', 'brief', '#3f8f63', 'half', {
+      mkMod('okr', '工作 · 把专业做成资产', 'brief', '#6b4ca8', 'half', {
         objectives: [{
           id: uid('o'), title: '从「干活的人」变成「有方法的人」', krs: [
             { id: uid('k'), text: '交付旗舰项目', cur: 3, target: 4, unit: '个' },
@@ -3213,7 +3213,7 @@
 
     /* ---- 月度规划 ---- */
     pageByIdIn(s, 'monthly').modules = [
-      mkMod('todo', '11 月目标拆解', 'target', '#3f8f63', 'half', {
+      mkMod('todo', '11 月目标拆解', 'target', '#6b4ca8', 'half', {
         items: [
           { id: uid('t'), text: '首页改版：3 个页面全部上线', done: true, meta: '工作' },
           { id: uid('t'), text: '完成年度复盘初稿', done: false, meta: '复盘' },
@@ -3226,7 +3226,7 @@
         value: 3, unit: '本', label: '目标 4 本 · 每天 30 页', step: 1,
         history: [{ d: '2026-07', v: 2 }, { d: '2026-08', v: 4 }, { d: '2026-09', v: 3 }, { d: '2026-10', v: 2 }, { d: '2026-11', v: 3 }]
       }),
-      mkMod('habit', '每日打卡', 'grid', '#3f8f63', 'full', {
+      mkMod('habit', '每日打卡', 'grid', '#6b4ca8', 'full', {
         month: mk,
         habits: [
           { id: uid('h'), name: '运动 30 分钟', checks: mockChecks(26, 2) },
@@ -3239,7 +3239,7 @@
 
     /* ---- 每日日程 ---- */
     pageByIdIn(s, 'daily').modules = [
-      mkMod('timeline', '今日时间轴', 'clock', '#3f8f63', 'full', {
+      mkMod('timeline', '今日时间轴', 'clock', '#6b4ca8', 'full', {
         date: t,
         items: [
           { id: uid('e'), date: t, time: '07:20', text: '起床 · 拉伸 10 分钟 · 一杯水', tag: '晨间' },
@@ -3267,7 +3267,7 @@
 
     /* ---- 八大模块 ---- */
     pageByIdIn(s, 'life8').modules = [
-      mkMod('note', '八个抽屉怎么用', 'bulb', '#3f8f63', 'full', {
+      mkMod('note', '八个抽屉怎么用', 'bulb', '#6b4ca8', 'full', {
         text: '每月底花 10 分钟：给八格各打一个分，写一句备注。\n\n不是为了追求每格都 10 分 —— 而是看清「哪一格连续三个月在掉分」。那通常就是下一步要处理的事。'
       })
     ];
@@ -3288,7 +3288,7 @@
           }
         ]
       }),
-      mkMod('note', '我的决策原则', 'compass', '#3f8f63', 'full', {
+      mkMod('note', '我的决策原则', 'compass', '#6b4ca8', 'full', {
         text: '1.  reversible 的决定，快；不可逆的决定，慢。\n2.  先写下「我现在的假设是什么」，再动手。\n3.  如果一件事只能靠意志力维持，说明系统设计错了。'
       })
     ];
