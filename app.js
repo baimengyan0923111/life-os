@@ -9104,7 +9104,13 @@
     function paints() {
       var year = state.settings.yearView || new Date().getFullYear();
       var all = v13YearGoals();
+      /* 筛选态兜底：settings.y13f 缺失或字段非法时回落到「全部」，避免读属性抛错把整页渲染打断 */
+      if (!state.settings.y13f || typeof state.settings.y13f !== 'object') {
+        state.settings.y13f = { domain: '', status: '' };
+      }
       var f = state.settings.y13f;
+      if (V13_DOMAINS.indexOf(f.domain) < 0) f.domain = '';
+      if (f.status !== '' && !v13Pick(V13_GOAL_ST, f.status)) f.status = '';
       var risk = all.filter(function (g) { return g.status === 'watch'; }).length;
       var doneN = all.filter(function (g) { return g.status === 'done' || v13GoalPct(g) >= 100; }).length;
       var pct = all.length ? Math.round(all.reduce(function (s, g) { return s + v13GoalPct(g); }, 0) / all.length) : 0;
@@ -9214,6 +9220,9 @@
           v13GoalDetail(c.dataset.goal);
         });
       });
+      /* 关键：paints() 每次都是整块重建 DOM，新生成的 .reveal 节点必须重新挂观察器，
+         否则它们会停在 opacity:0（.reveal 的初始态），看上去就是「筛选后一张卡都没有」。 */
+      observeReveal(sec);
     }
 
     paints();
