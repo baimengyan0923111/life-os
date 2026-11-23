@@ -1700,6 +1700,16 @@
           h1: '今年，要走到<em>哪里</em>。',
           lede: '每个目标写清动机、关键结果与阶段节点；进度只回一栏数字，风险摆在明面上。'
         };
+      case 'monthplan': {
+        var mk0 = monthKeyNow();
+        var mw0 = monthWeekList(mk0);
+        var mIsNow = mk0 === monthKey(now);
+        return {
+          eyebrow: '月度计划 · ' + mk0.slice(0, 4) + ' 年 ' + Number(mk0.slice(5, 7)) + ' 月 · ' + mw0.length + ' 周' + (mIsNow ? ' · 本月' : ''),
+          h1: '这个月，<em>只推三件事</em>。',
+          lede: '把年度目标拆到月份：一句月主题、三件重点、几条关键结果；再往下交给每一周去执行。'
+        };
+      }
       case 'monthly': {
         var ws0 = isDateStr(state.settings.planWeek) ? weekStartISO(state.settings.planWeek) : weekStartISO(today());
         return {
@@ -9859,13 +9869,13 @@
       $$('[data-mstep]', sec).forEach(function (b) {
         b.addEventListener('click', function () {
           state.settings.monthView = monthShiftKey(mk, Number(b.dataset.mstep));
-          save(); paints();
+          save(); renderPage();
         });
       });
       var mt = $('[data-mtoday]', sec);
       if (mt) mt.addEventListener('click', function () {
         state.settings.monthView = monthKey(new Date());
-        save(); paints();
+        save(); renderPage();
       });
       var themeIn = $('[data-mtheme]', sec);
       if (themeIn) {
