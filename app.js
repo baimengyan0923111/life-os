@@ -9484,7 +9484,11 @@
         '</div>' +
         '<div class="w-focus-box"><div class="w-sec-h"><h3>本周最重要的 3 件事</h3><p>只放真正要推进的</p></div>' + focusSlots + '</div>' +
         '<div class="w-add">' +
+        '<div class="w-add-main">' +
         '<input class="field" data-nt placeholder="添加任务，回车确认" maxlength="120">' +
+        '<button class="solid-btn tiny w-add-btn" type="button" data-nt-add>添加</button>' +
+        '</div>' +
+        '<button class="w-add-more" type="button" data-nt-more aria-expanded="false">更多选项 · 目标 / 日期 / 优先级</button>' +
         '<div class="w-add-row">' +
         '<select class="field slim" data-nt-goal><option value="">不关联目标</option>' +
         yearGoals.map(function (g) { return '<option value="' + esc(g.id) + '">' + esc(g.title) + '</option>'; }).join('') + '</select>' +
@@ -9494,7 +9498,6 @@
         '<select class="field slim" data-nt-day><option value="">未排期</option>' + days.map(function (d) {
           return '<option value="' + d + '">' + v13Md(d) + ' 周' + WEEK[parseISO(d).getDay()] + '</option>';
         }).join('') + '</select>' +
-        '<button class="solid-btn tiny" type="button" data-nt-add>添加</button>' +
         '</div></div>' +
         '<div class="w-list">' + (taskRows || '<div class="v13-empty sm"><b>这一周还没有任务</b><span>先加 1 – 3 件真正重要的事，不必排满。</span></div>') + '</div>' +
         '<div class="w-from-goal"><button class="ghost-btn tiny" type="button" data-from-goal>' + icon('flag') + ' 从年度目标添加任务</button></div>' +
@@ -9638,6 +9641,13 @@
         toast('已加入本周');
       }
       if (addBtn) addBtn.addEventListener('click', addTask);
+      var moreBtn = $('[data-nt-more]', sec);
+      if (moreBtn) moreBtn.addEventListener('click', function () {
+        var box = moreBtn.closest('.w-add');
+        var on = box.classList.toggle('open');
+        moreBtn.setAttribute('aria-expanded', on ? 'true' : 'false');
+        if (on) { var f = $('[data-nt-goal]', sec); if (f) f.focus(); }
+      });
       var nt = $('[data-nt]', sec);
       if (nt) nt.addEventListener('keydown', function (e) { if (e.key === 'Enter') addTask(); });
       var fg = $('[data-from-goal]', sec);
