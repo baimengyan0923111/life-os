@@ -786,7 +786,15 @@
           var src = objMap(h.checks);
           var safe = {};
           Object.keys(src).forEach(function (k) { if (isDateStr(k) && src[k]) safe[k] = true; });
-          return { id: h.id || uid('h'), name: str(h.name, '未命名习惯'), checks: safe, goal: Math.max(0, num(h.goal, 0)) };
+          /* V17：goal 现结构是对象 { per:'week', times:N }；旧数据里可能是数字或已损坏。
+             之前这里按数字洗（num({...}) → 0），goal 被洗成 0 后 v13Normalize 再按对象补齐成默认 3，
+             于是「改完每周目标次数，一刷新就变回原值」。这里统一收敛成对象并夹到 1–7。 */
+          var g = h.goal, times = 0;
+          if (isPlainObj(g)) times = Number(g.times);
+          else if (g !== null && g !== undefined && g !== '' && isFinite(Number(g))) times = Number(g);
+          if (!isFinite(times) || times <= 0) times = 3;
+          times = clamp(Math.round(times), 1, 7);
+          return { id: h.id || uid('h'), name: str(h.name, '未命名习惯'), checks: safe, goal: { per: 'week', times: times } };
         }).filter(function (h) { return !!h.name; });
         break;
       case 'timeline':
