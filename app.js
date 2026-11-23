@@ -307,6 +307,169 @@
   function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
   function clamp(n, a, b) { return Math.min(b, Math.max(a, n)); }
 
+  /* ---------------------------------------------------------
+     长按连发：短按走一次，长按 380ms 后每 85ms 一次（稍后提速到 55ms）
+     step() 只改数据 + 局部重绘；commit() 在松手时统一保存并重建卡片
+     --------------------------------------------------------- */
+  function bindStepHold(btn, step, opts) {
+    if (!btn || btn.dataset.holdBound) return;
+    btn.dataset.holdBound = '1';
+    opts = opts || {};
+    var delay = opts.delay || 380;
+    var rate = opts.rate || 85;
+    var wait = null, loop = null, count = 0, long = false, skipClick = false;
+
+    function stop() {
+      if (wait) { clearTimeout(wait); wait = null; }
+      if (loop) { clearInterval(loop); loop = null; }
+      btn.classList.remove('holding');
+      document.removeEventListener('pointerup', onUp, true);
+      document.removeEventListener('pointercancel', onUp, true);
+      window.removeEventListener('blur', onUp, true);
+    }
+    function onUp() {
+      var wasLong = long;
+      stop();
+      if (wasLong) {
+        skipClick = true;
+        long = false;
+        if (opts.commit) opts.commit();
+      }
+    }
+    function tick() {
+      count += 1;
+      step(count);
+    }
+
+    btn.addEventListener('pointerdown', function (e) {
+      if (e.button != null && e.button !== 0) return;
+      if (btn.disabled) return;
+      count = 0; long = false; skipClick = false;
+      document.addEventListener('pointerup', onUp, true);
+      document.addEventListener('pointercancel', onUp, true);
+      window.addEventListener('blur', onUp, true);
+      wait = setTimeout(function () {
+        wait = null;
+        long = true;
+        btn.classList.add('holding');
+        tick();
+        loop = setInterval(function () {
+          if (count === 8) {
+            clearInterval(loop);
+            loop = setInterval(tick, 55);
+          }
+          tick();
+        }, rate);
+      }, delay);
+    });
+
+    /* 按下后还没进入长按就移开：取消计时，让 click 正常走一次 */
+    btn.addEventListener('pointerleave', function () {
+      if (!long) stop();
+    });
+    btn.addEventListener('contextmenu', function (e) {
+      if (long) e.preventDefault();
+    });
+    btn.addEventListener('click', function (e) {
+      if (skipClick || long) {
+        skipClick = false;
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      step(0);
+      if (opts.commit) opts.commit();
+    });
+  }
+
+  /* 数量展示：整数值不带小数点 */
+  function fmtQty(v) {
+    var n = Number(v) || 0;
+    return Number.isInteger(n) ? String(n) : String(Math.round(n * 10) / 10);
+  }
+  function krPct(k) { return clamp(k.target ? (k.cur / k.target) * 100 : 0, 0, 100); }
+  function objSubText(krs) {
+    var hit = krs.filter(function (k) { return krPct(k) >= 100; }).length;
+    var left = krs.length - hit;
+    return krs.length
+      ? ('小目标 ' + krs.length + ' 个 · 已达成 ' + hit + ' 个' + (left > 0 ? ' · 还差 ' + left + ' 个' : ' · 全部达成'))
+      : '还没拆小目标，先定一个能落地的小步';
+  }
+
+  /* OKR 小目标 / 大目标的局部重绘（长按连发时不重建整卡，避免按钮消失） */
+  function paintObj(objEl, o) {
+    if (!objEl || !o) return;
+    var krs = o.krs || [];
+    var pcts = krs.map(krPct);
+    var pct = krs.length ? Math.round(pcts.reduce(function (a, b) { return a + b; }, 0) / pcts.length) : 0;
+    var left = pcts.filter(function (p) { return p < 100; }).length;
+    objEl.classList.toggle('obj-allhit', !!krs.length && !left);
+    var ring = $('.obj-ring', objEl);
+    if (ring) {
+      ring.style.setProperty('--p', pct);
+      ring.setAttribute('aria-label', '总进度 ' + pct + '%');
+      var rb = $('b', ring);
+      if (rb) rb.textContent = pct + '%';
+    }
+    var sub = $('.obj-sub', objEl);
+    if (sub) sub.textContent = objSubText(krs);
+  }
+
+  function paintKr(krEl, k, o) {
+    if (!krEl || !k) return;
+    var p = krPct(k);
+    var hit = p >= 100;
+    krEl.classList.toggle('kr-hit', hit);
+    var node = $('.kr-node', krEl);
+    if (node) {
+      if (hit) node.innerHTML = icon('check');
+      else node.textContent = krEl.dataset.idx || '';
+    }
+    var num = $('.kr-num', krEl);
+    if (num) num.textContent = fmtQty(k.cur) + ' / ' + k.target + (k.unit ? ' ' + k.unit : '');
+    var pctEl = $('.kr-pct', krEl);
+    if (pctEl) pctEl.textContent = Math.round(p) + '%';
+    var bar = $('.kr-bar i', krEl);
+    if (bar) bar.style.width = p.toFixed(1) + '%';
+    paintObj(krEl.closest('.obj'), o);
+  }
+
+  /* 目标进度条 / 计数器 / 指标仪表盘的行内局部重绘 */
+  function paintGoalRow(row, g) {
+    if (!row || !g) return;
+    var pct = g.target > 0 ? clamp(Math.round(g.cur / g.target * 100), 0, 100) : 0;
+    var num = $('.goal-num', row);
+    if (num) {
+      num.innerHTML = '<b>' + fmtQty(g.cur) + '</b> / ' + g.target + (g.unit ? ' ' + esc(g.unit) : '') +
+        ' · ' + pct + '%';
+    }
+    var bar = $('.mini-progress i', row);
+    if (bar) bar.style.width = pct + '%';
+  }
+
+  function paintCounterRow(row, c) {
+    if (!row || !c) return;
+    var val = $('.counter-val b', row);
+    if (val) val.textContent = fmtQty(c.val);
+    if (c.goal > 0) {
+      var bar = $('.mini-progress i', row);
+      if (bar) bar.style.width = clamp(Math.round(c.val / c.goal * 100), 0, 100) + '%';
+    }
+  }
+
+  function paintDashCell(el, k) {
+    if (!el || !k) return;
+    var v = $('.dash-value b', el);
+    if (v) v.textContent = fmtQty(k.value);
+    if (k.target > 0) {
+      var pct = clamp(Math.round(k.value / k.target * 100), 0, 100);
+      var tgt = $('.dash-target', el);
+      if (tgt) tgt.textContent = '目标 ' + k.target + ' · ' + pct + '%';
+      var bar = $('.mini-progress i', el);
+      if (bar) bar.style.width = pct + '%';
+    }
+  }
+
   /* 数字滚动递增：data-to 为目标值，260ms 内缓出逼近（reduced-motion 下直接落位） */
   function animateNums(scope, sel) {
     $$(sel, scope).forEach(function (el) {
@@ -2621,9 +2784,7 @@
         var pct = krs.length ? Math.round(pcts.reduce(function (a, b) { return a + b; }, 0) / pcts.length) : 0;
         var hit = pcts.filter(function (p) { return p >= 100; }).length;
         var left = krs.length - hit;
-        var sub = krs.length
-          ? ('小目标 ' + krs.length + ' 个 · 已达成 ' + hit + ' 个' + (left > 0 ? ' · 还差 ' + left + ' 个' : ' · 全部达成'))
-          : '还没拆小目标，先定一个能落地的小步';
+        var sub = objSubText(krs);
         return '<div class="obj' + (krs.length && !left ? ' obj-allhit' : '') + '" data-obj="' + o.id + '">' +
           '<div class="obj-hero">' +
             '<div class="obj-hero-l">' +
@@ -2637,7 +2798,7 @@
           (krs.length ? '<div class="obj-tree">' + krs.map(function (k, idx) {
             var p = clamp(k.target ? (k.cur / k.target) * 100 : 0, 0, 100);
             var hitK = p >= 100;
-            return '<div class="kr' + (hitK ? ' kr-hit' : '') + '" data-kr="' + k.id + '">' +
+            return '<div class="kr' + (hitK ? ' kr-hit' : '') + '" data-kr="' + k.id + '" data-idx="' + (idx + 1) + '">' +
               '<span class="kr-node">' + (hitK ? icon('check') : (idx + 1)) + '</span>' +
               '<div class="kr-main">' +
                 '<div class="kr-wrap">' +
@@ -2670,17 +2831,20 @@
       d.objectives = d.objectives || [];
 
       $$('[data-kr-step]', body).forEach(function (b) {
-        b.addEventListener('click', function () {
-          var krEl = b.closest('.kr');
-          var krId = krEl.dataset.kr;
-          var obj = d.objectives.filter(function (o) {
-            return (o.krs || []).some(function (k) { return k.id === krId; });
-          })[0];
-          if (!obj) return;
-          var k = obj.krs.filter(function (x) { return x.id === krId; })[0];
-          k.cur = clamp(Number(k.cur) + Number(b.dataset.krStep), 0, Number(k.target) || 9999);
-          save();
-          refreshCard(m);
+        var dir = Number(b.dataset.krStep) || 0;
+        var krEl = b.closest('.kr');
+        var krId = krEl ? krEl.dataset.kr : '';
+        var obj = d.objectives.filter(function (o) {
+          return (o.krs || []).some(function (k) { return k.id === krId; });
+        })[0];
+        if (!obj) return;
+        var k = (obj.krs || []).filter(function (x) { return x.id === krId; })[0];
+        if (!k) return;
+        bindStepHold(b, function () {
+          k.cur = clamp(Number(k.cur) + dir, 0, Number(k.target) || 9999);
+          paintKr(krEl, k, obj);
+        }, {
+          commit: function () { save(); refreshCard(m); }
         });
       });
 
@@ -3347,10 +3511,14 @@
       d.history = d.history || [];
       var step = Number(d.step) || 1;
       $$('[data-d]', body).forEach(function (b) {
-        b.addEventListener('click', function () {
-          d.value = Number((Number(d.value) + Number(b.dataset.d) * step).toFixed(2));
-          save();
-          refreshCard(m);
+        var dir = Number(b.dataset.d) || 0;
+        if (!dir) return;
+        bindStepHold(b, function () {
+          d.value = Number((Number(d.value) + dir * step).toFixed(2));
+          var vEl = $('.metric-value', body);
+          if (vEl) vEl.textContent = Number.isInteger(d.value) ? d.value : d.value.toFixed(1);
+        }, {
+          commit: function () { save(); refreshCard(m); }
         });
       });
       $('[data-log]', body).addEventListener('click', function () {
@@ -3552,12 +3720,14 @@
       $$('[data-item]', body).forEach(function (row) {
         var g = d.items.filter(function (x) { return x.id === row.dataset.item; })[0];
         if (!g) return;
-        $('[data-inc]', row).addEventListener('click', function () {
-          g.cur = Math.min(g.target || 999999, g.cur + 1); save(); refreshCard(m);
-        });
-        $('[data-dec]', row).addEventListener('click', function () {
-          g.cur = Math.max(0, g.cur - 1); save(); refreshCard(m);
-        });
+        bindStepHold($('[data-inc]', row), function () {
+          g.cur = Math.min(g.target || 999999, g.cur + 1);
+          paintGoalRow(row, g);
+        }, { commit: function () { save(); refreshCard(m); } });
+        bindStepHold($('[data-dec]', row), function () {
+          g.cur = Math.max(0, g.cur - 1);
+          paintGoalRow(row, g);
+        }, { commit: function () { save(); refreshCard(m); } });
         $('[data-del]', row).addEventListener('click', function () {
           d.items = d.items.filter(function (x) { return x !== g; }); save(); refreshCard(m);
         });
@@ -3598,12 +3768,14 @@
       $$('[data-item]', body).forEach(function (row) {
         var c = d.items.filter(function (x) { return x.id === row.dataset.item; })[0];
         if (!c) return;
-        $('[data-plus]', row).addEventListener('click', function () {
-          c.val += c.step || 1; save(); refreshCard(m);
-        });
-        $('[data-minus]', row).addEventListener('click', function () {
-          c.val = Math.max(0, c.val - (c.step || 1)); save(); refreshCard(m);
-        });
+        bindStepHold($('[data-plus]', row), function () {
+          c.val += c.step || 1;
+          paintCounterRow(row, c);
+        }, { commit: function () { save(); refreshCard(m); } });
+        bindStepHold($('[data-minus]', row), function () {
+          c.val = Math.max(0, c.val - (c.step || 1));
+          paintCounterRow(row, c);
+        }, { commit: function () { save(); refreshCard(m); } });
         $('[data-del]', row).addEventListener('click', function () {
           d.items = d.items.filter(function (x) { return x !== c; }); save(); refreshCard(m);
         });
@@ -3796,8 +3968,14 @@
       $$('[data-item]', body).forEach(function (el) {
         var k = d.metrics.filter(function (x) { return x.id === el.dataset.item; })[0];
         if (!k) return;
-        $('[data-inc]', el).addEventListener('click', function () { k.value += 1; save(); refreshCard(m); });
-        $('[data-dec]', el).addEventListener('click', function () { k.value -= 1; save(); refreshCard(m); });
+        bindStepHold($('[data-inc]', el), function () {
+          k.value += 1;
+          paintDashCell(el, k);
+        }, { commit: function () { save(); refreshCard(m); } });
+        bindStepHold($('[data-dec]', el), function () {
+          k.value -= 1;
+          paintDashCell(el, k);
+        }, { commit: function () { save(); refreshCard(m); } });
         $('[data-del]', el).addEventListener('click', function () {
           d.metrics = d.metrics.filter(function (x) { return x !== k; }); save(); refreshCard(m);
         });
