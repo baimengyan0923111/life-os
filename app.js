@@ -4993,7 +4993,9 @@
   var SB_CONFLICT_KEY = 'lifeos.sb.conflict';/* 已提示过的冲突：lifeos.sb.conflict::邮箱 */
   var SB_ROLLBACK_KEY = 'lifeos.sb.rollback';/* 下载覆盖前快照：lifeos.sb.rollback::邮箱 */
   var SB_TABLE = 'life_os_state';
-  var SB_AUTO_DELAY = 1500;                  /* 数据变动后的自动同步防抖（静默后台推送） */
+  /* 手动同步模式：改动后不再有任何自动上传 / 自动拉取。
+     SB_AUTO_DELAY 仅为兼容旧逻辑保留，当前代码不再调度自动同步。 */
+  var SB_MANUAL_MODE = true;
   var SB_CHANNEL = 'lifeos.sb.channel';      /* 同浏览器多标签页互通 */
 
   var sbUi = { busy: 0, offline: false, msg: null, syncing: false, conflictPending: false };
@@ -5066,7 +5068,7 @@
   function sbErrInfo(e) {
     var c = e && e.code;
     if (c === 'NETWORK') {
-      return { type: 'warn', text: '网络不通，没能连上云端。可以继续用本机数据离线使用，网络恢复后会自动补同步。', action: 'retry', offline: true };
+      return { type: 'warn', text: '网络不通，没能连上云端。可以继续用本机数据离线使用，联网后自己点「立即同步」再试一次。', action: 'retry', offline: true };
     }
     if (c === 'NO_TABLE') {
       return { type: 'err', text: '云端数据表还不存在（public.life_os_state）。请在 Supabase SQL Editor 里建好表后点「重试」，其它功能不受影响。', action: 'retry' };
@@ -5383,12 +5385,16 @@
   function sbStatusInfo() {
     if (!sbLoggedIn()) return { key: 'off', text: '未登录云端', panel: '未登录云端' };
     if (sbUi.syncing || sbUi.busy > 0) return { key: 'busy', text: '同步中', panel: '同步中' };
-    if (sbUi.offline) return { key: 'offline', text: '离线', panel: '离线，稍后自动补传' };
+    if (sbUi.offline) return { key: 'offline', text: '离线', panel: '离线 · 联网后手动点「立即同步」' };
     /* 有已提示过、用户还没处理的云端版本：不再弹窗打扰，只在状态行提示 */
     if (sbUi.conflictPending) return { key: 'conflict', text: '有冲突待处理', panel: '有冲突待处理 · 点「立即同步」查看' };
     var meta = sbReadMeta();
-    if (!meta.lastFp) return { key: 'new', text: '已开启', panel: '自动同步已开启' };
-    if (sbFp(state) !== meta.lastFp) return { key: 'busy', text: '同步中', panel: '同步中' };
+    /* 手动模式：从没同步过，就直说「未同步」，不再假装已开启自动同步 */
+    if (!meta.lastFp) return { key: 'new', text: '未同步', panel: '尚未与云端同步 · 手动模式' };
+    /* 本机自上次同步后改过：如实提示还没上传，等用户点按钮 */
+    if (sbFp(state) !== meta.lastFp) {
+      return { key: 'dirty', text: '本机有改动', panel: '本机有改动未上传 · 点「立即同步」' };
+    }
     return { key: 'ok', text: '已同步', panel: '已同步 · ' + sbClock(meta.lastAt) };
   }
 
@@ -5614,10 +5620,13 @@
   function sbInitChannel() {
     if (!sbOnlineHooked) {
       sbOnlineHooked = true;
+      /* 手动模式：网络恢复只刷新状态，不自动补传（补传会让「不点按钮就不联网」失效） */
       window.addEventListener('online', function () {
         sbUi.offline = false;
         updateCloudEntry();
-        if (sbLoggedIn()) sbReconcile({ reason: 'online' });
+        if (sbLoggedIn() && sbFp(state) !== sbReadMeta().lastFp) {
+          sbSetMsg('info', '网络已恢复。本机有改动未上传，点「立即同步」或「上传本机」即可同步。');
+        }
       });
       window.addEventListener('offline', function () {
         sbUi.offline = true;
@@ -5665,17 +5674,20 @@
   }
 
   function sbScheduleOfflineRetry() {
+    /* 手动模式：失败后不再自动重试，只保留一句提示，等用户自己点按钮 */
     clearTimeout(sbOfflineTimer);
-    sbOfflineTimer = setTimeout(function () {
-      if (!sbLoggedIn()) return;
-      if (typeof navigator !== 'undefined' && navigator.onLine === false) { sbScheduleOfflineRetry(); return; }
-      sbReconcile({ reason: 'retry' });
-    }, 8000);
+    sbOfflineTimer = null;
   }
 
-  /* 核心：拉一次云端 → 判定 推 / 拉 / 冲突，全程不需要用户确认 */
+  /* 核心：拉一次云端 → 判定 推 / 拉 / 冲突。
+     手动模式：只允许由「立即同步」发起，其它来源（打开页面 / 保存 / 联网 / 定时重试）
+     一律直接返回，保证不点按钮就不会有任何云端交互。 */
   function sbReconcile(opts) {
     opts = opts || {};
+    if (opts.reason !== 'manual') {
+      updateCloudEntry();
+      return Promise.resolve(null);
+    }
     if (!sbLoggedIn()) return Promise.resolve(null);
     if (sbReconciling) { sbReconcileAgain = true; return Promise.resolve(null); }
     sbReconciling = true;
@@ -5755,20 +5767,19 @@
       sbReconciling = false;
       if (sbReconcileAgain) {
         sbReconcileAgain = false;
-        setTimeout(function () { sbReconcile({ reason: 'queued' }); }, 60);
+        setTimeout(function () { sbReconcile({ reason: 'manual', forceConflict: true }); }, 60);
       }
       return r;
     });
   }
 
-  /* 登录后 / 页面打开时对齐一次：全自动，无弹窗 */
+  /* 登录后 / 页面打开：只刷新面板状态，不再自动拉取云端，也不做任何对齐 */
   function sbAfterEnter() {
     updateCloudEntry();
     sbInitChannel();
     sbUi.conflictPending = !!sbConflictRead();   /* 上次没处理的冲突：只在面板提示，不再弹窗 */
     if (!sbLoggedIn()) return;
-    sbScheduleRefresh();
-    sbReconcile({ reason: 'open' });
+    sbScheduleRefresh();   /* 仅续期登录态（token 刷新），不涉及数据同步 */
   }
 
   /* 手动兜底「立即同步」：走同一套对齐逻辑，只是多给一次明确反馈。
@@ -5830,20 +5841,18 @@
     sbSetMsg('ok', '已恢复覆盖前的本机数据（' + sbTime(snap.at) + '）');
   }
 
-  /* 保存后的联动：1.5 秒防抖，后台静默对齐（推/拉/冲突自动判定） */
+  /* 保存后的联动：手动模式只刷新状态行（提示「本机有改动未上传」），不发任何请求 */
   function sbAfterSave() {
     if (sbSuppress) return;
     updateCloudEntry();
     if (!sbLoggedIn()) return;
     clearTimeout(sbPushTimer);
-    sbPushTimer = setTimeout(sbAutoPush, SB_AUTO_DELAY);
+    sbPushTimer = null;
   }
 
+  /* 自动推送已废弃：保留空函数，避免任何旧调用点意外触发上传 */
   function sbAutoPush() {
     sbPushTimer = null;
-    if (!sbLoggedIn()) return;
-    if (sbUi.busy > 0) { sbPushTimer = setTimeout(sbAutoPush, SB_AUTO_DELAY); return; }
-    sbReconcile({ reason: 'edit' });
   }
 
   /* ---------------- 退出登录 ---------------- */
@@ -5903,7 +5912,7 @@
     var snap = sbSnapRead();
     html += '<div class="sb-rows">' +
       sbRowHtml('状态', '<span class="sb-dot" data-s="' + esc(st.key) + '"></span>' + esc(st.panel || st.text), 'sb-stat') +
-      sbRowHtml('自动同步', '已开启<span class="sb-sub">改动 1.5 秒后自动上传，打开页面自动拉取</span>') +
+      sbRowHtml('同步方式', '手动<span class="sb-sub">只在你点按钮时连云端：改动不会自动上传，打开页面也不会自动拉取</span>') +
       sbRowHtml('登录邮箱', esc(s.email || '')) +
       sbRowHtml('最后同步', esc(meta.lastAt ? sbTime(meta.lastAt) : '尚未同步'), 'sb-last') +
       '</div>' +
@@ -5915,7 +5924,8 @@
       (snap ? '<button class="ghost-btn" type="button" data-sb="restore">恢复覆盖前数据</button>' : '') +
       '<button class="ghost-btn" type="button" data-sb="signout">退出登录</button>' +
       '</div>' +
-      '<p class="sub sb-tip">云端与本机自动双向同步，不需要点任何按钮；「立即同步」只是手动兜底。离线时继续用本机数据，网络恢复后自动补传。</p>';
+      '<p class="sub sb-tip">当前是纯手动同步：改动只存在这台电脑上，点「立即同步」才会和云端比对并上传/下载；' +
+      '「上传本机」直接用本机覆盖云端，「下载云端」用云端覆盖本机。不点按钮就完全不会联网，也不会弹冲突提示。</p>';
     return '<div class="sb-sec">' + html + '</div>';
   }
 
@@ -6207,8 +6217,7 @@
     if (!cfg) return { key: 'off', text: '未绑定' };
     if (cloudBusy > 0) return { key: 'busy', text: '同步中' };
     if (!cfg.lastSyncRev) return { key: 'new', text: '待首次同步' };
-    if (cloudFp(state) !== cfg.lastSyncRev) return { key: 'dirty', text: cfg.auto ? '改动待同步' : '有本地改动' };
-    if (cfg.auto) return { key: 'auto', text: '已开启自动同步' };
+    if (cloudFp(state) !== cfg.lastSyncRev) return { key: 'dirty', text: '有本地改动' };
     return { key: 'ok', text: '已同步' };
   }
 
@@ -6229,23 +6238,16 @@
     btn.setAttribute('aria-label', '云同步，当前状态：' + st.text);
   }
 
-  /* ---------- 保存后的联动：打点 + 自动同步 ---------- */
+  /* ---------- 保存后的联动：手动模式下只打点，不再调度任何自动上传 ---------- */
   function cloudAfterSave() {
     if (cloudSuppress) return;
     cloudStampPages();
     updateCloudEntry();
-    if (!readCloud()) return;
-    cloudScheduleAuto();
   }
+  /* 自动同步已废弃：保留空函数以兼容旧调用 */
   function cloudScheduleAuto() {
-    var cfg = readCloud();
-    if (!cfg || !cfg.auto) return;
     clearTimeout(cloudAutoTimer);
-    cloudAutoTimer = setTimeout(function () {
-      var c = readCloud();
-      if (!c || !c.auto) return;
-      cloudPush({ silent: true });
-    }, 3000);
+    cloudAutoTimer = null;
   }
 
   /* ---------- 消息区（全部在面板内展示，不用原生 alert） ---------- */
@@ -6329,9 +6331,7 @@
         '<div class="cc-row"><span>账号</span><b class="cc-mono">' + esc(currentEmail() || '本机') + '</b></div>' +
       '</div>' +
       '<div class="cloud-switch">' +
-        '<div class="cs-txt"><b>自动同步</b><small>开启后改动 3 秒防抖静默上传；打开页面时若云端更新且本机没动过，会自动拉取</small></div>' +
-        '<label class="cs-sw"><input type="checkbox" id="cloud-auto"' + (cfg.auto ? ' checked' : '') + '>' +
-          '<span class="cs-track"><span class="cs-dot"></span></span></label>' +
+        '<div class="cs-txt"><b>同步方式：手动</b><small>改动不会自动上传，打开页面也不会自动拉取；只有点下面的按钮才会访问云端</small></div>' +
       '</div>' +
       '<div class="cloud-acts">' +
         '<button class="solid-btn" type="button" data-cloud="push">上传本机</button>' +
@@ -6438,24 +6438,13 @@
         if (e.key === 'Enter') { e.preventDefault(); cloudBind(); }
       });
     }
+    /* 手动模式：面板里已没有「自动同步」开关，旧的自动同步配置一律清理掉 */
     var auto = $('#cloud-auto', sheet);
-    if (auto) {
-      auto.addEventListener('change', function () {
-        var cfg = readCloud();
-        if (!cfg) return;
-        cfg.auto = !!auto.checked;
-        writeCloud(cfg);
-        updateCloudEntry();
-        if (cfg.auto) {
-          cloudMsg('ok', '已开启自动同步：改动 3 秒后自动上传');
-          cloudScheduleAuto();
-        } else {
-          clearTimeout(cloudAutoTimer);
-          cloudMsg('ok', '已关闭自动同步，之后请手动点「双向同步」');
-        }
-        cloudRepaint();
-      });
-    }
+    if (auto) auto.remove();
+    (function () {
+      var cfg = readCloud();
+      if (cfg && cfg.auto) { cfg.auto = false; writeCloud(cfg); }
+    })();
     sheet.addEventListener('click', function (e) {
       var b = e.target.closest ? e.target.closest('[data-cloud]') : null;
       if (!b || !sheet.contains(b)) return;
@@ -6587,7 +6576,7 @@
       writeCloud(c);
       cloudBusy--;
       updateCloudEntry();
-      toast(opts.silent ? '已自动同步到云端' : '已上传到云端 Gist');
+      toast('已上传到云端 Gist');
       cloudMsg('ok', '已上传 · ' + cloudFmtTime(c.lastSyncAt));
       cloudUi.view = 'main';
       cloudRepaint();
@@ -6641,8 +6630,8 @@
     cloudPending = null;
     cloudUi.view = 'main';
     updateCloudEntry();
-    toast(silent ? '已自动同步云端数据' : '已用云端数据覆盖本机');
-    cloudMsg('ok', silent ? '已自动同步云端数据' : '已用云端数据覆盖本机，必要时可「恢复覆盖前数据」');
+    toast('已用云端数据覆盖本机');
+    cloudMsg('ok', '已用云端数据覆盖本机，必要时可「恢复覆盖前数据」');
     cloudRepaint();
   }
 
@@ -6835,40 +6824,10 @@
   }
 
   function cloudAfterEnter() {
-    var fromLogin = cloudEnterFromLogin;
-    var localEmpty = cloudEnterLocalEmpty;
+    /* 手动模式：打开页面不再访问云端，只刷新入口状态 */
     cloudEnterFromLogin = false;
     cloudEnterLocalEmpty = false;
     updateCloudEntry();
-    var cfg = readCloud();
-    if (!cfg) return;
-    /* 打开页面：云端更新且本机自上次同步后没动过时，自动拉一次 */
-    cloudFetchGist(cfg.token, cfg.gistId).then(function (gist) {
-      return cloudReadRemote(gist).then(function (text) { return text; }, function () { return ''; });
-    }).then(function (text) {
-      var c = readCloud();
-      if (!c || !text) return;
-      var data = null, rfp = null;
-      try { data = cloudParse(text); rfp = cloudFp(data); } catch (e) { return; }
-      var localFp = cloudFp(state);
-      if (rfp === localFp) {
-        c.lastSyncRev = localFp;
-        c.remoteRev = rfp;
-        c.lastSyncAt = c.lastSyncAt || Date.now();
-        writeCloud(c);
-        updateCloudEntry();
-        return;
-      }
-      var localClean = !!c.lastSyncRev && localFp === c.lastSyncRev;
-      var remoteNew = !c.remoteRev || rfp !== c.remoteRev;
-      /* 刚登录：不静默覆盖，先问用户要不要把云端数据拉下来 */
-      if (fromLogin && remoteNew) { cloudOfferRemote(data, rfp, localEmpty); return; }
-      if (localClean && remoteNew) {
-        cloudApplyRemote(data, rfp, true);
-      } else {
-        updateCloudEntry();
-      }
-    }).catch(function () { /* 启动时静默失败，不打扰 */ });
   }
 
   /* ---------------------------------------------------------
@@ -7289,7 +7248,7 @@
     if (submit) submit.textContent = { login: '登录', signup: '注册并登录', recover: '发送重置邮件', local: '进入本机数据' }[authMode] || '登录';
     if (hint) {
       hint.textContent = {
-        login: '邮箱与密码由云端校验，登录后数据自动同步到所有设备。',
+        login: '邮箱与密码由云端校验，登录后数据仍只存在本机，需要在「云同步」面板手动点按钮才会与云端交互。',
         signup: '注册后需要到邮箱点开确认链接，确认完再回来登录。',
         recover: '邮件里点开链接即可设置新密码，本机已有数据不会被清空。',
         local: '本机模式仅供离线使用：密码只在这台电脑上校验，数据不会同步。'
