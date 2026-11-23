@@ -1216,6 +1216,17 @@
     return !!foldState().blocks[key];
   }
 
+  /* 系统详情页的模块画布：首次出现时默认收起；之后记住用户自己的展开/收起选择 */
+  function seedModulesFold(pageId) {
+    var f = foldState();
+    f.seeds = (f.seeds && typeof f.seeds === 'object') ? f.seeds : {};
+    var k = 'modules:' + pageId;
+    if (f.seeds[k]) return;
+    f.seeds[k] = 1;
+    if (!(k in f.blocks)) f.blocks[k] = true;
+    save();
+  }
+
   function foldSet(key, on) {
     var f = foldState();
     if (on) f.blocks[key] = true; else delete f.blocks[key];
@@ -1443,8 +1454,9 @@
     if (page.builtin === 'review') canvas.appendChild(weeklyBlock());
 
 
-    // 模块区（整块可折叠）；V13 三页不再展示模块画布
-    if (!v13Page) {
+    // 模块区（整块可折叠）：系统详情页只在已有模块时出现，避免空画布占位
+    if (!v13Page || page.modules.length) {
+    if (v13Page) seedModulesFold(page.id);
     var modsWrap = document.createElement('section');
     modsWrap.className = 'modules-wrap';
 
@@ -4424,38 +4436,65 @@
     }
   }
 
-  /* -------- 添加模块（17 种类型 + 分组图标 + 24 色 + 推荐组合） -------- */
+  /* -------- 添加模块：类型优先 / 目标页可选 / 外观折叠 / 固定底栏 -------- */
   function dialogAddModule() {
     var first = MODULE_TYPES[0];
     var sel = { type: first.type, icon: first.icon, color: first.color };
+    var cur = currentPage();
+
+    var pageOpts = state.pages.map(function (p) {
+      return '<option value="' + esc(p.id) + '"' + (p.id === cur.id ? ' selected' : '') + '>' +
+        esc(p.name) + (p.builtin ? ' · 系统页' : '') + '</option>';
+    }).join('');
 
     openDialog(
-      '<h3>添加模块</h3>' +
-      '<p class="sub">模块是画布的最小单元：选一个类型，名字、图标、配色都能马上改。</p>' +
-      '<div class="sheet-label">类型<small>' + MODULE_TYPES.length + ' 种 · 都能直接记东西</small></div>' +
-      '<div class="type-grid type-grid-tall">' + MODULE_TYPES.map(function (t) {
-        return '<button class="type-opt' + (t.type === sel.type ? ' active' : '') + '" type="button" data-type="' + t.type + '">' +
-          '<span class="to-icon">' + icon(t.icon) + '</span>' +
-          '<span><b>' + t.name + '</b><small>' + t.desc + '</small></span></button>';
-      }).join('') + '</div>' +
-      '<div class="sheet-label">名称</div>' +
-      '<input class="field" style="width:100%" data-title maxlength="40" value="' + esc(first.title) + '" placeholder="例如：每周复盘">' +
-      pickerHTML(sel) +
-      '<div class="sheet-actions"><button class="ghost-btn" data-close>取消</button>' +
-      '<button class="solid-btn" data-ok>添加到当前页</button></div>',
+      '<div class="sheet-head">' +
+        '<h3>添加模块</h3>' +
+        '<p class="sub">选一个类型就行，名字和图标之后随时能改。</p>' +
+      '</div>' +
+      '<div class="sheet-body">' +
+        '<div class="sheet-label">类型<small>' + MODULE_TYPES.length + ' 种 · 都能直接记东西</small></div>' +
+        '<div class="type-chips">' + MODULE_TYPES.map(function (t) {
+          return '<button class="type-chip' + (t.type === sel.type ? ' active' : '') + '" type="button" data-type="' + t.type + '" title="' + esc(t.desc) + '">' +
+            '<span class="to-icon">' + icon(t.icon) + '</span>' +
+            '<span class="tc-tx"><b>' + esc(t.name) + '</b><small>' + esc(t.desc) + '</small></span></button>';
+        }).join('') + '</div>' +
+        '<div class="dlg-fields">' +
+          '<label class="dlg-field"><span>名称</span>' +
+            '<input class="field" style="width:100%" data-title maxlength="40" value="' + esc(first.title) + '" placeholder="例如：每周复盘"></label>' +
+          '<label class="dlg-field"><span>添加到</span>' +
+            '<select class="field" style="width:100%" data-target-page>' + pageOpts + '</select></label>' +
+        '</div>' +
+        '<p class="sub dlg-tip" data-tip hidden>该系统页的模块画布平时收起，添加后会自动展开并定位到新模块。</p>' +
+        '<details class="dlg-more"><summary>外观：图标与配色<small>不改也行</small></summary>' +
+        '<div class="dlg-more-body">' + pickerHTML(sel) + '</div></details>' +
+      '</div>' +
+      '<div class="sheet-actions sheet-foot">' +
+        '<button class="ghost-btn" type="button" data-close>取消</button>' +
+        '<button class="solid-btn" type="button" data-ok>添加模块</button>' +
+      '</div>',
       function (sheet, close) {
+        sheet.classList.add('sheet-stack', 'sheet-wide');
         var titleInput = $('[data-title]', sheet);
+        var pageSel = $('[data-target-page]', sheet);
+        var tip = $('[data-tip]', sheet);
 
-        $$('.type-opt', sheet).forEach(function (b) {
+        function syncTip() {
+          var tp = pageById(pageSel.value);
+          tip.hidden = !(tp && tp.builtin);
+        }
+        pageSel.addEventListener('change', syncTip);
+        syncTip();
+
+        $$('.type-chip', sheet).forEach(function (b) {
           b.addEventListener('click', function () {
             var tp = b.dataset.type;
             var meta = MODULE_TYPES.filter(function (t) { return t.type === tp; })[0];
             if (!meta) return;
             sel.type = tp;
-            /* 类型切换：默认名称与默认图标跟着走，配色保持用户选择 */
             sel.icon = meta.icon;
             titleInput.value = meta.title || meta.name;
-            $$('.type-opt', sheet).forEach(function (x) { x.classList.toggle('active', x === b); });
+            $$('.type-chip', sheet).forEach(function (x) { x.classList.toggle('active', x === b); });
             $$('[data-icon]', sheet).forEach(function (x) { x.classList.toggle('active', x.dataset.icon === sel.icon); });
             $$('[data-preset]', sheet).forEach(function (x) {
               var p = COLOR_PRESETS[Number(x.dataset.preset)];
@@ -4468,12 +4507,13 @@
           titleInput.value = p.name;
           if (p.type) {
             sel.type = p.type;
-            $$('.type-opt', sheet).forEach(function (x) { x.classList.toggle('active', x.dataset.type === p.type); });
+            $$('.type-chip', sheet).forEach(function (x) { x.classList.toggle('active', x.dataset.type === p.type); });
           }
         });
 
         $('[data-ok]', sheet).addEventListener('click', function () {
           var meta = MODULE_TYPES.filter(function (t) { return t.type === sel.type; })[0] || first;
+          var target = pageById(pageSel.value) || cur;
           var m = {
             id: uid('m'),
             type: sel.type,
@@ -4483,11 +4523,25 @@
             w: meta.w || (sel.type === 'habit' || sel.type === 'kanban' || sel.type === 'timeline' ? 'full' : 'half'),
             data: blankData(sel.type)
           };
-          currentPage().modules.push(m);
+          target.modules.push(m);
+          /* 目标页若被折叠，先展开，避免「加了却看不到」 */
+          var fds = foldState();
+          fds.seeds = (fds.seeds && typeof fds.seeds === 'object') ? fds.seeds : {};
+          fds.seeds['modules:' + target.id] = 1;
+          foldSet('modules:' + target.id, false);
+          state.current = target.id;
           save();
           close();
+          renderNav();
           renderPage();
-          toast('已添加「' + m.title + '」');
+          requestAnimationFrame(function () {
+            var card = document.querySelector('[data-mod="' + m.id + '"]');
+            if (!card) return;
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            card.classList.add('mod-new');
+            setTimeout(function () { card.classList.remove('mod-new'); }, 1800);
+          });
+          toast('已添加「' + m.title + '」到「' + target.name + '」');
         });
       }
     );
@@ -9728,34 +9782,109 @@
     };
   }
 
-  /* 从年度目标的关键结果里挑一条，作为本月要推进的目标 */
+  /* 从年度目标的关键结果里挑一条，作为本月要推进的目标（结构化列表，不再塞进下拉框） */
   function mplanLinkDialog(mk) {
     var goals = (state.goals || []).filter(function (g) { return g && Array.isArray(g.krs) && g.krs.length; });
     if (!goals.length) { toast('先到「年度目标」里加一条关键结果'); return; }
-    var opts = [];
-    goals.forEach(function (g) {
-      g.krs.forEach(function (k, i) {
-        opts.push('<option value="' + esc(g.id) + '|' + i + '">' + esc(g.title) + ' · ' + esc(k.text) +
-          '（当前 ' + esc(String(k.cur || 0)) + '/目标 ' + esc(String(k.target || 0)) + (k.unit ? ' ' + esc(k.unit) : '') + '）</option>');
-      });
-    });
+    var sel = { goalId: goals[0].id, krIndex: 0 };
+    var total = 0;
+    goals.forEach(function (g) { total += g.krs.length; });
+
+    function pctOf(k) {
+      var t = Number(k && k.target) || 0, c = Number(k && k.cur) || 0;
+      if (!t) return 0;
+      return Math.max(0, Math.min(100, Math.round(c / t * 100)));
+    }
+
+    var groupsHtml = goals.map(function (g) {
+      return '<div class="kr-group" data-kg="' + esc(g.id) + '">' +
+        '<div class="kr-g-title">' + esc(g.title || '未命名目标') + '</div>' +
+        g.krs.map(function (k, i) {
+          var pct = pctOf(k);
+          var on = sel.goalId === g.id && sel.krIndex === i;
+          return '<button class="kr-row' + (on ? ' active' : '') + '" type="button" data-g="' + esc(g.id) + '" data-k="' + i + '">' +
+            '<span class="kr-dot" aria-hidden="true"></span>' +
+            '<span class="kr-main"><b>' + esc(k.text || '未命名关键结果') + '</b>' +
+            '<small>当前 ' + esc(String(k.cur || 0)) + ' / 目标 ' + esc(String(k.target || 0)) +
+            (k.unit ? ' ' + esc(k.unit) : '') + '</small></span>' +
+            '<span class="kr-pct"><i style="width:' + pct + '%"></i><em>' + pct + '%</em></span>' +
+            '</button>';
+        }).join('') +
+        '</div>';
+    }).join('');
+
     openDialog(
-      '<h3>添加本月目标</h3>' +
-      '<p class="sub">从年度目标里挑一条关键结果，只承诺这个月要做到哪儿。</p>' +
-      '<label class="v13-field"><span>年度目标 · 关键结果</span><select class="field" data-f="ref">' + opts.join('') + '</select></label>' +
-      '<label class="v13-field"><span>本月目标值（这个月结束时希望达到的数）</span><input class="field" type="number" min="0" step="1" data-f="target" placeholder="例如：2"></label>' +
-      '<label class="v13-field"><span>备注（可选）</span><input class="field" data-f="note" maxlength="60" placeholder="例如：先完成第一批"></label>' +
-      '<div class="sheet-actions"><button class="ghost-btn" type="button" data-close>取消</button><button class="solid-btn" type="button" data-ok>添加</button></div>',
+      '<div class="sheet-head">' +
+        '<h3>添加本月目标</h3>' +
+        '<p class="sub">从年度目标的关键结果里选一条，只承诺这个月做到哪儿。</p>' +
+      '</div>' +
+      '<div class="sheet-body">' +
+        (total > 6 ? '<input class="field kr-search" data-q placeholder="搜索目标或关键结果" aria-label="搜索关键结果">' : '') +
+        '<div class="sheet-label">年度目标 · 关键结果<small>' + goals.length + ' 个目标 · ' + total + ' 条</small></div>' +
+        '<div class="kr-groups">' + groupsHtml + '</div>' +
+        '<p class="pick-none" data-kr-none hidden>没有匹配的关键结果，换个词试试。</p>' +
+        '<div class="dlg-fields">' +
+          '<label class="dlg-field"><span>本月目标值（这个月结束时达到的数）</span>' +
+            '<input class="field" style="width:100%" type="number" min="0" step="1" data-f="target" placeholder="例如：2"></label>' +
+          '<label class="dlg-field"><span>备注（可选）</span>' +
+            '<input class="field" style="width:100%" data-f="note" maxlength="60" placeholder="例如：先完成第一批"></label>' +
+        '</div>' +
+      '</div>' +
+      '<div class="sheet-actions sheet-foot">' +
+        '<button class="ghost-btn" type="button" data-close>取消</button>' +
+        '<button class="solid-btn" type="button" data-ok>添加</button>' +
+      '</div>',
       function (sheet, close) {
+        sheet.classList.add('sheet-stack', 'sheet-wide');
+        var targetInput = $('[data-f="target"]', sheet);
+        var q = $('[data-q]', sheet);
+        var none = $('[data-kr-none]', sheet);
+
+        function krOf() {
+          var g = (state.goals || []).filter(function (x) { return x.id === sel.goalId; })[0];
+          return g && (g.krs || [])[sel.krIndex];
+        }
+        function syncTarget() {
+          var kr = krOf();
+          targetInput.placeholder = (kr && Number(kr.target)) ? ('默认 ' + kr.target + (kr.unit ? ' ' + kr.unit : '')) : '例如：2';
+        }
+        syncTarget();
+
+        $$('.kr-row', sheet).forEach(function (b) {
+          b.addEventListener('click', function () {
+            sel.goalId = b.dataset.g;
+            sel.krIndex = Number(b.dataset.k) || 0;
+            $$('.kr-row', sheet).forEach(function (x) { x.classList.toggle('active', x === b); });
+            syncTarget();
+          });
+        });
+
+        if (q) {
+          q.addEventListener('input', function () {
+            var kw = String(q.value || '').trim().toLowerCase();
+            var hit = 0;
+            $$('.kr-group', sheet).forEach(function (grp) {
+              var any = false;
+              $$('.kr-row', grp).forEach(function (row) {
+                var t = row.textContent.toLowerCase();
+                var on = !kw || t.indexOf(kw) >= 0;
+                row.hidden = !on;
+                if (on) { any = true; hit++; }
+              });
+              grp.hidden = !any;
+            });
+            none.hidden = hit > 0;
+          });
+        }
+
         $('[data-ok]', sheet).addEventListener('click', function () {
-          var ref = ($('[data-f="ref"]', sheet).value || '').split('|');
           var m = v13Month(mk, true);
-          var target = Math.max(0, Number($('[data-f="target"]', sheet).value) || 0);
-          var g = (state.goals || []).filter(function (x) { return x.id === ref[0]; })[0];
-          var kr = g && (g.krs || [])[Number(ref[1])];
+          var target = Math.max(0, Number(targetInput.value) || 0);
+          var g = (state.goals || []).filter(function (x) { return x.id === sel.goalId; })[0];
+          var kr = g && (g.krs || [])[sel.krIndex];
           if (!target && kr) target = Number(kr.target) || 0;
           m.links.push({
-            id: uid('ml'), goalId: ref[0], krIndex: Number(ref[1]) || 0,
+            id: uid('ml'), goalId: sel.goalId, krIndex: sel.krIndex,
             target: target, note: $('[data-f="note"]', sheet).value || ''
           });
           save(); close(); renderPage(); toast('已添加本月目标');
