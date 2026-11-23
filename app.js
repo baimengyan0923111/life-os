@@ -1707,7 +1707,7 @@
         return {
           eyebrow: '月度计划 · ' + mk0.slice(0, 4) + ' 年 ' + Number(mk0.slice(5, 7)) + ' 月 · ' + mw0.length + ' 周' + (mIsNow ? ' · 本月' : ''),
           h1: '这个月，<em>只推三件事</em>。',
-          lede: '把年度目标拆到月份：一句月主题、三件重点、几条关键结果；再往下交给每一周去执行。'
+          lede: '把年度目标拆到月份：三件重点、几条关键结果；再往下交给每一周去执行。'
         };
       }
       case 'monthly': {
@@ -9839,9 +9839,9 @@
         '<div class="mplan-grid">' +
 
         '<div class="mplan-card full">' +
-        '<div class="mplan-h"><div><h2>本月聚焦</h2><p>给这个月定一句话主题，再挑最多 3 件最重要的事</p></div>' +
+        '<div class="mplan-h"><div><h2>本月聚焦</h2><p>这个月只挑最多 3 件最重要的事，其余交给周计划</p></div>' +
         '<div class="mplan-side"><span class="mplan-pctnum">' + doneP + '/' + m.priorities.length + '</span></div></div>' +
-        '<input class="field mplan-theme" data-mtheme maxlength="120" value="' + esc(m.theme) + '" placeholder="给这个月定一句话主题">' +
+        (m.theme ? '<input class="field mplan-theme" data-mtheme maxlength="120" value="' + esc(m.theme) + '" placeholder="给这个月定一句话主题">' : '') +
         '<div class="m-plan-list">' + prioHtml + '</div>' +
         '<div class="m-plan-add"><button class="m-add-focus" type="button" data-mp-add>'
           + '<span class="m-add-focus-ico">' + icon('plus') + '</span><span>添加重点</span></button>' +
