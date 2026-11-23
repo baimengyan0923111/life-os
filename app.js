@@ -4990,12 +4990,13 @@
   var SB_ANON = 'sb_publishable_WHjW9GvlXc7lr0xpvJmrqA_5U9HLFRz';
   var SB_SESSION_KEY = 'lifeos.sb.v1';
   var SB_SYNC_KEY = 'lifeos.sb.sync';        /* 每账号一份：lifeos.sb.sync::邮箱 */
+  var SB_CONFLICT_KEY = 'lifeos.sb.conflict';/* 已提示过的冲突：lifeos.sb.conflict::邮箱 */
   var SB_ROLLBACK_KEY = 'lifeos.sb.rollback';/* 下载覆盖前快照：lifeos.sb.rollback::邮箱 */
   var SB_TABLE = 'life_os_state';
   var SB_AUTO_DELAY = 1500;                  /* 数据变动后的自动同步防抖（静默后台推送） */
   var SB_CHANNEL = 'lifeos.sb.channel';      /* 同浏览器多标签页互通 */
 
-  var sbUi = { busy: 0, offline: false, msg: null, syncing: false };
+  var sbUi = { busy: 0, offline: false, msg: null, syncing: false, conflictPending: false };
   var sbSuppress = false;      /* 程序化改写 state 期间不触发上传、不打页面时间戳 */
   var sbPushTimer = null;
   var sbRefreshTimer = null;
@@ -5006,6 +5007,7 @@
   var sbBc = null;             /* BroadcastChannel 实例 */
   var sbTabId = 'tab-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   var sbLastToastAt = 0;
+  var sbConflictCoolUntil = 0;  /* 冲突面板刚操作完的冷却期：期间不再弹新的冲突提示 */
   var sbOnlineHooked = false;
 
   /* ---------------- 基础工具 ---------------- */
@@ -5247,6 +5249,43 @@
   }
   function sbWriteMeta(m) { safeSet(sbSyncStoreKey(), JSON.stringify(m)); }
 
+  /* ---------------- 冲突记忆：同一份云端版本只提示一次 ---------------- */
+  /* 冲突的本质是「云端存在一个本机还没处理的版本」。这里记住已被提示过的云端指纹，
+     只要云端版本没变，就不再重复弹窗（本机后续改动也不会让同一个冲突反复打扰），
+     只在云同步面板的状态行显示「有冲突待处理」，由用户主动点「立即同步」再处理。 */
+  function sbConflictStoreKey() { return SB_CONFLICT_KEY + '::' + (currentEmail() || sbCurrentEmail() || 'local'); }
+  function sbConflictRead() {
+    try {
+      var c = JSON.parse(safeGet(sbConflictStoreKey()) || 'null');
+      if (!c || typeof c !== 'object' || !c.remoteFp) return null;
+      return c;
+    } catch (e) { return null; }
+  }
+  function sbConflictWrite(remoteFp, localFp, decision) {
+    try {
+      safeSet(sbConflictStoreKey(), JSON.stringify({
+        remoteFp: String(remoteFp || ''), localFp: String(localFp || ''),
+        decision: String(decision || 'dismissed'), at: Date.now()
+      }));
+    } catch (e) { }
+    sbUi.conflictPending = true;
+  }
+  function sbConflictClear() {
+    try { safeDel(sbConflictStoreKey()); } catch (e) { }
+    sbUi.conflictPending = false;
+  }
+  /* 这份云端版本是否已经提示过（含用户已选择「先不动」/直接关掉的情况） */
+  function sbConflictSeen(remoteFp) {
+    var c = sbConflictRead();
+    if (!c) return false;
+    return String(c.remoteFp || '') === String(remoteFp || '');
+  }
+  function sbConflictNote(remoteFp, localFp, decision) {
+    sbConflictWrite(remoteFp, localFp, decision);
+    updateCloudEntry();
+  }
+
+
   function sbSnapRead() {
     try {
       var s = JSON.parse(safeGet(sbSnapStoreKey()) || 'null');
@@ -5345,6 +5384,8 @@
     if (!sbLoggedIn()) return { key: 'off', text: '未登录云端', panel: '未登录云端' };
     if (sbUi.syncing || sbUi.busy > 0) return { key: 'busy', text: '同步中', panel: '同步中' };
     if (sbUi.offline) return { key: 'offline', text: '离线', panel: '离线，稍后自动补传' };
+    /* 有已提示过、用户还没处理的云端版本：不再弹窗打扰，只在状态行提示 */
+    if (sbUi.conflictPending) return { key: 'conflict', text: '有冲突待处理', panel: '有冲突待处理 · 点「立即同步」查看' };
     var meta = sbReadMeta();
     if (!meta.lastFp) return { key: 'new', text: '已开启', panel: '自动同步已开启' };
     if (sbFp(state) !== meta.lastFp) return { key: 'busy', text: '同步中', panel: '同步中' };
@@ -5433,6 +5474,7 @@
         meta.remoteAt = Date.now();
       }
       sbWriteMeta(meta);
+      sbConflictClear();   /* 本机版本已成功上云：这份冲突彻底解决，允许以后的新冲突再次提示 */
       updateCloudEntry();
       sbSetMsg('ok', '已同步 · ' + sbTime(meta.lastAt));
       if (silent) sbLightToast('已与云端同步');
@@ -5463,6 +5505,7 @@
     meta.rev = Number(rev) || 0;
     meta.remoteAt = Number(remoteAt) || Date.now();
     sbWriteMeta(meta);
+    sbConflictClear();   /* 已采用云端版本：这份冲突解决 */
     renderNav();
     renderPage();
     updateCloudEntry();
@@ -5472,36 +5515,62 @@
     sbBroadcast();
   }
 
-  /* 两端都改过：三选一 */
+  /* 两端都改过：三选一。所有关闭路径（含点遮罩、Esc、「先不动」）都会记下这次冲突已提示，
+     同一份云端版本不再重复弹窗，避免用户被同一个提示反复打扰。 */
   function sbOpenConflict(remoteData, remoteFp, rev, remoteAt) {
     if (sbConflictOpen) return;
     sbConflictOpen = true;
+    sbUi.conflictPending = true;
+    updateCloudEntry();
+    var localFp = sbFp(state);
+    var settled = false;
     var meta = sbReadMeta();
     openDialog(
       '<h3>两边都有改动</h3>' +
       '<p class="sub">这台电脑和云端在「上次同步之后都被改过」，才会出现这个提示（日常使用碰不到）。' +
       '上一次同步：' + esc(sbTime(meta.lastAt)) + '。默认推荐合并：逐页保留较新的那一份。</p>' +
       '<div class="sb-conflict-list">' +
-      '<div class="sb-cf"><b>本机</b><span>' + ((state.pages || []).length) + ' 个页面 · 指纹 ' + esc(sbFp(state)) + '</span></div>' +
+      '<div class="sb-cf"><b>本机</b><span>' + ((state.pages || []).length) + ' 个页面 · 指纹 ' + esc(localFp) + '</span></div>' +
       '<div class="sb-cf"><b>云端</b><span>' + ((remoteData && remoteData.pages) ? remoteData.pages.length : 0) + ' 个页面 · 指纹 ' + esc(remoteFp) + '</span></div>' +
       '</div>' +
+      '<p class="sub" style="margin-top:4px">这份差异只会提示这一次：选「先不动」或直接关掉，之后不会再为它弹窗，' +
+      '云同步面板会显示「有冲突待处理」，需要时点「立即同步」可以再处理。' +
+      '只有当云端又出现新的改动时，才会再提示一次。</p>' +
       '<div class="sheet-actions sheet-actions-wrap">' +
       '<button class="solid-btn" type="button" data-merge>合并（推荐，逐页取较新）</button>' +
       '<button class="ghost-btn" type="button" data-local>用本机覆盖云端</button>' +
       '<button class="ghost-btn" type="button" data-remote>用云端覆盖本机</button>' +
-      '<button class="ghost-btn" type="button" data-close>先不动</button></div>',
+      '<button class="ghost-btn" type="button" data-hold>先不动</button></div>',
       function (sheet, close) {
-        function done() { sbConflictOpen = false; close(); }
+        function finish(decision) {
+          if (settled) return;
+          settled = true;
+          sbConflictNote(remoteFp, localFp, decision);   /* 记住这份云端版本已提示过 */
+          /* 只有「立刻要落地某个动作」时才短暂冷却，避免动作执行中的排队对齐立刻再弹；
+             「先不动 / 直接关闭」不冷却：去重交给已提示记录，这样之后云端真出了新版本仍能提示一次 */
+          if (decision === 'merge' || decision === 'local' || decision === 'remote') {
+            sbConflictCoolUntil = Date.now() + 2000;
+          }
+          sbConflictOpen = false;
+          close();
+        }
+        /* 点遮罩、按 Esc 都等同于「先不动」，同样记账 */
+        overlay.onclick = function (e) { if (e.target === overlay) finish('dismissed'); };
+        activeDialogClose = function () { finish('dismissed'); };
+        $('[data-hold]', sheet).addEventListener('click', function () {
+          finish('dismissed');
+          sbSetMsg('info', '已先不动。本机和云端保持各自现状，需要处理时在云同步面板点「立即同步」。');
+        });
         $('[data-local]', sheet).addEventListener('click', function () {
-          done();
+          finish('local');
           sbPushNow(false);
         });
         $('[data-remote]', sheet).addEventListener('click', function () {
-          done();
+          finish('remote');
           sbApplyRemote(remoteData, remoteFp, rev, remoteAt, false);
         });
         $('[data-merge]', sheet).addEventListener('click', function () {
-          done();
+          finish('merge');
           var merged = cloudMerge(state, remoteData || { pages: [] });
           sbSuppress = true;
           state = normalize(merged);
@@ -5513,10 +5582,10 @@
           toast('已合并两边数据');
           sbPushNow(false);
         });
-        $('[data-close]', sheet).addEventListener('click', function () { sbConflictOpen = false; });
       }
     );
   }
+
 
   /* ---------------- 全自动静默同步引擎 ---------------- */
   /* 原则：常规使用零确认。只有「两端自上次同步后都改过同一份数据」才算真冲突。 */
@@ -5643,6 +5712,7 @@
         meta.rev = rev || meta.rev;
         meta.remoteAt = remoteAt || meta.remoteAt;
         sbWriteMeta(meta);
+        sbConflictClear();   /* 两端已收敛：清掉冲突记忆，以后真冲突还能正常提示一次 */
         updateCloudEntry();
         return null;
       }
@@ -5654,8 +5724,17 @@
         sbApplyRemote(remoteData, remoteFp, rev, remoteAt, true);
         return null;
       }
-      /* ④ 真冲突：两端自上次同步后都改过 */
+      /* ④ 真冲突：两端自上次同步后都改过。
+         关键：同一份云端版本只提示一次。用户选择过（或直接关掉/先不动）之后，
+         后续打开页面、保存防抖、网络恢复都不再重复弹窗，只在状态行标「有冲突待处理」；
+         云端版本真的变了（remoteFp 变化）才会作为新冲突再提示一次。 */
       if (localChanged && remoteChanged) {
+        var forced = opts.forceConflict === true;
+        if (!forced && (sbConflictSeen(remoteFp) || Date.now() < sbConflictCoolUntil)) {
+          sbUi.conflictPending = true;
+          updateCloudEntry();
+          return null;
+        }
         sbOpenConflict(remoteData, remoteFp, rev, remoteAt);
         return null;
       }
@@ -5686,19 +5765,22 @@
   function sbAfterEnter() {
     updateCloudEntry();
     sbInitChannel();
+    sbUi.conflictPending = !!sbConflictRead();   /* 上次没处理的冲突：只在面板提示，不再弹窗 */
     if (!sbLoggedIn()) return;
     sbScheduleRefresh();
     sbReconcile({ reason: 'open' });
   }
 
-  /* 手动兜底「立即同步」：走同一套对齐逻辑，只是多给一次明确反馈 */
+  /* 手动兜底「立即同步」：走同一套对齐逻辑，只是多给一次明确反馈。
+     这是用户主动发起的操作，所以允许把「待处理冲突」重新显示出来供选择。 */
   function sbSyncNow() {
     if (!sbLoggedIn()) { sbSetMsg('err', '请先登录云端账号'); return; }
     if (sbUi.busy > 0) { sbSetMsg('info', '正在同步中，稍等片刻…'); return; }
     sbUi.syncing = true;
+    sbConflictCoolUntil = 0;
     updateCloudEntry();
     sbSetMsg('info', '正在和云端核对…');
-    sbReconcile({ reason: 'manual' }).then(function () {
+    sbReconcile({ reason: 'manual', forceConflict: true }).then(function () {
       sbUi.syncing = false;
       updateCloudEntry();
       if (sbConflictOpen) return;  /* 真冲突时交给冲突面板，不再叠加成功提示 */
@@ -5721,7 +5803,7 @@
       sbUi.busy--;
       sbUi.syncing = false;
       if (!row || !row.data) { sbSetMsg('warn', '云端还没有数据，先点「上传本机」。'); return; }
-      var remoteFp = sbFp(row.data);
+      var remoteFp = sbNormFp(row.data);
       var remoteAt = Date.parse(row.client_updated_at || row.updated_at || '');
       if (isNaN(remoteAt)) remoteAt = 0;
       if (remoteFp === sbFp(state)) { sbSetMsg('ok', '云端数据和本机一致，无需下载。'); updateCloudEntry(); return; }
