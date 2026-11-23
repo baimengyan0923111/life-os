@@ -345,6 +345,9 @@
       if (e.button != null && e.button !== 0) return;
       if (btn.disabled) return;
       count = 0; long = false; skipClick = false;
+      if (opts.capture !== false && e.pointerType === 'mouse' && btn.setPointerCapture && e.pointerId != null) {
+        try { btn.setPointerCapture(e.pointerId); } catch (_) {}
+      }
       document.addEventListener('pointerup', onUp, true);
       document.addEventListener('pointercancel', onUp, true);
       window.addEventListener('blur', onUp, true);
@@ -363,9 +366,10 @@
       }, delay);
     });
 
-    /* 按下后还没进入长按就移开：取消计时，让 click 正常走一次 */
+    /* 按下后还没进入长按就移开：取消计时；鼠标已被捕获，故忽略随后那次 click */
     btn.addEventListener('pointerleave', function () {
-      if (!long) stop();
+      if (opts.keepOnLeave) return;
+      if (!long) { stop(); skipClick = true; }
     });
     btn.addEventListener('contextmenu', function (e) {
       if (long) e.preventDefault();
@@ -9332,6 +9336,7 @@
             k.cur = clamp(Math.round(k.cur + dir), 0, Math.max(Number(k.target) || 0, 1) * 3);
             paintKrRow(li, k);
           }, {
+            keepOnLeave: true,
             commit: function () { v13GoalTouch(g, '调整关键结果'); save(); paintSub(); }
           });
         });
