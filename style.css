@@ -3599,6 +3599,15 @@ html[data-theme="dark"] .g-st.st-done { color: #7fd6a8; }
 }
 .gd-kr-step button.holding { background: var(--accent-soft); border-color: var(--accent); }
 .gd-kr-step button:hover { background: var(--accent-soft); }
+/* 手机上扩大 ± 的热区，长按更稳、不易被手指滑出打断 */
+@media (hover: none), (max-width: 720px) {
+  .gd-kr-step { gap: 8px; }
+  .gd-kr-step button { width: 32px; height: 32px; font-size: var(--t-15); position: relative; }
+  .gd-kr-step button::after {
+    content: ''; position: absolute; inset: -8px; border-radius: 12px;
+  }
+  .gd-kr-step button.holding { transform: scale(0.94); }
+}
 .gd-ms { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .gd-ms li { display: flex; align-items: center; gap: 8px; font-size: var(--t-13); color: var(--ink-2); }
 .gd-ms li.on > span { color: var(--faint); text-decoration: line-through; }
