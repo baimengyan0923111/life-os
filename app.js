@@ -9493,7 +9493,7 @@
           '<button class="gd-ms-x" type="button" data-ms-del="' + esc(m.id) + '" aria-label="删除里程碑">×</button></li>';
       }).join('') + '</ul>' : '<p class="dim">还没有里程碑，可以按季度拆 2 – 3 个节点。</p>') +
         '<div class="gd-ms-add"><input class="field" data-ms-title placeholder="新增里程碑" maxlength="60">' +
-        '<input class="field date" type="date" data-ms-date><button class="ghost-btn tiny" type="button" data-ms-add>加入</button></div>';
+        '<input class="field date" type="date" data-ms-date><button class="add-mini" type="button" data-ms-add>加入</button></div>';
     }
 
     function html() {
@@ -9851,7 +9851,7 @@
 
         '<div class="mplan-card">' +
         '<div class="mplan-h"><div><h2>本月目标</h2><p>从年度目标的关键结果里拆下来</p></div>' +
-        '<button class="ghost-btn tiny" type="button" data-ml-add>' + icon('plus') + ' 添加</button></div>' +
+        '<button class="add-mini" type="button" data-ml-add>' + icon('plus') + ' 添加</button></div>' +
         '<div class="m-link-list">' + linkHtml + '</div>' +
         '</div>' +
 
@@ -9983,19 +9983,23 @@
         var hdone = habits.filter(function (x) { return (x.habit.checks || {})[d]; }).length;
         var doneN = info.filter(function (t) { return t.done; }).length;
         var isToday = d === today();
+        var statBits = [];
+        if (info.length) statBits.push(doneN + '/' + info.length + ' 项');
+        if (habits.length) statBits.push('习惯 ' + hdone + '/' + habits.length);
         return '<div class="w-day' + (isToday ? ' is-today' : '') + '" data-day="' + d + '">' +
-          '<div class="w-day-head">' +
+          '<div class="w-day-lead">' +
           '<span class="w-day-chip">' + v13Md(d) + '</span>' +
-          '<span class="w-day-wd">周' + WEEK[parseISO(d).getDay()] + '</span>' +
-          (isToday ? '<span class="w-day-tag">今天</span>' : '') +
-          '<span class="w-day-meta">' + (info.length ? doneN + '/' + info.length + ' 项' : '无任务') +
-          (habits.length ? ' · 习惯 ' + hdone + '/' + habits.length : '') + '</span>' +
+          '<span class="w-day-wd">' + (isToday ? '今天' : '周' + WEEK[parseISO(d).getDay()]) + '</span>' +
           '</div>' +
           '<div class="w-day-body">' +
           (info.length ? info.map(function (t) {
             return '<div class="w-mini' + (t.done ? ' done' : '') + '"><i class="w-dot ' + (t.src === 'mit' ? 'mit' : (t.src === 'week' ? 'week' : 'mod')) + '"></i>' +
               '<span class="w-mini-t">' + esc(t.text) + '</span></div>';
-          }).join('') : '<div class="w-day-empty">这一天还空着</div>') +
+          }).join('') : '<span class="w-day-none">未安排</span>') +
+          '</div>' +
+          '<div class="w-day-stat">' +
+          (statBits.length ? statBits.map(function (x) { return '<span class="w-day-kpi">' + x + '</span>'; }).join('')
+            : '<span class="w-day-kpi is-idle">空闲</span>') +
           '</div>' +
           '</div>';
       }).join('');
@@ -10090,7 +10094,7 @@
         '<div class="w-add">' +
         '<div class="w-add-main">' +
         '<input class="field" data-nt placeholder="添加任务，回车确认" maxlength="120">' +
-        '<button class="solid-btn tiny w-add-btn" type="button" data-nt-add>添加</button>' +
+        '<button class="add-pill w-add-btn" type="button" data-nt-add>添加</button>' +
         '</div>' +
         '<button class="w-add-more" type="button" data-nt-more aria-expanded="false">更多选项 · 目标 / 日期 / 优先级</button>' +
         '<div class="w-add-row">' +
@@ -10380,14 +10384,14 @@
         '<div class="d-card d-tasks"><div class="d-card-h"><h3>今日任务</h3><span>' + doneN + '/' + tasks.length + ' 完成</span></div>' +
         '<div class="d-task-list">' + (taskRows || '<p class="dim">这一天还没有任务。临时想到什么，直接写下来。</p>') + '</div>' +
         '<div class="d-add"><input class="field" data-dnew placeholder="临时加一件，回车确认" maxlength="120">' +
-        '<button class="solid-btn tiny" type="button" data-dadd>加入</button></div>' +
+        '<button class="add-pill" type="button" data-dadd>加入</button></div>' +
         (defers.length ? '<div class="d-defer-log"><span>从别的日子顺延过来：</span>' +
           defers.map(function (x) { return '<em>' + esc(x.title) + (x.from ? '（' + esc(v13Md(x.from)) + '）' : '') + '</em>'; }).join('') + '</div>' : '') +
         '</div>' +
         '<div class="d-card d-habits"><div class="d-card-h"><h3>习惯打卡</h3><span>' + habitDoneN + '/' + habits.length + ' 完成</span></div>' +
         '<div class="d-habit-list">' + (habitRows || '<p class="dim">还没有习惯，先加一个最想坚持的。</p>') + '</div>' +
         '<div class="d-add"><input class="field" data-hnew placeholder="新增习惯，例如：运动 30 分钟" maxlength="30">' +
-        '<button class="ghost-btn tiny" type="button" data-hadd>加入</button></div>' +
+        '<button class="add-pill" type="button" data-hadd>加入</button></div>' +
         '</div>' +
         '<div class="d-card d-state"><div class="d-card-h"><h3>今日状态</h3><span>1 – 5 分，随手一点</span></div>' +
         scaleRow('energy', '精力', dm.energy, '偏低', '充沛') +
