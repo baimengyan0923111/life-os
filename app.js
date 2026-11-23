@@ -2615,25 +2615,46 @@
       if (!objs.length) return '<p class="empty-line">还没有目标，先写一个方向。</p>';
       return objs.map(function (o) {
         var krs = o.krs || [];
-        var pct = krs.length ? Math.round(krs.reduce(function (a, k) {
-          return a + clamp(k.target ? (k.cur / k.target) * 100 : 0, 0, 100);
-        }, 0) / krs.length) : 0;
-        return '<div class="obj" data-obj="' + o.id + '">' +
-          '<div class="obj-title"><span class="dot"></span><span class="obj-name">' + esc(o.title) + '</span>' +
-          '<span class="pct">' + pct + '%</span></div>' +
-          (krs.length ? krs.map(function (k) {
+        var pcts = krs.map(function (k) {
+          return clamp(k.target ? (k.cur / k.target) * 100 : 0, 0, 100);
+        });
+        var pct = krs.length ? Math.round(pcts.reduce(function (a, b) { return a + b; }, 0) / pcts.length) : 0;
+        var hit = pcts.filter(function (p) { return p >= 100; }).length;
+        var left = krs.length - hit;
+        var sub = krs.length
+          ? ('小目标 ' + krs.length + ' 个 · 已达成 ' + hit + ' 个' + (left > 0 ? ' · 还差 ' + left + ' 个' : ' · 全部达成'))
+          : '还没拆小目标，先定一个能落地的小步';
+        return '<div class="obj' + (krs.length && !left ? ' obj-allhit' : '') + '" data-obj="' + o.id + '">' +
+          '<div class="obj-hero">' +
+            '<div class="obj-hero-l">' +
+              '<span class="obj-kicker">大目标</span>' +
+              '<span class="obj-name">' + esc(o.title) + '</span>' +
+              '<span class="obj-sub">' + sub + '</span>' +
+            '</div>' +
+            '<div class="obj-ring" style="--p:' + pct + '" role="img" aria-label="总进度 ' + pct + '%">' +
+              '<i></i><b>' + pct + '%</b></div>' +
+          '</div>' +
+          (krs.length ? '<div class="obj-tree">' + krs.map(function (k, idx) {
             var p = clamp(k.target ? (k.cur / k.target) * 100 : 0, 0, 100);
-            return '<div class="kr" data-kr="' + k.id + '">' +
-              '<div class="kr-wrap">' +
-              '<span class="kr-text">' + esc(k.text) + '</span>' +
-              '<button class="kr-num" type="button" data-kr-edit="' + k.id + '" title="点击修改目标次数">' +
-              k.cur + '/' + k.target + (k.unit ? ' ' + esc(k.unit) : '') + '</button>' +
-              '<button class="kr-mini" type="button" data-kr-step="-1" aria-label="减少">−</button>' +
-              '<button class="kr-mini" type="button" data-kr-step="1" aria-label="增加">＋</button>' +
+            var hitK = p >= 100;
+            return '<div class="kr' + (hitK ? ' kr-hit' : '') + '" data-kr="' + k.id + '">' +
+              '<span class="kr-node">' + (hitK ? icon('check') : (idx + 1)) + '</span>' +
+              '<div class="kr-main">' +
+                '<div class="kr-wrap">' +
+                  '<span class="kr-text">' + esc(k.text) + '</span>' +
+                  '<span class="kr-pct">' + Math.round(p) + '%</span>' +
+                '</div>' +
+                '<div class="kr-bar"><i style="width:' + p.toFixed(1) + '%"></i></div>' +
+                '<div class="kr-tools">' +
+                  '<button class="kr-num" type="button" data-kr-edit="' + k.id + '" title="点击修改目标次数">' +
+                  k.cur + ' / ' + k.target + (k.unit ? ' ' + esc(k.unit) : '') + '</button>' +
+                  '<button class="kr-mini" type="button" data-kr-step="-1" aria-label="减少">−</button>' +
+                  '<button class="kr-mini" type="button" data-kr-step="1" aria-label="增加">＋</button>' +
+                '</div>' +
               '</div>' +
-              '<div class="kr-bar"><i style="width:' + p + '%"></i></div>' +
               '</div>';
-          }).join('') : '<p class="empty-line" style="margin:0 0 8px">给这个目标配 2 – 3 个可量化的关键结果。</p>') +
+          }).join('') + '</div>'
+            : '<p class="empty-line" style="margin:0 0 8px">给这个目标配 2 – 3 个可量化的小目标。</p>') +
           '<div class="inline-add">' +
           '<input class="field" data-kr-input="' + o.id + '" placeholder="添加关键结果，例如：跑步 800 km">' +
           '<input class="field kr-target-field" type="number" inputmode="numeric" min="1" step="1"' +
@@ -2802,7 +2823,17 @@
       var items = visibleDailyItems(m.data.items);
       var done = items.filter(function (i) { return i.done; }).length;
       var pct = items.length ? Math.round(done / items.length * 100) : 0;
-      return '<div class="todo-list">' +
+      var allHit = items.length > 0 && done === items.length;
+      /* 非每日视图（如系统页的「年度达成奖励」）加一条成就进度，强化「解锁奖励」的激励感 */
+      var ach = (!dailyView && items.length) ? '<div class="ach' + (allHit ? ' ach-hit' : '') + '">' +
+        '<span class="ach-ico">' + icon(allHit ? 'trophy' : 'star') + '</span>' +
+        '<div class="ach-main">' +
+        '<div class="ach-top"><span class="ach-label">' +
+        (allHit ? '全部解锁 · 奖励到手' : '已解锁 <b>' + done + '</b> / ' + items.length + ' 项奖励') +
+        '</span><span class="ach-pct">' + pct + '%</span></div>' +
+        '<div class="ach-track"><i style="width:' + pct + '%"></i></div>' +
+        '</div></div>' : '';
+      return ach + '<div class="todo-list">' +
         (items.length ? items.map(function (i) {
           return '<div class="todo' + (i.done ? ' done' : '') + '" data-item="' + esc(i.id) + '">' +
             '<button class="check' + (i.done ? ' on' : '') + '" type="button" aria-label="完成">' + icon('check') + '</button>' +
@@ -2813,7 +2844,7 @@
         '</div>' +
         '<div class="inline-add"><input class="field" data-new placeholder="' + (dailyView ? '添加这一天的待办，回车确认' : '添加一件事，回车确认') + '">' +
         '<button class="add-btn" data-add type="button">添加</button></div>' +
-        (items.length ? '<div class="todo-foot"><div class="mini-progress"><i style="width:' + pct + '%"></i></div><span>' + done + ' / ' + items.length + '</span></div>' : '');
+        (items.length && !ach ? '<div class="todo-foot"><div class="mini-progress"><i style="width:' + pct + '%"></i></div><span>' + done + ' / ' + items.length + '</span></div>' : '');
     },
     bind: function (body, card, m) {
       var d = m.data;
