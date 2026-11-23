@@ -9270,7 +9270,10 @@
           '</header>' +
           '<h3 class="g-title">' + esc(g.title) + '</h3>' +
           '<p class="g-why">' + (g.why ? esc(g.why) : '<span class="dim">还没写动机 / 成功标准</span>') + '</p>' +
-          '<div class="g-prog"><span class="g-prog-bar"><i style="width:' + gp + '%"></i></span><b>' + gp + '<small>%</small></b></div>' +
+          '<div class="g-prog">' +
+          '<div class="g-prog-top"><span class="g-prog-l">全年进度</span><b>' + gp + '<small>%</small></b></div>' +
+          '<span class="g-prog-bar"><i style="width:' + gp + '%"></i></span>' +
+          '</div>' +
           '<div class="g-meta">' +
           '<span><em>当前阶段</em>' + (g.stage ? esc(g.stage) : '未设置') + '</span>' +
           '<span><em>关联周任务</em>' + linked + ' 项</span>' +
