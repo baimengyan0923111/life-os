@@ -3530,7 +3530,10 @@ html[data-theme="dark"] .ag-chip { background: var(--elev-2); color: var(--ink);
   gap: var(--s-4); flex-wrap: wrap; margin-bottom: var(--s-4);
 }
 .y13-head h2, .w13-cal-h h2 { margin: 0; }
-.y13-year { display: flex; align-items: baseline; gap: 8px; }
+.y13-year { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.year-nav { width: 26px; height: 26px; flex: none; display: grid; place-items: center; }
+.year-nav svg { width: 14px; height: 14px; }
+.y13-year .ghost-btn.tiny { margin-left: 2px; }
 .y13-year b { font-size: var(--t-26); color: var(--title); font-weight: 700; letter-spacing: -.5px; }
 .y13-year span { font-size: var(--t-13); color: var(--muted); }
 .y13-lede, .w13-cal-h p { margin: 4px 0 0; font-size: var(--t-13); color: var(--muted); }
@@ -4255,4 +4258,131 @@ input[type="number"], input[type="date"], input[type="time"] {
 }
 @media (prefers-reduced-motion: reduce) {
   .quote-strip, .qs-btn, .qs-state, .focus-hero, .fh-check, .fh-del, .fh-set, .fh-ghost { transition: none; }
+}
+
+
+/* =========================================================
+   V20 月度计划
+   ========================================================= */
+.mplan-top {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s-3); flex-wrap: wrap; margin-bottom: var(--s-4);
+}
+.mplan-nav { display: flex; align-items: center; gap: 6px; }
+.mplan-lab {
+  font-size: var(--t-17); font-weight: 650; color: var(--ink);
+  display: inline-flex; align-items: baseline; gap: 8px; letter-spacing: -0.01em;
+}
+.mplan-lab i {
+  font-style: normal; font-size: var(--t-11); font-weight: 600;
+  color: var(--accent); background: var(--accent-soft);
+  border-radius: var(--r-pill); padding: 2px 8px;
+}
+.mplan-sum { display: flex; align-items: center; gap: var(--s-3); font-size: var(--t-12); color: var(--muted); }
+.mplan-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s-4); align-items: start; }
+.mplan-card {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1); padding: var(--s-4);
+}
+.mplan-card.full { grid-column: 1 / -1; }
+.mplan-h { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s-3); margin-bottom: var(--s-3); }
+.mplan-h h2 { font-size: var(--t-15); color: var(--ink); }
+.mplan-h p { font-size: var(--t-12); color: var(--muted); margin-top: 3px; }
+.mplan-side { display: flex; align-items: center; gap: 8px; }
+.mplan-pctnum { font-size: var(--t-13); font-weight: 650; color: var(--muted); font-variant-numeric: tabular-nums; }
+.mplan-bar { height: 6px; border-radius: var(--r-pill); background: var(--bg-soft); overflow: hidden; }
+.mplan-bar i { display: block; height: 100%; background: var(--accent); border-radius: var(--r-pill); }
+.mplan-bar-mini { height: 4px; flex: 1; min-width: 60px; margin-left: auto; }
+.mplan-theme { margin-bottom: var(--s-3); }
+
+/* 本月聚焦 */
+.m-plan-list { display: flex; flex-direction: column; gap: 6px; }
+.m-plan-row {
+  display: flex; align-items: center; gap: 9px; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: var(--r-md); background: var(--elev);
+}
+.m-plan-row.done { background: var(--bg-soft); }
+.m-plan-row.done .m-in { color: var(--faint); text-decoration: line-through; }
+.m-tick {
+  width: 20px; height: 20px; flex: 0 0 20px; border-radius: 50%;
+  border: 1.5px solid var(--line-strong); background: transparent;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--on-accent); cursor: pointer; transition: all var(--dur-1) var(--ease); padding: 0;
+}
+.m-tick.on { background: var(--accent); border-color: var(--accent); }
+.m-tick svg { width: 12px; height: 12px; }
+.m-in {
+  flex: 1; min-width: 0; border: 0; background: transparent;
+  font-size: var(--t-13); color: var(--ink); font-family: inherit; outline: none;
+}
+.m-in::placeholder { color: var(--faint); }
+.m-x {
+  border: 0; background: transparent; color: var(--faint);
+  font-size: 15px; line-height: 1; cursor: pointer; padding: 2px 4px; border-radius: 6px;
+}
+.m-x:hover { color: var(--danger); background: var(--danger-soft); }
+.m-plan-add { display: flex; align-items: center; gap: 10px; margin-top: var(--s-3); }
+.m-plan-tip { font-size: var(--t-11); color: var(--faint); }
+
+/* 本月目标 */
+.m-link {
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  padding: 10px 12px; margin-bottom: 8px; background: var(--elev);
+}
+.m-link:last-child { margin-bottom: 0; }
+.m-link-h { display: flex; align-items: center; gap: 6px; font-size: var(--t-11); color: var(--muted); }
+.m-link-h svg { width: 13px; height: 13px; flex: 0 0 13px; }
+.m-link-h span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-link-t { font-size: var(--t-13); font-weight: 600; color: var(--ink); margin: 4px 0 8px; }
+.m-link-meta {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: var(--t-11); color: var(--muted); margin-top: 6px; font-variant-numeric: tabular-nums;
+}
+.m-link-note { font-size: var(--t-11); color: var(--faint); margin-top: 4px; }
+
+/* 本月各周 */
+.m-week-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: var(--s-3); }
+.m-week {
+  display: grid; grid-template-columns: 56px 92px minmax(0, 1fr) 40px;
+  align-items: center; gap: 8px; width: 100%; text-align: left;
+  border: 1px solid transparent; border-radius: var(--r-md);
+  padding: 8px 9px; background: transparent; cursor: pointer; font-family: inherit;
+  transition: background var(--dur-1) var(--ease);
+}
+.m-week:hover { background: var(--bg-soft); }
+.m-week.now { background: var(--accent-soft); border-color: var(--accent-line); }
+.m-week-no { font-size: var(--t-11); font-weight: 600; color: var(--muted); }
+.m-week-date { font-size: var(--t-12); color: var(--ink); font-variant-numeric: tabular-nums; }
+.m-week-theme { font-size: var(--t-12); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-week-task { font-size: var(--t-11); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.m-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-2); }
+.m-kpi { border-radius: var(--r-md); background: var(--bg-soft); padding: 10px 12px; }
+.m-kpi b { display: block; font-size: var(--t-20); color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.m-kpi span { font-size: var(--t-11); color: var(--muted); }
+
+/* 月度复盘 */
+.m-rev { display: flex; flex-direction: column; gap: var(--s-3); }
+.m-q { display: block; font-size: var(--t-12); font-weight: 600; color: var(--ink); margin-bottom: 5px; }
+.m-rev textarea {
+  width: 100%; min-height: 62px; resize: vertical;
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  background: var(--elev); padding: 8px 10px;
+  font-size: var(--t-13); color: var(--ink); font-family: inherit; line-height: 1.55; outline: none;
+}
+.m-rev textarea:focus { border-color: var(--accent); }
+
+@media (max-width: 900px) {
+  .mplan-grid { grid-template-columns: 1fr; }
+  .m-week { grid-template-columns: 52px 84px minmax(0, 1fr) 36px; }
+}
+@media (max-width: 520px) {
+  .m-week { grid-template-columns: 44px 76px minmax(0, 1fr) 32px; gap: 6px; padding: 8px 7px; }
+  .m-week-no { font-size: 10px; }
+  .m-week-date { font-size: 11px; }
+  .m-week-theme { font-size: 11px; }
+  .m-week-task { font-size: 10px; }
+  .m-kpis { gap: 6px; }
+  .m-kpi { padding: 8px 9px; }
+  .m-kpi b { font-size: 16px; }
+  .m-kpi span { font-size: 10px; }
 }
