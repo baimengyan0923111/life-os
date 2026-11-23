@@ -3230,11 +3230,11 @@ html[data-theme="dark"] {
   width: 1px; background: var(--line-2); }
 .kr { display: flex; gap: 9px; margin-bottom: 10px; align-items: flex-start; }
 .kr:last-child { margin-bottom: 4px; }
-.kr-node { position: relative; z-index: 1; flex: none; width: 19px; height: 19px; margin-top: 1px;
-  border-radius: 50%; display: grid; place-items: center; background: var(--card);
+.kr-node { position: relative; z-index: 1; flex: none; width: 19px; height: 19px; margin-top: -0.625px;
+  border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--card);
   border: 1px solid var(--line-2); color: var(--muted);
-  font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.kr-node svg { width: 11px; height: 11px; stroke-width: 2.8; }
+  font-size: 10px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.kr-node svg { display: block; width: 11px; height: 11px; stroke-width: 2.8; }
 .kr-hit .kr-node { background: var(--gold-soft); border-color: var(--gold-line); color: var(--gold-2); }
 .kr-main { flex: 1 1 auto; min-width: 0; }
 .kr-wrap { gap: 8px; align-items: baseline; }
@@ -3279,3 +3279,17 @@ html[data-theme="dark"] {
   paint-order: stroke; stroke: var(--card); stroke-width: 2.4px;
   stroke-linejoin: round; stroke-linecap: round; }
 @media (max-width: 620px) { .radar-label { font-size: 11px; } }
+
+/* ================= V10：数量增减支持长按连发 ================= */
+.kr-mini, .kr-tools .kr-num, .step-btn, .icon-mini, .counter-ops button,
+.dash-ops button, .goal-ops .icon-mini, [data-plus], [data-minus] {
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none; touch-action: manipulation;
+  transition: transform .12s ease, filter .12s ease;
+}
+.kr-mini.holding, .step-btn.holding, .icon-mini.holding,
+.counter-ops button.holding, .dash-ops button.holding,
+[data-plus].holding, [data-minus].holding {
+  transform: scale(.9);
+  filter: brightness(.95);
+}
