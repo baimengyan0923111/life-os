@@ -1937,17 +1937,20 @@
     sec.innerHTML =
       '<div class="day-bar-main">' +
       '<button class="icon-btn day-nav" type="button" data-day="-1" aria-label="前一天" title="前一天">' + icon('chevronLeft') + '</button>' +
-      '<div class="day-now">' +
-      '<strong>' + esc(cnDate(dt)) + '</strong>' +
-      '<span>周' + WEEK[dt.getDay()] + ' · ' + total + ' 项任务</span>' +
+      '<label class="day-now" title="点击选择日期">' +
+      '<span class="day-line"><strong>' + (dt.getMonth() + 1) + '月' + dt.getDate() + '日</strong>' +
+      '<em class="day-wk">周' + WEEK[dt.getDay()] + '</em>' +
       (isToday ? '<em class="day-tag">今天</em>' : '') +
-      '</div>' +
-      '<button class="icon-btn day-nav" type="button" data-day="1" aria-label="后一天" title="后一天">' + icon('chevronRight') + '</button>' +
+      '</span>' +
+      '<span class="day-sub">' + dt.getFullYear() + ' 年 · ' + total + ' 项任务</span>' +
       '<input class="day-input" type="date" value="' + d + '" aria-label="选择日期" />' +
+      '</label>' +
+      '<button class="icon-btn day-nav" type="button" data-day="1" aria-label="后一天" title="后一天">' + icon('chevronRight') + '</button>' +
       '</div>' +
       '<div class="day-bar-side">' +
-      (isToday ? '' : '<button class="ghost-btn tiny" type="button" data-day-now>回到今天</button>') +
-      '<button class="ghost-btn tiny" type="button" data-open-month>月度计划' + icon('arrowRight') + '</button>' +
+      (isToday ? '' : '<button class="ghost-btn side-today" type="button" data-day-now title="回到今天">今天</button>') +
+      '<button class="jump-btn" type="button" data-open-month title="打开月度计划">' +
+      icon('calendar') + '<span class="jf-txt">月度计划</span>' + icon('arrowRight') + '</button>' +
       '</div>';
 
     $$('[data-day]', sec).forEach(function (b) {
@@ -2004,19 +2007,62 @@
     var pickedSet = {};
     validPicks.forEach(function (k) { pickedSet[k] = 1; });
 
+    var doneN = tasks.filter(function (t) { return t.done; }).length;
+    var pendingN = tasks.length - doneN;
+    var rate = tasks.length ? Math.round(doneN / tasks.length * 100) : 0;
+    var hideDone = !!state.settings.agHideDone;
+    var pickLeft = tasks.filter(function (t) { return !t.done && !pickedSet[t.key]; }).length;
+    var planDone = validPicks.filter(function (k) { return byKey[k].done; }).length;
+    var tdy = today();
+
     var groups = [];
     var cur = null;
     tasks.forEach(function (t) {
       if (!cur || cur.date !== t.date) { cur = { date: t.date, items: [] }; groups.push(cur); }
       cur.items.push(t);
     });
+    groups.forEach(function (g) {
+      g.items.sort(function (a, b) { return (a.done ? 1 : 0) - (b.done ? 1 : 0); });
+      g.pending = g.items.filter(function (t) { return !t.done; }).length;
+    });
 
-    var doneN = tasks.filter(function (t) { return t.done; }).length;
+    function dayRel(ds) {
+      var n = Math.round((parseISO(ds) - parseISO(tdy)) / 86400000);
+      if (n === 0) return '今天';
+      if (n === 1) return '明天';
+      if (n === 2) return '后天';
+      if (n === -1) return '昨天';
+      if (n < -1) return '已过 ' + (-n) + ' 天';
+      if (n <= 7) return n + ' 天后';
+      return '';
+    }
+
+    var y = Number(month.slice(0, 4));
+    var mo = Math.max(1, Number(month.slice(5, 7)) || 1);
+    var days = new Date(y, mo, 0).getDate();
+    var per = {};
+    tasks.forEach(function (t) {
+      var o = per[t.date] || (per[t.date] = { n: 0, done: 0 });
+      o.n++;
+      if (t.done) o.done++;
+    });
+    var maxN = 1;
+    Object.keys(per).forEach(function (k) { if (per[k].n > maxN) maxN = per[k].n; });
+    var heatHtml = '';
+    for (var di = 1; di <= days; di++) {
+      var ds = month + '-' + pad(di);
+      var o = per[ds] || { n: 0, done: 0 };
+      var lv = o.n ? Math.max(1, Math.round(o.n / maxN * 4)) : 0;
+      heatHtml +=
+        '<button class="ag-hd' + (lv ? ' has' : '') + (ds === tdy ? ' is-today' : '') + '" type="button" data-jump="' + ds +
+        '" title="' + mo + '月' + di + '日 · ' + o.n + ' 项' + (o.done ? '（已完成 ' + o.done + '）' : '') +
+        '" aria-label="' + mo + '月' + di + '日 ' + o.n + ' 项任务"><i class="lv' + lv + '"></i></button>';
+    }
 
     var html =
       '<div class="agenda-head">' +
       '<div class="agenda-title"><h2>本月日程任务</h2>' +
-      '<p>' + tasks.length + ' 项 · 完成 ' + doneN + ' 项 · 已加入计划 ' + validPicks.length + ' 项</p></div>' +
+      '<p>' + tasks.length + ' 项 · 完成 ' + doneN + ' · 待办 ' + pendingN + ' · 已加入计划 ' + validPicks.length + '</p></div>' +
       '<div class="agenda-nav">' +
       '<button class="icon-btn" type="button" data-month="-1" aria-label="上一月" title="上一月">' + icon('chevronLeft') + '</button>' +
       '<span class="agenda-month">' + esc(monthLabel(month)) + '</span>' +
@@ -2029,51 +2075,78 @@
       html +=
         '<div class="agenda-empty">' +
         '<span class="agenda-empty-icon">' + icon('calendar') + '</span>' +
-        '<p>本月还没有日程任务</p>' +
-        '<span class="agenda-empty-sub">去每日日程加几条，这里会自动聚合出来，并可直接加入本月计划。</span>' +
+        '<p>' + mo + ' 月还没有日程任务</p>' +
+        '<span class="agenda-empty-sub">在每日日程里记几件事，这里会按天自动汇总；勾选状态和计划清单实时同步。</span>' +
+        '<div class="agenda-empty-act">' +
         '<button class="solid-btn" type="button" data-goto-daily>去每日日程添加</button>' +
+        '</div>' +
         '</div>';
     } else {
-      html += '<div class="agenda-groups">' + groups.map(function (g) {
-        var pending = g.items.filter(function (t) { return !t.done; }).length;
-        return '<div class="agenda-group">' +
-          '<div class="agenda-day">' +
-          '<span class="agenda-date">' + esc(shortDate(g.date)) + '</span>' +
-          '<span class="agenda-day-meta">' + g.items.length + ' 项' + (pending ? ' · 待办 ' + pending : ' · 全部完成') + '</span>' +
-          '<button class="link-btn" type="button" data-jump="' + g.date + '">查看当天' + icon('arrowRight') + '</button>' +
-          '</div>' +
-          g.items.map(function (t) {
-            var inPlan = !!pickedSet[t.key];
-            return '<div class="agenda-item' + (t.done ? ' done' : '') + '" data-key="' + esc(t.key) + '">' +
-              '<button class="check' + (t.done ? ' on' : '') + '" type="button" data-check' +
-              ' aria-label="' + (t.done ? '标记为未完成' : '标记为完成') + '">' + icon('check') + '</button>' +
-              '<button class="agenda-text" type="button" data-jump="' + t.date + '" title="点击跳到当天">' + esc(t.text || '（未命名任务）') + '</button>' +
-              (t.type === 'timeline' ? '<span class="agenda-time">' + esc(tlRangeText(t.item)) + '</span>' : '') +
-              (t.tag ? '<span class="agenda-tag">' + esc(t.tag) + '</span>' : '') +
-              '<button class="pick-btn' + (inPlan ? ' on' : '') + '" type="button" data-pick title="' +
-              (inPlan ? '点击移出本月计划' : '加入本月计划（引用，不复制）') + '">' +
-              (inPlan ? '已加入' : '＋ 加入计划') + '</button>' +
-              '</div>';
-          }).join('') +
-          '</div>';
-      }).join('') + '</div>';
+      html +=
+        '<div class="ag-prog">' +
+        '<div class="ag-prog-track"><i style="width:' + rate + '%"></i></div>' +
+        '<span class="ag-prog-num">' + rate + '<em>%</em></span>' +
+        '<div class="ag-tools">' +
+        '<button class="ag-hide' + (hideDone ? ' on' : '') + '" type="button" data-hide-done title="' +
+        (hideDone ? '显示已完成任务' : '隐藏已完成任务') + '">' + icon(hideDone ? 'eyeOff' : 'eye') +
+        '<span>' + (hideDone ? '显示已完成' : '隐藏已完成') + '</span></button>' +
+        (pickLeft ? '<button class="ghost-btn tiny" type="button" data-pick-all title="把本月所有未完成任务加入计划">' +
+          icon('plus') + '<span>全部加入</span></button>' : '') +
+        '</div>' +
+        '</div>' +
+        '<div class="ag-heat" role="group" aria-label="本月每日任务分布">' + heatHtml + '</div>' +
+        '<div class="ag-groups">' + groups.map(function (g) {
+          var gd = parseISO(g.date);
+          var rel = dayRel(g.date);
+          var isT = g.date === tdy;
+          var shown = hideDone ? g.items.filter(function (t) { return !t.done; }) : g.items;
+          if (!shown.length) return '';
+          return '<div class="ag-group">' +
+            '<div class="agenda-day">' +
+            '<span class="ag-chip' + (isT ? ' is-today' : '') + (g.date < tdy ? ' is-past' : '') + '">' + (gd.getMonth() + 1) + '/' + gd.getDate() + '</span>' +
+            '<span class="ag-wk">周' + WEEK[gd.getDay()] + '</span>' +
+            (rel ? '<span class="ag-rel' + (isT ? ' is-today' : '') + '">' + rel + '</span>' : '') +
+            '<span class="agenda-day-meta">' + g.items.length + ' 项 · 待办 ' + g.pending + '</span>' +
+            '<button class="link-btn ag-jump" type="button" data-jump="' + g.date + '" title="跳到这一天">当天' + icon('arrowRight') + '</button>' +
+            '</div>' +
+            shown.map(function (t) {
+              var inPlan = !!pickedSet[t.key];
+              return '<div class="agenda-item' + (t.done ? ' done' : '') + (inPlan ? ' in-plan' : '') + '" data-key="' + esc(t.key) + '">' +
+                '<button class="check' + (t.done ? ' on' : '') + '" type="button" data-check' +
+                ' aria-label="' + (t.done ? '标记为未完成' : '标记为完成') + '">' + icon('check') + '</button>' +
+                '<button class="agenda-text" type="button" data-jump="' + t.date + '" title="点击跳到当天">' + esc(t.text || '（未命名任务）') + '</button>' +
+                ((t.type === 'timeline' || t.tag)
+                  ? '<span class="ag-meta">' +
+                    (t.type === 'timeline' ? '<span class="agenda-time">' + esc(tlRangeText(t.item)) + '</span>' : '') +
+                    (t.tag ? '<span class="agenda-tag">' + esc(t.tag) + '</span>' : '') +
+                    '</span>'
+                  : '') +
+                '<button class="pick-btn' + (inPlan ? ' on' : '') + '" type="button" data-pick title="' +
+                (inPlan ? '点击移出本月计划' : '加入本月计划（引用，不复制）') + '">' +
+                icon(inPlan ? 'check' : 'plus') + '<span class="pk-txt">' + (inPlan ? '已加入' : '加入计划') + '</span></button>' +
+                '</div>';
+            }).join('') +
+            '</div>';
+        }).join('') + '</div>';
     }
 
-    if (validPicks.length) {
-      html +=
-        '<div class="plan-list">' +
-        '<div class="plan-head"><h3>本月计划清单</h3><span>引用自每日日程 · 完成状态双向同步</span></div>' +
-        validPicks.map(function (k) {
-          var t = byKey[k];
-          return '<div class="plan-item' + (t.done ? ' done' : '') + '" data-key="' + esc(k) + '">' +
-            '<button class="check' + (t.done ? ' on' : '') + '" type="button" data-check>' + icon('check') + '</button>' +
-            '<span class="plan-date">' + esc(Number(t.date.slice(5, 7)) + '/' + Number(t.date.slice(8, 10))) + '</span>' +
-            '<button class="agenda-text" type="button" data-jump="' + t.date + '" title="点击跳到当天">' + esc(t.text || '（未命名任务）') + '</button>' +
-            '<button class="plan-off" type="button" data-unpick title="移出计划" aria-label="移出计划">' + icon('x') + '</button>' +
-            '</div>';
-        }).join('') +
-        '</div>';
-    }
+    html +=
+      '<div class="plan-list">' +
+      '<div class="plan-head"><h3>本月计划清单</h3><span>' +
+      (validPicks.length
+        ? validPicks.length + ' 项 · 完成 ' + planDone + ' · 与每日日程双向同步'
+        : '从上面的任务点「加入计划」，这里就形成本月要打的仗') +
+      '</span></div>' +
+      (validPicks.length ? validPicks.map(function (k) {
+        var t = byKey[k];
+        return '<div class="plan-item' + (t.done ? ' done' : '') + '" data-key="' + esc(k) + '">' +
+          '<button class="check' + (t.done ? ' on' : '') + '" type="button" data-check>' + icon('check') + '</button>' +
+          '<span class="plan-date">' + esc(Number(t.date.slice(5, 7)) + '/' + Number(t.date.slice(8, 10))) + '</span>' +
+          '<button class="agenda-text" type="button" data-jump="' + t.date + '" title="点击跳到当天">' + esc(t.text || '（未命名任务）') + '</button>' +
+          '<button class="plan-off" type="button" data-unpick title="移出计划" aria-label="移出计划">' + icon('x') + '</button>' +
+          '</div>';
+      }).join('') : '<p class="plan-empty">还没有挑选任务。点任务右侧的「加入计划」，把真正要在这个月完成的事挑出来。</p>') +
+      '</div>';
 
     sec.innerHTML = html;
 
@@ -2091,6 +2164,24 @@
       state.settings.planMonth = monthKey(new Date());
       save();
       renderPage();
+    });
+    var hideBtn = $('[data-hide-done]', sec);
+    if (hideBtn) hideBtn.addEventListener('click', function () {
+      state.settings.agHideDone = !hideDone;
+      save();
+      refresh();
+    });
+    var pickAll = $('[data-pick-all]', sec);
+    if (pickAll) pickAll.addEventListener('click', function () {
+      var arr = planPicks(month);
+      var add = 0;
+      tasks.forEach(function (t) {
+        if (t.done || pickedSet[t.key]) return;
+        if (arr.indexOf(t.key) === -1) { arr.push(t.key); add++; }
+      });
+      save();
+      toast(add ? '已加入 ' + add + ' 项到本月计划' : '本月待办都已在计划里');
+      refresh();
     });
     var gd = $('[data-goto-daily]', sec);
     if (gd) gd.addEventListener('click', function () { goToDate(today()); });
