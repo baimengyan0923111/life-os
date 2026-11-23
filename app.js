@@ -1216,7 +1216,6 @@
     return !!foldState().blocks[key];
   }
 
-  /* 系统详情页的模块画布：首次出现时默认收起；之后记住用户自己的展开/收起选择 */
   function seedModulesFold(pageId) {
     var f = foldState();
     f.seeds = (f.seeds && typeof f.seeds === 'object') ? f.seeds : {};
@@ -1438,7 +1437,6 @@
       canvas.appendChild(kpisBlock());
     }
     /* V13：年度目标 / 周计划 / 每日打卡 三页按新结构渲染 */
-    var v13Page = page.builtin === 'yearly' || page.builtin === 'monthplan' || page.builtin === 'monthly' || page.builtin === 'daily';
     if (page.builtin === 'yearly') canvas.appendChild(yearlyBoardBlock());
     if (page.builtin === 'monthplan') canvas.appendChild(monthBoardBlock());
     if (page.builtin === 'monthly') {
@@ -1453,50 +1451,6 @@
     /* 周复盘：自动汇总 + 四栏手填 + 历史 */
     if (page.builtin === 'review') canvas.appendChild(weeklyBlock());
 
-
-    // 模块区（整块可折叠）：系统详情页只在已有模块时出现，避免空画布占位
-    if (!v13Page || page.modules.length) {
-    if (v13Page) seedModulesFold(page.id);
-    var modsWrap = document.createElement('section');
-    modsWrap.className = 'modules-wrap';
-
-    var head = document.createElement('div');
-    head.className = 'section-head reveal';
-    head.innerHTML = '<div><h2>模块画布</h2><p>' + page.modules.length + ' 个模块 · 拖拽右侧手柄可排序</p></div>' +
-      '<button class="solid-btn head-add" type="button" data-act="add">＋ 添加模块</button>';
-    modsWrap.appendChild(head);
-
-    var grid = document.createElement('div');
-    grid.className = 'modules';
-    grid.id = 'modules';
-    page.modules.forEach(function (m, i) {
-      /* 单张卡渲染异常只降级这张卡，绝不中断同页后续卡片（概览「3 个模块只显示 1 张」的根因） */
-      var card;
-      try {
-        card = renderCard(m);
-      } catch (err) {
-        card = renderCardError(m, err);
-      }
-      card.classList.add('reveal');
-      grid.appendChild(card);
-    });
-    modsWrap.appendChild(grid);
-    if (!page.modules.length) modsWrap.appendChild(emptyBlock(page));
-    foldSection(modsWrap, 'modules:' + page.id, '.section-head');
-    canvas.appendChild(modsWrap);
-    attachDrag(grid);
-    }
-
-
-
-    // 底部
-    if (!v13Page) {
-      var foot = document.createElement('div');
-      foot.className = 'section-head reveal';
-      foot.style.cssText = 'margin-top:40px;justify-content:center';
-      foot.innerHTML = '<button class="ghost-btn" data-act="add">＋ 添加一个模块</button>';
-      canvas.appendChild(foot);
-    }
 
     observeReveal(canvas);
     // 卡片挂载到文档后再测量文本域高度（脱离文档时测不到高度）
@@ -2465,21 +2419,6 @@
       return '<span class="loop-chip"><i></i>' + s + '</span>' +
         (i < steps.length - 1 ? '<span class="loop-arrow">' + icon('arrowRight') + '</span>' : '');
     }).join('');
-    return sec;
-  }
-
-  function emptyBlock(page) {
-    var welcome = !state.seeded && page.builtin === 'overview';
-    var sec = document.createElement('div');
-    sec.className = 'empty reveal';
-    sec.innerHTML =
-      '<div class="empty-mark">' + icon(welcome ? 'sparkle' : 'layers') + '</div>' +
-      '<h3>' + (welcome ? '这里还很空' : '这个页签还没有模块') + '</h3>' +
-      '<p>' + (welcome
-        ? '先从一个小模块开始就好 —— 想看完整的样子，点顶栏的「载入示例」；想自己搭，点「空白搭建」就够了。'
-        : '模块是这个系统的最小单元。选一个类型，写个名字，就能开始用。') + '</p>' +
-      (welcome ? '' :
-        '<div class="empty-actions"><button class="solid-btn" data-act="add">添加模块</button></div>');
     return sec;
   }
 
@@ -4341,8 +4280,7 @@
     }
   };
 
-  /* -------- 添加模块 -------- */
-  /* ========= 图标 / 配色 / 推荐组合 选择器（添加模块与改样式共用） ========= */
+  /* ========= 图标 / 配色 / 推荐组合 选择器（改样式用） ========= */
 
   function pickerHTML(sel) {
     var iconGroups = ICON_GROUPS.map(function (g) {
@@ -4434,141 +4372,6 @@
         if (none) none.hidden = !!any || !q;
       });
     }
-  }
-
-  /* -------- 添加模块：类型优先 / 目标页可选 / 外观折叠 / 固定底栏 -------- */
-  function dialogAddModule() {
-    var first = MODULE_TYPES[0];
-    var sel = { type: first.type, icon: first.icon, color: first.color };
-    var cur = currentPage();
-
-    var pageOpts = state.pages.map(function (p) {
-      return '<option value="' + esc(p.id) + '"' + (p.id === cur.id ? ' selected' : '') + '>' +
-        esc(p.name) + (p.builtin ? ' · 系统页' : '') + '</option>';
-    }).join('');
-
-    openDialog(
-      '<div class="sheet-head">' +
-        '<h3>添加模块</h3>' +
-        '<p class="sub">选一个类型就行，名字和图标之后随时能改。</p>' +
-      '</div>' +
-      '<div class="sheet-body">' +
-        '<div class="sheet-label">类型<small>' + MODULE_TYPES.length + ' 种 · 都能直接记东西</small></div>' +
-        '<div class="type-chips">' + MODULE_TYPES.map(function (t) {
-          return '<button class="type-chip' + (t.type === sel.type ? ' active' : '') + '" type="button" data-type="' + t.type + '" title="' + esc(t.desc) + '">' +
-            '<span class="to-icon">' + icon(t.icon) + '</span>' +
-            '<span class="tc-tx"><b>' + esc(t.name) + '</b><small>' + esc(t.desc) + '</small></span></button>';
-        }).join('') + '</div>' +
-        '<div class="dlg-fields">' +
-          '<label class="dlg-field"><span>名称</span>' +
-            '<input class="field" style="width:100%" data-title maxlength="40" value="' + esc(first.title) + '" placeholder="例如：每周复盘"></label>' +
-          '<label class="dlg-field"><span>添加到</span>' +
-            '<select class="field" style="width:100%" data-target-page>' + pageOpts + '</select></label>' +
-        '</div>' +
-        '<p class="sub dlg-tip" data-tip hidden>该系统页的模块画布平时收起，添加后会自动展开并定位到新模块。</p>' +
-        '<details class="dlg-more"><summary>外观：图标与配色<small>不改也行</small></summary>' +
-        '<div class="dlg-more-body">' + pickerHTML(sel) + '</div></details>' +
-      '</div>' +
-      '<div class="sheet-actions sheet-foot">' +
-        '<button class="ghost-btn" type="button" data-close>取消</button>' +
-        '<button class="solid-btn" type="button" data-ok>添加模块</button>' +
-      '</div>',
-      function (sheet, close) {
-        sheet.classList.add('sheet-stack', 'sheet-wide');
-        var titleInput = $('[data-title]', sheet);
-        var pageSel = $('[data-target-page]', sheet);
-        var tip = $('[data-tip]', sheet);
-
-        function syncTip() {
-          var tp = pageById(pageSel.value);
-          tip.hidden = !(tp && tp.builtin);
-        }
-        pageSel.addEventListener('change', syncTip);
-        syncTip();
-
-        $$('.type-chip', sheet).forEach(function (b) {
-          b.addEventListener('click', function () {
-            var tp = b.dataset.type;
-            var meta = MODULE_TYPES.filter(function (t) { return t.type === tp; })[0];
-            if (!meta) return;
-            sel.type = tp;
-            sel.icon = meta.icon;
-            titleInput.value = meta.title || meta.name;
-            $$('.type-chip', sheet).forEach(function (x) { x.classList.toggle('active', x === b); });
-            $$('[data-icon]', sheet).forEach(function (x) { x.classList.toggle('active', x.dataset.icon === sel.icon); });
-            $$('[data-preset]', sheet).forEach(function (x) {
-              var p = COLOR_PRESETS[Number(x.dataset.preset)];
-              x.classList.toggle('active', !!p && p.icon === sel.icon && p.color === sel.color);
-            });
-          });
-        });
-
-        bindPicker(sheet, sel, function (p) {
-          titleInput.value = p.name;
-          if (p.type) {
-            sel.type = p.type;
-            $$('.type-chip', sheet).forEach(function (x) { x.classList.toggle('active', x.dataset.type === p.type); });
-          }
-        });
-
-        $('[data-ok]', sheet).addEventListener('click', function () {
-          var meta = MODULE_TYPES.filter(function (t) { return t.type === sel.type; })[0] || first;
-          var target = pageById(pageSel.value) || cur;
-          var m = {
-            id: uid('m'),
-            type: sel.type,
-            title: (titleInput.value || '').trim() || meta.title || meta.name,
-            icon: sel.icon,
-            color: sel.color,
-            w: meta.w || (sel.type === 'habit' || sel.type === 'kanban' || sel.type === 'timeline' ? 'full' : 'half'),
-            data: blankData(sel.type)
-          };
-          target.modules.push(m);
-          /* 目标页若被折叠，先展开，避免「加了却看不到」 */
-          var fds = foldState();
-          fds.seeds = (fds.seeds && typeof fds.seeds === 'object') ? fds.seeds : {};
-          fds.seeds['modules:' + target.id] = 1;
-          foldSet('modules:' + target.id, false);
-          state.current = target.id;
-          save();
-          close();
-          renderNav();
-          renderPage();
-          requestAnimationFrame(function () {
-            var card = document.querySelector('[data-mod="' + m.id + '"]');
-            if (!card) return;
-            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            card.classList.add('mod-new');
-            setTimeout(function () { card.classList.remove('mod-new'); }, 1800);
-          });
-          toast('已添加「' + m.title + '」到「' + target.name + '」');
-        });
-      }
-    );
-  }
-
-  /* -------- 重命名模块 -------- */
-  function dialogRename(m) {
-    openDialog(
-      '<h3>重命名</h3><p class="sub">名字显示在卡片顶部，最长 40 个字；回车即可保存。</p>' +
-      '<input class="field" style="width:100%" data-title maxlength="40" value="' + esc(m.title) + '" placeholder="例如：每周复盘">' +
-      '<div class="sheet-actions"><button class="ghost-btn" data-close>取消</button>' +
-      '<button class="solid-btn" data-ok>保存</button></div>',
-      function (sheet, close) {
-        var inp = $('[data-title]', sheet);
-        function commit() {
-          var v = (inp.value || '').trim();
-          if (!v) { inp.focus(); toast('名字不能为空'); return; }
-          m.title = v.slice(0, 40);
-          save(); close(); refreshCard(m);
-          toast('已重命名');
-        }
-        $('[data-ok]', sheet).addEventListener('click', commit);
-        inp.addEventListener('keydown', function (e) {
-          if (e.key === 'Enter') { e.preventDefault(); commit(); }
-        });
-      }
-    );
   }
 
   /* -------- 图标与配色（同一套选择器） -------- */
@@ -4943,7 +4746,7 @@
     state.pages.filter(function (p) { return p.builtin; }).forEach(function (p) {
       out.push({
         kind: 'page', group: '页签', page: p.id, icon: p.icon,
-        text: p.name, meta: '系统页 · ' + p.modules.length + ' 个模块',
+        text: p.name, meta: '系统页',
         keys: p.name
       });
       p.modules.forEach(function (m) {
@@ -4984,7 +4787,6 @@
         }
       });
     });
-    out.push({ kind: 'action', group: '操作', icon: 'plus', text: '添加模块', meta: '在当前页新建一个模块', keys: '添加 新建 模块', run: dialogAddModule });
     out.push({ kind: 'action', group: '操作', icon: 'download', text: '导出备份', meta: '把当前数据导出为 JSON', keys: '导出 备份 下载 json', run: exportData });
     out.push({ kind: 'action', group: '操作', icon: 'user', text: '修改用户名', meta: '当前：' + userName(), keys: '用户名 昵称 账户 名字 账号', run: openAccountDialog });
     out.push({ kind: 'action', group: '操作', icon: 'auto', text: '切换外观', meta: '在跟随系统 / 浅色 / 深色之间切换', keys: '主题 深浅色 外观 暗色', run: cycleTheme });
@@ -7052,7 +6854,6 @@
       else openSidebar();
     });
     $('#scrim').addEventListener('click', closeSidebar);
-    $('#btn-add-module').addEventListener('click', dialogAddModule);
     var pageMenuBtn = $('#btn-page-menu');
     if (pageMenuBtn) pageMenuBtn.addEventListener('click', dialogPages);
     applyActions(actionsOpen());
@@ -7134,7 +6935,6 @@
       var act = e.target.closest('[data-act]');
       if (act) {
         var a = act.dataset.act;
-        if (a === 'add') dialogAddModule();
         if (a === 'export') exportData();
         if (a === 'import') $('#file-import').click();
         if (a === 'reset') resetAll();
@@ -7209,7 +7009,7 @@
     box.hidden = !open;
     bar.classList.toggle('actions-hidden', !open);
     btn.innerHTML = icon(open ? 'chevronRight' : 'chevronLeft');
-    btn.title = open ? '隐藏「页签设置 / 添加模块」' : '展开「页签设置 / 添加模块」';
+    btn.title = open ? '隐藏操作区' : '展开操作区';
     btn.setAttribute('aria-expanded', open ? 'true' : 'false');
   }
 
