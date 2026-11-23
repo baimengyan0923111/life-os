@@ -9275,7 +9275,17 @@
         var gp = v13GoalPct(g);
         var st = v13GoalSt(g.status);
         var linked = v13GoalTaskCount(g.id);
-        var msNext = (g.milestones || []).filter(function (m) { return !m.done; })[0] || (g.milestones || []).slice(-1)[0];
+        var msAll = (g.milestones || []).slice().sort(function (a, b) {
+          /* 未完成的排前面，按日期先后；已完成的排后面 */
+          if (!!a.done !== !!b.done) return a.done ? 1 : -1;
+          return String(a.date || '') < String(b.date || '') ? -1 : (String(a.date || '') > String(b.date || '') ? 1 : 0);
+        });
+        var msDone = (g.milestones || []).filter(function (m) { return m.done; }).length;
+        var msRows = msAll.map(function (m) {
+          return '<span class="g-ms-i' + (m.done ? ' on' : '') + '">' +
+            (m.done ? '✓ ' : '○ ') + esc(m.title) +
+            (m.date ? '<em>' + esc(v13Md(m.date)) + '</em>' : '') + '</span>';
+        }).join('');
         var krRows = (g.krs || []).slice(0, 3).map(function (k) {
           var kp = k.target > 0 ? Math.round(clamp(k.cur / k.target * 100, 0, 100)) : 0;
           return '<li><span class="g-kr-t" title="' + esc(k.text) + '">' + esc(k.text) + '</span>' +
@@ -9299,8 +9309,8 @@
           '<span><em>最近更新</em>' + esc(v13Md(g.updatedAt)) + '</span>' +
           '</div>' +
           (krRows ? '<ul class="g-krs">' + krRows + '</ul>' : '<p class="g-nokr">还没有关键结果，点开详情补上更能量化推进。</p>') +
-          (msNext ? '<div class="g-ms"><span class="g-ms-l">里程碑</span><span class="g-ms-i' + (msNext.done ? ' on' : '') + '">' +
-            (msNext.done ? '✓ ' : '') + esc(msNext.title) + (msNext.date ? '<em>' + esc(v13Md(msNext.date)) + '</em>' : '') + '</span></div>' : '') +
+          (msRows ? '<div class="g-ms"><span class="g-ms-l">阶段里程碑<em>' + msDone + '/' + msAll.length + '</em></span>' +
+            '<div class="g-ms-list">' + msRows + '</div></div>' : '') +
           '<footer class="g-foot">' +
           '<button class="ghost-btn tiny" type="button" data-goal-open="' + esc(g.id) + '">查看详情</button>' +
           '<button class="link-btn" type="button" data-goal-edit="' + esc(g.id) + '">编辑</button>' +
@@ -9482,7 +9492,7 @@
           (m.date ? '<em>' + esc(m.date) + '</em>' : '') +
           '<button class="gd-ms-x" type="button" data-ms-del="' + esc(m.id) + '" aria-label="删除里程碑">×</button></li>';
       }).join('') + '</ul>' : '<p class="dim">还没有里程碑，可以按季度拆 2 – 3 个节点。</p>') +
-        '<div class="gd-ms-add"><input class="field" data-ms-title placeholder="新增里程碑，例如：完成第一版方法论" maxlength="60">' +
+        '<div class="gd-ms-add"><input class="field" data-ms-title placeholder="新增里程碑" maxlength="60">' +
         '<input class="field date" type="date" data-ms-date><button class="ghost-btn tiny" type="button" data-ms-add>加入</button></div>';
     }
 
@@ -9831,9 +9841,10 @@
         '<div class="mplan-card full">' +
         '<div class="mplan-h"><div><h2>本月聚焦</h2><p>给这个月定一句话主题，再挑最多 3 件最重要的事</p></div>' +
         '<div class="mplan-side"><span class="mplan-pctnum">' + doneP + '/' + m.priorities.length + '</span></div></div>' +
-        '<input class="field mplan-theme" data-mtheme maxlength="120" value="' + esc(m.theme) + '" placeholder="例如：把身体拉回正轨，同时交付第一版方案">' +
+        '<input class="field mplan-theme" data-mtheme maxlength="120" value="' + esc(m.theme) + '" placeholder="给这个月定一句话主题">' +
         '<div class="m-plan-list">' + prioHtml + '</div>' +
-        '<div class="m-plan-add"><button class="ghost-btn tiny" type="button" data-mp-add>' + icon('plus') + ' 添加重点</button>' +
+        '<div class="m-plan-add"><button class="m-add-focus" type="button" data-mp-add>'
+          + '<span class="m-add-focus-ico">' + icon('plus') + '</span><span>添加重点</span></button>' +
         '<span class="m-plan-tip">建议 3 条以内</span>' +
         '<div class="mplan-bar mplan-bar-mini"><i style="width:' + prioPct + '%"></i></div></div>' +
         '</div>' +
@@ -10073,7 +10084,7 @@
         '<div class="w13-focus">' +
         '<div class="w-theme">' +
         '<label>本周主题</label>' +
-        '<input class="field" data-wtheme maxlength="120" value="' + esc(w.theme) + '" placeholder="例如：完成方案初稿，恢复稳定运动">' +
+        '<input class="field" data-wtheme maxlength="120" value="' + esc(w.theme) + '" placeholder="给这一周定一句话主题">' +
         '</div>' +
         '<div class="w-focus-box"><div class="w-sec-h"><h3>本周最重要的 3 件事</h3><p>只放真正要推进的</p></div>' + focusSlots + '</div>' +
         '<div class="w-add">' +
