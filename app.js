@@ -168,7 +168,7 @@
     rootEl.setAttribute('data-theme', real);
     rootEl.style.colorScheme = real;
     var meta = document.getElementById('theme-color');
-    if (meta) meta.setAttribute('content', real === 'dark' ? '#0b0b0d' : '#fbfbfd');
+    if (meta) meta.setAttribute('content', real === 'dark' ? '#17171C' : '#F6F4EF');
 
     var btn = $('#btn-theme');
     if (btn) {
@@ -202,51 +202,49 @@
 
   /* 配色：24 色，按 紫 / 蓝 / 青 / 绿 / 黄 / 橙 / 红 / 粉 / 棕 / 中性 分组。
      只存一套色值：暗色下由 CSS 的 color-mix 自动降饱和，避免维护两份调色板 */
+  /* 配色：只存 CSS token 名，不再持有裸色值；强调色统一由 --accent 承担，
+     模块装饰色一律取中性灰阶（暗色由 style.css 的变量自动切换，无需维护两份） */
   var PALETTE_GROUPS = [
-    { key: 'purple', name: '紫', colors: ['#6b4ca8', '#8a6fc7', '#a98ad6', '#b07cb5'] },
-    { key: 'blue', name: '蓝', colors: ['#5b93bf', '#6f7ba8', '#4c7a9e'] },
-    { key: 'cyan', name: '青', colors: ['#4f9c9c', '#56a8a0'] },
-    { key: 'green', name: '绿', colors: ['#6fae8b', '#5f9e6f'] },
-    { key: 'yellow', name: '黄', colors: ['#d9a13d', '#c9b24a'] },
-    { key: 'orange', name: '橙', colors: ['#c98b5e', '#d07a4a'] },
-    { key: 'red', name: '红', colors: ['#c96b6b', '#b3564f'] },
-    { key: 'pink', name: '粉', colors: ['#c48fb4', '#d98aa8'] },
-    { key: 'brown', name: '棕', colors: ['#9c7b5f', '#8a6a52'] },
-    { key: 'neutral', name: '中性', colors: ['#7d7689', '#6b6478', '#a5a1b5'] }
+    { key: 'graphite', name: '石墨', colors: ['var(--m-3)', 'var(--m-6)'] },
+    { key: 'ash', name: '浅灰', colors: ['var(--m-1)', 'var(--m-4)'] },
+    { key: 'sand', name: '砂', colors: ['var(--m-5)', 'var(--m-10)'] },
+    { key: 'mist', name: '雾', colors: ['var(--m-2)', 'var(--m-7)'] },
+    { key: 'ink', name: '靛', colors: ['var(--m-8)'] },
+    { key: 'moss', name: '苔', colors: ['var(--m-9)'] }
   ];
   var PALETTE = PALETTE_GROUPS.reduce(function (acc, g) { return acc.concat(g.colors); }, []);
 
   /* 8 套推荐组合：在一堆图标和颜色之间帮用户直接选好一套 */
   var COLOR_PRESETS = [
-    { name: '学习计划', type: 'okr', icon: 'book', color: '#5b93bf', desc: '书本 + 蓝' },
-    { name: '健身训练', type: 'habit', icon: 'dumbbell', color: '#c98b5e', desc: '哑铃 + 橙' },
-    { name: '阅读清单', type: 'reading', icon: 'bookmark', color: '#56a8a0', desc: '书签 + 青' },
-    { name: '财务记账', type: 'counter', icon: 'wallet', color: '#5f9e6f', desc: '钱包 + 绿' },
-    { name: '每周复盘', type: 'review', icon: 'repeat', color: '#8a6fc7', desc: '循环箭头 + 紫' },
-    { name: '灵感收集', type: 'excerpt', icon: 'bulb', color: '#d9a13d', desc: '灯泡 + 黄' },
-    { name: '项目跟进', type: 'milestone', icon: 'target', color: '#6f7ba8', desc: '目标 + 靛' },
-    { name: '习惯打卡', type: 'habit', icon: 'check', color: '#6b4ca8', desc: '勾 + 紫' }
+    { name: '学习计划', type: 'okr', icon: 'book', color: 'var(--m-1)', desc: '书本 + 浅灰' },
+    { name: '健身训练', type: 'habit', icon: 'dumbbell', color: 'var(--m-10)', desc: '哑铃 + 砂' },
+    { name: '阅读清单', type: 'reading', icon: 'bookmark', color: 'var(--m-2)', desc: '书签 + 雾' },
+    { name: '财务记账', type: 'counter', icon: 'wallet', color: 'var(--m-9)', desc: '钱包 + 苔' },
+    { name: '每周复盘', type: 'review', icon: 'repeat', color: 'var(--m-6)', desc: '循环 + 石墨' },
+    { name: '灵感收集', type: 'excerpt', icon: 'bulb', color: 'var(--m-5)', desc: '灯泡 + 砂' },
+    { name: '项目跟进', type: 'milestone', icon: 'target', color: 'var(--m-4)', desc: '目标 + 浅灰' },
+    { name: '习惯打卡', type: 'habit', icon: 'check', color: 'var(--m-8)', desc: '勾 + 靛' }
   ];
 
   /* 17 种类型：全部有数据字段 + 渲染 + 编辑，可真实使用（新增沿用同一 state 与同步链路） */
   var MODULE_TYPES = [
-    { type: 'todo', name: '待办清单', desc: '轻量的行动清单', icon: 'check', color: '#6b4ca8', title: '待办清单', w: 'half' },
-    { type: 'habit', name: '习惯追踪', desc: '按天打钩的网格', icon: 'grid', color: '#6fae8b', title: '习惯打卡', w: 'full' },
-    { type: 'timeline', name: '时间轴日程', desc: '按小时安排一天', icon: 'clock', color: '#5b93bf', title: '今日时间轴', w: 'full' },
-    { type: 'note', name: '笔记随记', desc: '随手写下的区块', icon: 'note', color: '#c98b5e', title: '随手记', w: 'half' },
-    { type: 'goal', name: '目标进度条', desc: '一个目标 + 进度', icon: 'target', color: '#6b4ca8', title: '目标进度', w: 'half' },
-    { type: 'counter', name: '计数器', desc: '一天几次，加减记录', icon: 'cup', color: '#4f9c9c', title: '喝水打卡', w: 'half' },
-    { type: 'milestone', name: '里程碑进度', desc: '分阶段推进的节点', icon: 'flag', color: '#6f7ba8', title: '里程碑', w: 'half' },
-    { type: 'reading', name: '阅读清单', desc: '想读 / 在读 / 读完', icon: 'bookmark', color: '#56a8a0', title: '阅读清单', w: 'half' },
-    { type: 'kanban', name: '周看板', desc: '待办 / 进行中 / 完成', icon: 'kanban', color: '#8a6fc7', title: '本周看板', w: 'full' },
-    { type: 'dashboard', name: '指标仪表盘', desc: '多个数字一起看', icon: 'gauge', color: '#5b93bf', title: '关键指标', w: 'half' },
-    { type: 'diary', name: '每日一句话', desc: '一天只写一句', icon: 'journal', color: '#d9a13d', title: '每日一句话', w: 'half' },
-    { type: 'excerpt', name: '阅读摘录', desc: '句子 + 出处', icon: 'quote', color: '#d9a13d', title: '摘录本', w: 'half' },
-    { type: 'quadrant', name: '四象限待办', desc: '紧急 × 重要', icon: 'layout', color: '#c96b6b', title: '四象限', w: 'half' },
-    { type: 'countdown', name: '倒计时纪念日', desc: '还有几天 / 已过几天', icon: 'hourglass', color: '#b07cb5', title: '倒计时', w: 'half' },
-    { type: 'okr', name: '目标 OKR', desc: '目标 + 关键结果', icon: 'compass', color: '#6b4ca8', title: '目标 OKR', w: 'half' },
-    { type: 'metric', name: '数字指标', desc: '一个数，持续记录', icon: 'trend', color: '#6f7ba8', title: '数字指标', w: 'half' },
-    { type: 'review', name: '决策复盘', desc: '选择 · 假设 · 收获', icon: 'bulb', color: '#b07cb5', title: '决策复盘', w: 'half' }
+    { type: 'todo', name: '待办清单', desc: '轻量的行动清单', icon: 'check', color: 'var(--m-3)', title: '待办清单', w: 'half' },
+    { type: 'habit', name: '习惯追踪', desc: '按天打钩的网格', icon: 'grid', color: 'var(--m-9)', title: '习惯打卡', w: 'full' },
+    { type: 'timeline', name: '时间轴日程', desc: '按小时安排一天', icon: 'clock', color: 'var(--m-1)', title: '今日时间轴', w: 'full' },
+    { type: 'note', name: '笔记随记', desc: '随手写下的区块', icon: 'note', color: 'var(--m-10)', title: '随手记', w: 'half' },
+    { type: 'goal', name: '目标进度条', desc: '一个目标 + 进度', icon: 'target', color: 'var(--m-3)', title: '目标进度', w: 'half' },
+    { type: 'counter', name: '计数器', desc: '一天几次，加减记录', icon: 'cup', color: 'var(--m-5)', title: '喝水打卡', w: 'half' },
+    { type: 'milestone', name: '里程碑进度', desc: '分阶段推进的节点', icon: 'flag', color: 'var(--m-5)', title: '里程碑', w: 'half' },
+    { type: 'reading', name: '阅读清单', desc: '想读 / 在读 / 读完', icon: 'bookmark', color: 'var(--m-2)', title: '阅读清单', w: 'half' },
+    { type: 'kanban', name: '周看板', desc: '待办 / 进行中 / 完成', icon: 'kanban', color: 'var(--m-6)', title: '本周看板', w: 'full' },
+    { type: 'dashboard', name: '指标仪表盘', desc: '多个数字一起看', icon: 'gauge', color: 'var(--m-1)', title: '关键指标', w: 'half' },
+    { type: 'diary', name: '每日一句话', desc: '一天只写一句', icon: 'journal', color: 'var(--m-2)', title: '每日一句话', w: 'half' },
+    { type: 'excerpt', name: '阅读摘录', desc: '句子 + 出处', icon: 'quote', color: 'var(--m-2)', title: '摘录本', w: 'half' },
+    { type: 'quadrant', name: '四象限待办', desc: '紧急 × 重要', icon: 'layout', color: 'var(--m-1)', title: '四象限', w: 'half' },
+    { type: 'countdown', name: '倒计时纪念日', desc: '还有几天 / 已过几天', icon: 'hourglass', color: 'var(--m-10)', title: '倒计时', w: 'half' },
+    { type: 'okr', name: '目标 OKR', desc: '目标 + 关键结果', icon: 'compass', color: 'var(--m-3)', title: '目标 OKR', w: 'half' },
+    { type: 'metric', name: '数字指标', desc: '一个数，持续记录', icon: 'trend', color: 'var(--m-5)', title: '数字指标', w: 'half' },
+    { type: 'review', name: '决策复盘', desc: '选择 · 假设 · 收获', icon: 'bulb', color: 'var(--m-10)', title: '决策复盘', w: 'half' }
   ];
 
   var TYPE_NAME = {
@@ -258,14 +256,14 @@
   };
 
   var LIFE8 = [
-    { id: 'career', name: '主业', icon: 'brief', color: '#6b4ca8' },
-    { id: 'workplace', name: '职场', icon: 'users', color: '#5b93bf' },
-    { id: 'solo', name: '一人公司', icon: 'sparkle', color: '#b07cb5' },
-    { id: 'finance', name: '财务管理', icon: 'wallet', color: '#c98b5e' },
-    { id: 'growth', name: '个人提升', icon: 'book', color: '#6f7ba8' },
-    { id: 'fun', name: '休闲娱乐', icon: 'coffee', color: '#d9a13d' },
-    { id: 'health', name: '身心健康', icon: 'dumbbell', color: '#6fae8b' },
-    { id: 'family', name: '家人关系', icon: 'heart', color: '#c96b6b' }
+    { id: 'career', name: '主业', icon: 'brief', color: 'var(--m-3)' },
+    { id: 'workplace', name: '职场', icon: 'users', color: 'var(--m-1)' },
+    { id: 'solo', name: '一人公司', icon: 'sparkle', color: 'var(--m-10)' },
+    { id: 'finance', name: '财务管理', icon: 'wallet', color: 'var(--m-10)' },
+    { id: 'growth', name: '个人提升', icon: 'book', color: 'var(--m-5)' },
+    { id: 'fun', name: '休闲娱乐', icon: 'coffee', color: 'var(--m-2)' },
+    { id: 'health', name: '身心健康', icon: 'dumbbell', color: 'var(--m-9)' },
+    { id: 'family', name: '家人关系', icon: 'heart', color: 'var(--m-1)' }
   ];
 
   /* 图标选择器：分组 + 可搜索（共 80 个，全部内联 SVG 24×24 stroke 1.6） */
@@ -508,11 +506,32 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
-  function hexA(hex, a) {
-    var h = (hex || '#6b4ca8').replace('#', '');
+  function isToken(c) { return typeof c === 'string' && c.indexOf('var(') === 0; }
+  /* 颜色工具：token 与裸色值都支持（token 交给 CSS 的 color-mix 处理，裸色值转 rgba） */
+  function hexA(color, a) {
+    if (isToken(color)) return 'color-mix(in srgb, ' + color + ' ' + Math.round(a * 100) + '%, transparent)';
+    var h = (color || 'var(--m-3)').replace('#', '');
     if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
     var n = parseInt(h, 16);
     return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  }
+  /* 旧色值 → 新 token：历史备份 / 旧 localStorage 里的裸色值统一收敛，避免旧紫系复活 */
+  var LEGACY_COLOR_MAP = {
+    '#6b4ca8': 'var(--m-3)', '#8a6fc7': 'var(--m-6)', '#a98ad6': 'var(--m-4)', '#b07cb5': 'var(--m-10)',
+    '#5b93bf': 'var(--m-1)', '#6f7ba8': 'var(--m-5)', '#4c7a9e': 'var(--m-3)',
+    '#4f9c9c': 'var(--m-5)', '#56a8a0': 'var(--m-2)', '#6fae8b': 'var(--m-9)', '#5f9e6f': 'var(--m-9)',
+    '#d9a13d': 'var(--m-2)', '#c9b24a': 'var(--m-7)', '#c98b5e': 'var(--m-10)', '#d07a4a': 'var(--m-10)',
+    '#c96b6b': 'var(--m-1)', '#b3564f': 'var(--m-1)', '#c48fb4': 'var(--m-4)', '#d98aa8': 'var(--m-4)',
+    '#9c7b5f': 'var(--m-5)', '#8a6a52': 'var(--m-3)', '#7d7689': 'var(--m-2)', '#6b6478': 'var(--m-6)',
+    '#a5a1b5': 'var(--m-7)', '#7b5ec4': 'var(--m-8)', '#4c4a7d': 'var(--accent)', '#5f7355': 'var(--done)'
+  };
+  function normColor(c) {
+    var k = String(c || '').trim().toLowerCase();
+    if (!k) return PALETTE[0];
+    if (LEGACY_COLOR_MAP[k]) return LEGACY_COLOR_MAP[k];
+    if (k.indexOf('var(--m-') === 0 || k.indexOf('var(--accent') === 0 || k.indexOf('var(--done') === 0) return c.trim();
+    /* 任何陌生的裸色值一律收敛到中性，杜绝彩色散落 */
+    return PALETTE[0];
   }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function iso(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
@@ -649,6 +668,7 @@
         return found ? Object.assign({}, d, found) : d;
       });
     }
+    s.life8.forEach(function (d) { if (d) d.color = normColor(d.color); });
     s.pages = s.pages.map(function (p) {
       p.id = p.id || uid('p');
       p.name = p.name || '未命名页签';
@@ -659,7 +679,7 @@
         m.type = m.type || 'note';
         m.title = m.title || (TYPE_NAME[m.type] || '模块');
         m.icon = m.icon || 'note';
-        m.color = m.color || PALETTE[0];
+        m.color = normColor(m.color);
         m.w = m.w === 'full' ? 'full' : 'half';
         /* 按类型把 data 洗成确定可渲染的结构（null / 半截对象 / 旧字段都会被修好） */
         sanitizeModuleData(m);   /* 函数内部已把 m.data 洗成规范结构，切勿整体回写（曾导致 m.data === m 自引用） */
@@ -1227,7 +1247,7 @@
     body.appendChild(inner);
     sec.appendChild(body);
 
-    var label = (head.querySelector('h2') || head.querySelector('.ol-badge') || {}).textContent || '区块';
+    var label = (head.querySelector('h2') || head.querySelector('.qs-label') || head.querySelector('.fh-label') || {}).textContent || '区块';
     label = String(label).trim().replace(/^＋\s*/, '');
 
     var btn = document.createElement('button');
@@ -1278,59 +1298,82 @@
     return sec;
   }
 
-  function todayLineBlock() {
+  /* ---------------------------------------------------------
+     今日一句话：由原通栏大卡降级为顶栏一行小字 + 换一句
+     数据仍存 state.lines[key].text（随 state 一起进 localStorage）
+     --------------------------------------------------------- */
+  var LINE_QUOTES = [
+    '把今天过扎实，比把今天排满更重要。',
+    '先做完最重要的那件，再谈其他。',
+    '慢慢来，比较快。',
+    '今天只推进一小步，也算数。',
+    '注意力放在哪里，生活就在哪里。',
+    '别急着证明，先把事做完。',
+    '留一点空白给意外的好事。',
+    '身体先稳住，脑子才清醒。',
+    '记录不是为了回顾，是为了看清。',
+    '不追求状态，追求开始。'
+  ];
+
+  function lineRec(key) {
+    state.lines = isPlainObj(state.lines) ? state.lines : {};
+    var rec = state.lines[key];
+    if (!isPlainObj(rec)) rec = state.lines[key] = { text: '', mood: '' };
+    if (typeof rec.text !== 'string') rec.text = '';
+    return rec;
+  }
+
+  function quoteStrip() {
     var key = today();
-    state.lines = state.lines || {};
-    var rec = state.lines[key] || (state.lines[key] = { text: '', mood: '' });
-    var now = new Date();
+    var rec = lineRec(key);
 
     var sec = document.createElement('section');
-    sec.className = 'today-line reveal';
+    sec.className = 'quote-strip reveal';
     sec.innerHTML =
-      '<div class="ol-top">' +
-      '<span class="ol-badge">今日一句话</span>' +
-      '<span class="ol-date">' + cnDate(now) + ' · 周' + WEEK[now.getDay()] + '</span>' +
-      '<span class="ol-state">点击句子即可改写 · 自动保存</span>' +
-      '</div>' +
-      '<div class="ol-quote" contenteditable="true" role="textbox" spellcheck="false" data-ph="今天，用一句话给自己定个调…">' +
-      '</div>' +
-      '<div class="ol-mood"><span class="ol-mood-label">心情</span>' +
-      MOODS.map(function (x) {
-        return '<button class="mood-chip' + (rec.mood === x ? ' active' : '') + '" type="button" data-mood="' + x + '">' + x + '</button>';
-      }).join('') +
-      '</div>';
+      '<span class="qs-label">今日一句话</span>' +
+      '<span class="qs-text" contenteditable="true" role="textbox" spellcheck="false" ' +
+      'data-ph="写一句今天的话，或点右侧换一句…"></span>' +
+      '<button class="qs-btn" type="button" data-qs-next>换一句</button>' +
+      '<span class="qs-state" aria-live="polite"></span>';
 
-    var quote = $('.ol-quote', sec);
-    quote.textContent = rec.text || '';
+    var txt = $('.qs-text', sec);
+    var st = $('.qs-state', sec);
+    txt.textContent = rec.text || '';
+    txt.classList.toggle('is-empty', !rec.text);
 
-    var commit = function () {
-      rec.text = (quote.innerText || '').replace(/\u00a0/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+    var timer = null;
+    function flash(msg) {
+      if (!st) return;
+      st.textContent = msg;
+      st.classList.add('on');
+      clearTimeout(timer);
+      timer = setTimeout(function () { st.classList.remove('on'); }, 1800);
+    }
+    function commit() {
+      rec.text = (txt.innerText || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
       state.lines[key] = rec;
+      txt.classList.toggle('is-empty', !rec.text);
       save();
-      var st = $('.ol-state', sec);
-      if (st) st.textContent = '已保存 · ' + cnShort(now);
-    };
-    var commitLazy = debounce(commit, 500);
-    quote.addEventListener('input', function () {
-      var st = $('.ol-state', sec);
-      if (st) st.textContent = '保存中…';
-      commitLazy();
+    }
+    var lazy = debounce(commit, 400);
+
+    txt.addEventListener('input', function () {
+      txt.classList.remove('is-empty');
+      lazy();
     });
-    quote.addEventListener('blur', commit);
-    quote.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); quote.blur(); }
+    txt.addEventListener('blur', commit);
+    txt.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); txt.blur(); }
     });
 
-    $$('[data-mood]', sec).forEach(function (b) {
-      b.addEventListener('click', function () {
-        rec.mood = rec.mood === b.dataset.mood ? '' : b.dataset.mood;
-        state.lines[key] = rec;
-        save();
-        $$('[data-mood]', sec).forEach(function (x) { x.classList.toggle('active', x.dataset.mood === rec.mood); });
-      });
+    $('[data-qs-next]', sec).addEventListener('click', function () {
+      var cur = (txt.innerText || '').trim();
+      var i = LINE_QUOTES.indexOf(cur);
+      txt.textContent = LINE_QUOTES[(i + 1) % LINE_QUOTES.length];
+      txt.classList.remove('is-empty');
+      commit();
+      flash('已换一句');
     });
-
-    foldSection(sec, 'todayLine', '.ol-top');
     return sec;
   }
 
@@ -1353,7 +1396,8 @@
     /* 每日日程页：所有日程模块只渲染「当前查看日期」的任务；其它页面为 null（渲染全部） */
     dailyView = page.builtin === 'daily' ? (isDateStr(state.settings.dailyDate) ? state.settings.dailyDate : today()) : null;
 
-    if (page.builtin === 'overview') canvas.appendChild(todayLineBlock());
+    /* 今日一句话：降级为顶栏一行小字，不再占通栏大卡 */
+    if (page.builtin === 'overview') canvas.appendChild(quoteStrip());
 
     // Hero
     var intro = pageIntro(page);
@@ -1366,13 +1410,10 @@
       (intro.actions || '');
     canvas.appendChild(hero);
 
-    /* 概览仪表盘：响应式网格，首屏给出今日聚焦 / 时间轴 / 习惯 / OKR / 心情 / 全局速览 */
-    if (page.builtin === 'overview') canvas.appendChild(overviewBoard());
-    /* 今日聚焦：三件事 + 容量 + 逾期 */
+    /* 概览首屏顺序：英雄卡（今日聚焦）→ 卡片网格（上 3 下 2）→ 心情曲线 → 关键指标 */
     if (page.builtin === 'overview') {
-      var fb = focusBlock();
-      fb.id = 'focus-card';
-      canvas.appendChild(fb);
+      canvas.appendChild(focusHero());
+      canvas.appendChild(overviewBoard());
       var mb0 = moodBlock();
       mb0.id = 'mood-block';
       canvas.appendChild(mb0);
@@ -1469,7 +1510,7 @@
     return '<div class="ov-card' + (o.wide ? ' wide' : '') + '" data-ov-go="' + esc(o.go || '') + '"' +
       (o.anchor ? ' data-ov-anchor="' + esc(o.anchor) + '"' : '') +
       ' role="button" tabindex="0" aria-label="' + esc(o.title) + '，点击查看详情">' +
-      '<div class="ov-head"><span class="ov-ico" style="--c:' + esc(o.color || '#6b4ca8') + '">' + icon(o.icon) + '</span>' +
+      '<div class="ov-head"><span class="ov-ico" style="--c:' + esc(o.color || 'var(--m-3)') + '">' + icon(o.icon) + '</span>' +
       '<span class="ov-title">' + esc(o.title) + '</span>' +
       (o.meta ? '<span class="ov-meta">' + o.meta + '</span>' : '') +
       '<span class="ov-more">详情 ›</span></div>' +
@@ -1510,20 +1551,7 @@
     sec.id = 'overview-board';
     var cards = [];
 
-    /* ① 今日聚焦 */
-    var mits = mitsOf(key).filter(function (x) { return String(x.text || '').trim(); });
-    var mitDone = mits.filter(function (x) { return x.done; }).length;
-    cards.push(ovCard({
-      title: '今日聚焦', icon: 'target', color: '#6b4ca8', go: 'overview', anchor: '#focus-card',
-      meta: mits.length ? mitDone + '/' + mits.length : '未设定',
-      body: mits.length
-        ? '<ul class="ov-mini">' + mits.slice(0, 3).map(function (x) {
-          return '<li class="' + (x.done ? 'done' : '') + '"><i>' + (x.done ? '✓' : '·') + '</i>' + esc(x.text) + '</li>';
-        }).join('') + '</ul>'
-        : '<p class="ov-empty">今天还没有挑出最重要的事。</p>'
-    }));
-
-    /* ② 今日时间轴摘要 */
+    /* ① 今日时间轴摘要（今日聚焦已提为上方英雄卡，不再进网格） */
     var tl = [], tlMods = 0;
     (pageById('daily') ? pageById('daily').modules : []).forEach(function (m) {
       if (!m || m.type !== 'timeline') return;
@@ -1536,7 +1564,7 @@
     });
     tl.sort(function (a, b) { return String(a.start || a.time || '').localeCompare(String(b.start || b.time || '')); });
     cards.push(ovCard({
-      title: '今日时间轴', icon: 'clock', color: '#5b93bf', go: 'daily',
+      title: '今日时间轴', icon: 'clock', color: 'var(--m-1)', go: 'daily',
       meta: tl.length + ' 段安排',
       body: tl.length
         ? '<ul class="ov-mini">' + tl.slice(0, 3).map(function (it) {
@@ -1545,7 +1573,7 @@
         : '<p class="ov-empty">今天的时间轴还空着。</p>'
     }));
 
-    /* ③ 习惯打卡 */
+    /* ② 习惯打卡 */
     var habits = [];
     state.pages.forEach(function (p) {
       (p.modules || []).forEach(function (m) {
@@ -1555,7 +1583,7 @@
     });
     var hit = habits.filter(function (h) { return h.checks && h.checks[key]; }).length;
     cards.push(ovCard({
-      title: '习惯打卡', icon: 'grid', color: '#6fae8b', go: 'daily',
+      title: '习惯打卡', icon: 'grid', color: 'var(--m-9)', go: 'daily',
       meta: habits.length ? hit + '/' + habits.length + ' 已完成' : '未建立',
       body: habits.length
         ? '<ul class="ov-mini">' + habits.slice(0, 3).map(function (h) {
@@ -1563,6 +1591,14 @@
           return '<li class="' + (on ? 'done' : '') + '"><i>' + (on ? '✓' : '○') + '</i>' + esc(h.name) + '</li>';
         }).join('') + '</ul>'
         : '<p class="ov-empty">还没有习惯，加一条每天的固定动作。</p>'
+    }));
+
+    /* ③ 心情与精力（近 7 天） */
+    var mt = moodOf(key) || {};
+    cards.push(ovCard({
+      title: '心情曲线', icon: 'smile', color: 'var(--m-2)', go: 'overview', anchor: '#mood-block',
+      meta: mt.mood ? '今日 <b>' + mt.mood + '/5</b>' : '今日未记',
+      body: moodSpark()
     }));
 
     /* ④ OKR 进度 */
@@ -1584,7 +1620,7 @@
     var okrAvg = krPcts.length ? Math.round(krPcts.reduce(function (a, b) { return a + b; }, 0) / krPcts.length) : 0;
     objNames.sort(function (a, b) { return b.pct - a.pct; });
     cards.push(ovCard({
-      title: 'OKR 进度', icon: 'compass', color: '#8a6fc7', go: 'yearly',
+      title: 'OKR 进度', icon: 'compass', color: 'var(--m-6)', go: 'yearly',
       meta: krPcts.length ? '平均 <b>' + okrAvg + '%</b>' : '未建立',
       body: objNames.length
         ? '<ul class="ov-mini ov-bars">' + objNames.slice(0, 2).map(function (o) {
@@ -1594,15 +1630,7 @@
         : '<p class="ov-empty">还没有年度目标。</p>'
     }));
 
-    /* ⑤ 心情与精力（近 7 天） */
-    var mt = moodOf(key) || {};
-    cards.push(ovCard({
-      title: '心情曲线', icon: 'smile', color: '#d9a13d', go: 'overview', anchor: '#mood-block',
-      meta: mt.mood ? '今日 <b>' + mt.mood + '/5</b>' : '今日未记',
-      body: moodSpark()
-    }));
-
-    /* ⑥ 全局速览：各页模块数 + 最近的纪念日 */
+    /* ⑤ 全周速览：各页模块数 + 最近的纪念日 */
     var chip = state.pages.filter(function (p) { return p.builtin; }).map(function (p) {
       return '<span class="ov-chip"><i></i>' + esc(p.name.replace(/·.*/, '')) + '<b>' + (p.modules || []).length + '</b></span>';
     }).join('');
@@ -1618,7 +1646,7 @@
       });
     });
     cards.push(ovCard({
-      title: '全局速览', icon: 'layers', color: '#7d7689', go: 'life8',
+      title: '全周速览', icon: 'layers', color: 'var(--m-2)', go: 'life8',
       meta: nextCd ? '最近纪念日 <b>' + nextCd.left + ' 天</b>' : '',
       body: '<div class="ov-chips">' + chip + '</div>' +
         (nextCd ? '<p class="ov-line">' + esc(nextCd.title) + ' · 还有 ' + nextCd.left + ' 天</p>' : '')
@@ -2300,25 +2328,25 @@
 
     var cards = [
       {
-        label: '今日待办', icon: 'check', tone: '#6b4ca8',
+        label: '今日待办', icon: 'check', tone: 'var(--m-3)',
         num: todoDone, unit: '/ ' + todoTotal,
         note: todoTotal ? '完成度 ' + Math.round(todoDone / todoTotal * 100) + '%' : '还没有待办模块',
         bar: todoTotal ? Math.round(todoDone / todoTotal * 100) : 0
       },
       {
-        label: '本月打卡', icon: 'grid', tone: '#c98b5e',
+        label: '本月打卡', icon: 'grid', tone: 'var(--m-10)',
         num: checks, unit: '次',
         note: '平均完成率 ' + checkRate + '%',
         bar: clamp(checkRate, 0, 100)
       },
       {
-        label: '目标进度', icon: 'target', tone: '#5b93bf',
+        label: '目标进度', icon: 'target', tone: 'var(--m-1)',
         num: avgKr, unit: '%',
         note: krCount ? '共 ' + krCount + ' 个关键结果' : '先去年度目标页设定',
         bar: avgKr
       },
       {
-        label: '决策复盘', icon: 'bulb', tone: '#b07cb5',
+        label: '决策复盘', icon: 'bulb', tone: 'var(--m-10)',
         num: revCount, unit: '条',
         note: revScored ? '平均自评 ' + (revScore / revScored).toFixed(1) + ' / 5' : '记录一次真实的选择',
         bar: revScored ? Math.round((revScore / revScored) / 5 * 100) : 0
@@ -2456,7 +2484,7 @@
   function renderCardError(m, err) {
     var el = document.createElement('article');
     el.className = 'card mod card-error';
-    el.style.setProperty('--c', (m && m.color) || '#6b4ca8');
+    el.style.setProperty('--c', (m && m.color) || 'var(--m-3)');
     el.dataset.id = (m && m.id) || '';
     el.innerHTML = '<header class="card-head">' +
       '<span class="card-ico">' + icon((m && m.icon) || 'note') + '</span>' +
@@ -2483,7 +2511,7 @@
 
     el.innerHTML =
       '<div class="card-head">' +
-      '<span class="card-icon" style="--m-color:' + (m.color || '#6b4ca8') + '">' + icon(m.icon) + '</span>' +
+      '<span class="card-icon" style="--m-color:' + (m.color || 'var(--m-3)') + '">' + icon(m.icon) + '</span>' +
       '<span class="card-title">' + esc(m.title) + '</span>' +
       '<span class="card-type">' + (TYPE_NAME[m.type] || '') + '</span>' +
       '<span class="card-tools">' +
@@ -2712,7 +2740,7 @@
       '<p class="sub">「' + esc(m.title) + '」里的内容会一起删除，且无法恢复。可以先导出备份。</p>' +
       '<div class="sheet-actions">' +
       '<button class="ghost-btn" data-close>再想想</button>' +
-      '<button class="solid-btn" data-ok style="background:#b0443c">删除</button>' +
+      '<button class="solid-btn" data-ok style="background:var(--danger)">删除</button>' +
       '</div>',
       function (sheet, close) {
         $('[data-close]', sheet).addEventListener('click', close);
@@ -4576,7 +4604,7 @@
       '<h3>清空全部数据？</h3>' +
       '<p class="sub">所有页签和模块都会被删除，仅保留系统页的空画布。建议先导出备份。</p>' +
       '<div class="sheet-actions"><button class="ghost-btn" data-close>取消</button>' +
-      '<button class="solid-btn" data-ok style="background:#b0443c">确认清空</button></div>',
+      '<button class="solid-btn" data-ok style="background:var(--danger)">确认清空</button></div>',
       function (sheet, close) {
         $('[data-ok]', sheet).addEventListener('click', function () {
           try { localStorage.removeItem(activeKey); } catch (e) { }
@@ -4639,26 +4667,26 @@
     var t = today();
 
     s.life8 = [
-      { id: 'career', name: '主业', icon: 'brief', color: '#6b4ca8', score: 8, note: '做深一条主线' },
-      { id: 'workplace', name: '职场', icon: 'users', color: '#5b93bf', score: 7, note: '少说，多做，留痕' },
-      { id: 'solo', name: '一人公司', icon: 'sparkle', color: '#b07cb5', score: 6, note: '先跑通最小闭环' },
-      { id: 'finance', name: '财务管理', icon: 'wallet', color: '#c98b5e', score: 7, note: '每月 1 号对账' },
-      { id: 'growth', name: '个人提升', icon: 'book', color: '#6f7ba8', score: 8, note: '每天 30 页' },
-      { id: 'fun', name: '休闲娱乐', icon: 'coffee', color: '#d9a13d', score: 5, note: '这格欠费了' },
-      { id: 'health', name: '身心健康', icon: 'dumbbell', color: '#6fae8b', score: 7, note: '一周三次力量' },
-      { id: 'family', name: '家人关系', icon: 'heart', color: '#c96b6b', score: 8, note: '周末一次长电话' }
+      { id: 'career', name: '主业', icon: 'brief', color: 'var(--m-3)', score: 8, note: '做深一条主线' },
+      { id: 'workplace', name: '职场', icon: 'users', color: 'var(--m-1)', score: 7, note: '少说，多做，留痕' },
+      { id: 'solo', name: '一人公司', icon: 'sparkle', color: 'var(--m-10)', score: 6, note: '先跑通最小闭环' },
+      { id: 'finance', name: '财务管理', icon: 'wallet', color: 'var(--m-10)', score: 7, note: '每月 1 号对账' },
+      { id: 'growth', name: '个人提升', icon: 'book', color: 'var(--m-5)', score: 8, note: '每天 30 页' },
+      { id: 'fun', name: '休闲娱乐', icon: 'coffee', color: 'var(--m-2)', score: 5, note: '这格欠费了' },
+      { id: 'health', name: '身心健康', icon: 'dumbbell', color: 'var(--m-9)', score: 7, note: '一周三次力量' },
+      { id: 'family', name: '家人关系', icon: 'heart', color: 'var(--m-1)', score: 8, note: '周末一次长电话' }
     ];
 
     /* ---- 概览 ---- */
     pageByIdIn(s, 'overview').modules = [
-      mkMod('todo', '今天的三件大事', 'check', '#6b4ca8', 'half', {
+      mkMod('todo', '今天的三件大事', 'check', 'var(--m-3)', 'half', {
         items: [
           { id: uid('t'), text: '把人生管理系统的模块引擎跑通', done: true },
           { id: uid('t'), text: '给 12 月排一版内容日历', done: false },
           { id: uid('t'), text: '晚上 8 点前离开电脑，出门走 30 分钟', done: false }
         ]
       }),
-      mkMod('habit', '晨间习惯', 'sun', '#6fae8b', 'half', {
+      mkMod('habit', '晨间习惯', 'sun', 'var(--m-9)', 'half', {
         month: mk,
         habits: [
           { id: uid('h'), name: '起床后喝一杯水', checks: mockChecks(24, 1) },
@@ -4666,14 +4694,14 @@
           { id: uid('h'), name: '写 3 行晨间日记', checks: mockChecks(24, 5) }
         ]
       }),
-      mkMod('note', '这一周想记住的一句话', 'note', '#c98b5e', 'full', {
+      mkMod('note', '这一周想记住的一句话', 'note', 'var(--m-10)', 'full', {
         text: '不追求把每一天填满，只追求每一天有一件事是真正推进了的。\n\n—— 写在 11 月的一个周三晚上'
       })
     ];
 
     /* ---- 年度目标 ---- */
     pageByIdIn(s, 'yearly').modules = [
-      mkMod('okr', '健康 · 身体是底盘', 'heart', '#6fae8b', 'half', {
+      mkMod('okr', '健康 · 身体是底盘', 'heart', 'var(--m-9)', 'half', {
         objectives: [{
           id: uid('o'), title: '把体能拉回 2023 年的状态', krs: [
             { id: uid('k'), text: '力量训练', cur: 68, target: 156, unit: '次' },
@@ -4682,7 +4710,7 @@
           ]
         }]
       }),
-      mkMod('okr', '工作 · 把专业做成资产', 'brief', '#6b4ca8', 'half', {
+      mkMod('okr', '工作 · 把专业做成资产', 'brief', 'var(--m-3)', 'half', {
         objectives: [{
           id: uid('o'), title: '从「干活的人」变成「有方法的人」', krs: [
             { id: uid('k'), text: '交付旗舰项目', cur: 3, target: 4, unit: '个' },
@@ -4691,7 +4719,7 @@
           ]
         }]
       }),
-      mkMod('okr', '财务 · 一年存下 24 万', 'wallet', '#c98b5e', 'half', {
+      mkMod('okr', '财务 · 一年存下 24 万', 'wallet', 'var(--m-10)', 'half', {
         objectives: [{
           id: uid('o'), title: '现金流稳定，且有自己的储备', krs: [
             { id: uid('k'), text: '年度储蓄', cur: 19.6, target: 24, unit: '万' },
@@ -4700,14 +4728,14 @@
           ]
         }]
       }),
-      mkMod('note', '年度关键词', 'star', '#b07cb5', 'half', {
+      mkMod('note', '年度关键词', 'star', 'var(--m-10)', 'half', {
         text: '稳 · 深 · 松弛\n\n稳：不再频繁换方向。\n深：一件小事做到别人替代不了。\n松弛：允许自己有无所事事的一天。'
       })
     ];
 
     /* ---- 月度规划 ---- */
     pageByIdIn(s, 'monthly').modules = [
-      mkMod('todo', '11 月目标拆解', 'target', '#6b4ca8', 'half', {
+      mkMod('todo', '11 月目标拆解', 'target', 'var(--m-3)', 'half', {
         items: [
           { id: uid('t'), text: '首页改版：3 个页面全部上线', done: true, meta: '工作' },
           { id: uid('t'), text: '完成年度复盘初稿', done: false, meta: '复盘' },
@@ -4716,11 +4744,11 @@
           { id: uid('t'), text: '把副业定价方案定下来', done: false, meta: '一人公司' }
         ]
       }),
-      mkMod('metric', '本月阅读', 'book', '#6f7ba8', 'half', {
+      mkMod('metric', '本月阅读', 'book', 'var(--m-5)', 'half', {
         value: 3, unit: '本', label: '目标 4 本 · 每天 30 页', step: 1,
         history: [{ d: '2026-07', v: 2 }, { d: '2026-08', v: 4 }, { d: '2026-09', v: 3 }, { d: '2026-10', v: 2 }, { d: '2026-11', v: 3 }]
       }),
-      mkMod('habit', '每日打卡', 'grid', '#6b4ca8', 'full', {
+      mkMod('habit', '每日打卡', 'grid', 'var(--m-3)', 'full', {
         month: mk,
         habits: [
           { id: uid('h'), name: '运动 30 分钟', checks: mockChecks(26, 2) },
@@ -4733,7 +4761,7 @@
 
     /* ---- 每日日程 ---- */
     pageByIdIn(s, 'daily').modules = [
-      mkMod('timeline', '今日时间轴', 'clock', '#6b4ca8', 'full', {
+      mkMod('timeline', '今日时间轴', 'clock', 'var(--m-3)', 'full', {
         date: t,
         items: [
           { id: uid('e'), date: t, time: '07:20', text: '起床 · 拉伸 10 分钟 · 一杯水', tag: '晨间' },
@@ -4747,28 +4775,28 @@
           { id: uid('e'), date: shiftISO(t, -1), start: '20:00', end: '21:00', time: '20:00', text: '跑步 5 公里', tag: '运动' }
         ]
       }),
-      mkMod('todo', '三件大事', 'check', '#c98b5e', 'half', {
+      mkMod('todo', '三件大事', 'check', 'var(--m-10)', 'half', {
         items: [
           { id: uid('t'), text: '把首页交互定稿', done: true },
           { id: uid('t'), text: '回复两封重要的邮件', done: false },
           { id: uid('t'), text: '晚上不加班', done: false }
         ]
       }),
-      mkMod('note', '生活记录 · 心情与睡眠', 'moon', '#6f7ba8', 'half', {
+      mkMod('note', '生活记录 · 心情与睡眠', 'moon', 'var(--m-5)', 'half', {
         text: '睡眠：7 小时 20 分，中途醒过一次。\n心情：平静偏轻快，下午有点闷。\n身体：肩颈紧，晚上做了 10 分钟拉伸。\n\n今天最想记住的瞬间：下楼买咖啡时，风是凉的。'
       })
     ];
 
     /* ---- 八大模块 ---- */
     pageByIdIn(s, 'life8').modules = [
-      mkMod('note', '八个抽屉怎么用', 'bulb', '#6b4ca8', 'full', {
+      mkMod('note', '八个抽屉怎么用', 'bulb', 'var(--m-3)', 'full', {
         text: '每月底花 10 分钟：给八格各打一个分，写一句备注。\n\n不是为了追求每格都 10 分 —— 而是看清「哪一格连续三个月在掉分」。那通常就是下一步要处理的事。'
       })
     ];
 
     /* ---- 决策复盘 ---- */
     pageByIdIn(s, 'review').modules = [
-      mkMod('review', '最近的三个决定', 'bulb', '#b07cb5', 'full', {
+      mkMod('review', '最近的三个决定', 'bulb', 'var(--m-10)', 'full', {
         items: [
           {
             id: uid('r'), title: '要不要开始做「一人公司」', date: '2026.08', score: 4,
@@ -4782,7 +4810,7 @@
           }
         ]
       }),
-      mkMod('note', '我的决策原则', 'compass', '#6b4ca8', 'full', {
+      mkMod('note', '我的决策原则', 'compass', 'var(--m-3)', 'full', {
         text: '1.  reversible 的决定，快；不可逆的决定，慢。\n2.  先写下「我现在的假设是什么」，再动手。\n3.  如果一件事只能靠意志力维持，说明系统设计错了。'
       })
     ];
@@ -7796,119 +7824,138 @@
     return { min: min, seg: seg };
   }
 
-  function focusBlock() {
+  /* ---------------------------------------------------------
+     今日聚焦：首屏唯一英雄卡（标签 + 输入框 + 设定按钮）
+     设定后进入完成态：可勾完成、可就地改写、可删除；数据存 state.mits[today]
+     --------------------------------------------------------- */
+  function focusHero() {
     if (!isPlainObj(state.mits)) normalizeCoach(state);
     var key = today();
     var cap = clamp(Number(state.settings.capacityH) || 8, 1, 16);
     var load = todayLoad();
     var useH = load.min / 60;
-    var pct = cap ? Math.round(useH / cap * 100) : 0;
-    var over = pct > 100;
     var od = overdueList();
+    var day = parseISO(key);
 
     var sec = document.createElement('section');
-    sec.className = 'focus-card reveal';
+    sec.className = 'focus-hero reveal';
+    sec.id = 'focus-card';
 
-    function mitRows() {
-      var mits = mitsOf(key);
-      return [0, 1, 2].map(function (i) {
-        var it = mits[i] || null;
-        var has = !!(it && String(it.text || '').trim());
-        return '<div class="mit' + (it && it.done ? ' done' : '') + '">' +
-          '<button class="mit-check' + (it && it.done ? ' on' : '') + '" type="button" data-mit-check="' + i + '"' +
-          (has ? '' : ' disabled') + ' aria-label="完成第 ' + (i + 1) + ' 件事">' + icon('check') + '</button>' +
-          '<input class="mit-in" data-mit-in="' + i + '" maxlength="40" aria-label="第 ' + (i + 1) +
-          ' 件最重要的事" placeholder="第 ' + (i + 1) + ' 件最重要的事" value="' + esc((it && it.text) || '') + '">' +
-          '</div>';
-      }).join('');
+    function setItems() {
+      return mitsOf(key).filter(function (x) { return String(x.text || '').trim(); });
     }
 
-    function mitMeta() {
-      var mits = mitsOf(key);
-      var real = mits.filter(function (x) { return String(x.text || '').trim(); }).length;
-      var done = mits.filter(function (x) { return x.done && String(x.text || '').trim(); }).length;
-      return '三件事 ' + done + '/' + real;
-    }
-
-    sec.innerHTML =
-      '<div class="fc-head">' +
-      '<div class="fc-title"><span class="fc-ico">' + icon('target') + '</span>今日聚焦</div>' +
-      '<div class="fc-meta">' + esc(cnDate(parseISO(key))) + ' · 周' + WEEK[parseISO(key).getDay()] +
-      ' · <span data-mit-meta>' + mitMeta() + '</span></div>' +
-      '</div>' +
-      '<div class="fc-grid">' +
-      '<div class="fc-mits" data-mits>' + mitRows() + '</div>' +
-      '<div class="fc-side">' +
-      '<div class="fc-cap' + (over ? ' over' : '') + '">' +
-      '<div class="fc-cap-top"><span>今日容量</span><b>' + useH.toFixed(1) + 'h<small> / ' + cap + 'h</small></b></div>' +
-      '<span class="fc-bar"><i style="width:' + clamp(pct, 0, 100) + '%"></i></span>' +
-      '<p class="fc-cap-note">' + (over
-        ? '超载 ' + (useH - cap).toFixed(1) + 'h · 建议压缩或顺延低优先的 ' + load.seg + ' 段安排'
-        : '已排 ' + load.seg + ' 段 · 余量 ' + Math.max(0, cap - useH).toFixed(1) + 'h') + '</p>' +
-      '</div>' +
-      '<div class="fc-od' + (od.length ? ' has' : '') + '">' +
-      '<div class="fc-od-top"><span>逾期未完成</span><b>' + od.length + ' 项</b></div>' +
-      '<p class="fc-od-list">' + (od.length
-        ? od.slice(0, 3).map(function (o) { return esc(o.item.text || '未命名'); }).join(' · ') + (od.length > 3 ? ' 等' : '')
-        : '没有逾期，节奏刚好。') + '</p>' +
-      '<button class="ghost-btn tiny" type="button" data-od-move' + (od.length ? '' : ' disabled') + '>一键顺延到今天</button>' +
-      '</div>' +
-      '</div>' +
-      '</div>';
-
-    var mitsBox = $('[data-mits]', sec);
-    var saveLazy = debounce(function () { save(); }, 320);
-
-    function onMitInput(inp) {
-      var i = Number(inp.dataset.mitIn);
+    function commitText(i, val) {
       var list = mitsOf(key);
-      while (list.length <= i) list.push({ id: uid('mit'), text: '', done: false });
-      var rec = list[i] || (list[i] = { id: uid('mit'), text: '', done: false });
-      rec.text = inp.value;
-      if (!String(rec.text).trim()) rec.done = false;
-      saveLazy();
-      var meta = $('[data-mit-meta]', sec);
-      if (meta) meta.textContent = mitMeta();
-      var row = inp.closest('.mit');
-      var btn = row ? $('.mit-check', row) : null;
-      if (btn) {
-        var ready = !!String(rec.text).trim();
-        btn.disabled = !ready;
-        if (!ready) { btn.classList.remove('on'); row.classList.remove('done'); }
-      }
+      var rec = list[i];
+      if (!rec) return;
+      rec.text = String(val || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+      if (!rec.text) rec.done = false;
+      save();
+      paint();
     }
 
-    $$('[data-mit-in]', mitsBox).forEach(function (inp) {
-      inp.addEventListener('input', function () { onMitInput(inp); });
-      inp.addEventListener('blur', function () { save(); });
-    });
-
-    $$('[data-mit-check]', mitsBox).forEach(function (b) {
-      b.addEventListener('click', function () {
-        var i = Number(b.dataset.mitCheck);
-        var list = mitsOf(key);
-        var rec = list[i];
-        if (!rec || !String(rec.text || '').trim()) return;
-        rec.done = !rec.done;
-        save();
-        var row = b.closest('.mit');
-        if (row) row.classList.toggle('done', rec.done);
-        b.classList.toggle('on', rec.done);
-        var meta = $('[data-mit-meta]', sec);
-        if (meta) meta.textContent = mitMeta();
-      });
-    });
-
-    var mv = $('[data-od-move]', sec);
-    if (mv) mv.addEventListener('click', function () {
-      var list = overdueList();
-      if (!list.length) return;
-      var t = today();
-      list.forEach(function (o) { o.item.date = t; });
+    function addItem() {
+      var inp = $('[data-fh-input]', sec);
+      if (!inp) return;
+      var val = (inp.value || '').replace(/\s+/g, ' ').trim();
+      if (!val) { inp.focus(); return; }
+      var list = mitsOf(key);
+      while (list.length && !String(list[list.length - 1].text || '').trim()) list.pop();
+      if (list.length >= 3) { toast('最多 3 件，先完成或删掉一件'); return; }
+      var first = list.length === 0;
+      list.push({ id: uid('mit'), text: val, done: false });
       save();
-      toast('已把 ' + list.length + ' 项逾期顺延到今天');
-      renderPage();
-    });
+      paint();
+      if (first) toast('今日聚焦已设定');
+      var next = $('[data-fh-input]', sec);
+      if (next) next.focus();
+    }
+
+    function bind() {
+      var inp = $('[data-fh-input]', sec);
+      if (inp) inp.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); addItem(); }
+      });
+      var btn = $('[data-fh-set]', sec);
+      if (btn) btn.addEventListener('click', addItem);
+
+      $$('[data-fh-check]', sec).forEach(function (b) {
+        b.addEventListener('click', function () {
+          var list = mitsOf(key);
+          var rec = list[Number(b.dataset.fhCheck)];
+          if (!rec) return;
+          rec.done = !rec.done;
+          save();
+          paint();
+        });
+      });
+      $$('[data-fh-del]', sec).forEach(function (b) {
+        b.addEventListener('click', function () {
+          var list = mitsOf(key);
+          var rec = list[Number(b.dataset.fhDel)];
+          if (!rec) return;
+          rec.text = '';
+          rec.done = false;
+          save();
+          paint();
+        });
+      });
+      $$('[data-fh-edit]', sec).forEach(function (el) {
+        el.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); el.blur(); }
+        });
+        el.addEventListener('blur', function () { commitText(Number(el.dataset.fhEdit), el.innerText); });
+      });
+      var mv = $('[data-fh-move]', sec);
+      if (mv) mv.addEventListener('click', function () {
+        var list = overdueList();
+        if (!list.length) return;
+        var t = today();
+        list.forEach(function (o) { o.item.date = t; });
+        save();
+        toast('已把 ' + list.length + ' 项逾期顺延到今天');
+        renderPage();
+      });
+    }
+
+    function paint() {
+      var list = setItems();
+      var done = list.filter(function (x) { return x.done; }).length;
+      sec.innerHTML =
+        '<div class="fh-head">' +
+        '<span class="fh-label">今日聚焦</span>' +
+        '<span class="fh-meta">' + esc(cnDate(day)) + ' · 周' + WEEK[day.getDay()] +
+        (list.length ? ' · <b class="num">' + done + ' / ' + list.length + '</b>' : '') +
+        '</span>' +
+        '</div>' +
+        (list.length
+          ? '<ul class="fh-list">' + list.map(function (it, i) {
+            return '<li class="fh-item' + (it.done ? ' done' : '') + '">' +
+              '<button class="fh-check' + (it.done ? ' on' : '') + '" type="button" data-fh-check="' + i +
+              '" aria-label="标记完成">' + icon('check') + '</button>' +
+              '<span class="fh-text" contenteditable="true" role="textbox" spellcheck="false" data-fh-edit="' + i +
+              '">' + esc(it.text) + '</span>' +
+              '<button class="fh-del" type="button" data-fh-del="' + i + '" aria-label="删除这条">' + icon('x') + '</button>' +
+              '</li>';
+          }).join('') + '</ul>'
+          : '') +
+        '<div class="fh-form">' +
+        '<input class="fh-input" data-fh-input type="text" maxlength="60" autocomplete="off" placeholder="' +
+        (list.length ? '再加一件最重要的事…' : '今天，哪一件事最值得做完？') + '">' +
+        '<button class="fh-set" type="button" data-fh-set>' + (list.length ? '添加' : '设定') + '</button>' +
+        '</div>' +
+        '<div class="fh-foot">' +
+        '<span class="fh-note">已排 <span class="num">' + load.seg + '</span> 段 · 余量 <span class="num">' +
+        Math.max(0, cap - useH).toFixed(1) + 'h</span>' +
+        (od.length ? ' · <b>逾期 <span class="num">' + od.length + '</span> 项</b>' : '') +
+        '</span>' +
+        (od.length ? '<button class="fh-ghost" type="button" data-fh-move>一键顺延到今天</button>' : '') +
+        '</div>';
+      bind();
+    }
+
+    paint();
     return sec;
   }
 
