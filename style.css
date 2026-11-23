@@ -3631,8 +3631,10 @@ html[data-theme="dark"] .ag-chip { background: var(--elev-2); color: var(--ink);
 .g-kr-bar { grid-column: 1 / -1; height: 5px; margin-top: 7px; border-radius: var(--r-pill); background: var(--accent-soft); overflow: hidden; }
 .g-kr-bar i { display: block; height: 100%; background: var(--accent-2); border-radius: inherit; }
 .g-nokr { margin: 0; font-size: var(--t-12); color: var(--faint); line-height: 1.6; }
-.g-ms { display: flex; align-items: center; gap: 6px; font-size: var(--t-12); }
-.g-ms-l { color: var(--faint); font-size: var(--t-11); }
+.g-ms { display: flex; flex-direction: column; gap: 7px; font-size: var(--t-12); }
+.g-ms-l { color: var(--faint); font-size: var(--t-11); display: flex; align-items: center; gap: 6px; letter-spacing: .02em; }
+.g-ms-l em { font-style: normal; color: var(--accent); font-variant-numeric: tabular-nums; }
+.g-ms-list { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .g-ms-i { color: var(--ink-2); display: inline-flex; gap: 5px; align-items: center; min-width: 0; }
 .g-ms-i.on { color: var(--accent); }
 .g-ms-i em { font-style: normal; color: var(--faint); font-size: var(--t-11); }
@@ -4323,6 +4325,45 @@ input[type="number"], input[type="date"], input[type="time"] {
 .m-x:hover { color: var(--danger); background: var(--danger-soft); }
 .m-plan-add { display: flex; align-items: center; gap: 10px; margin-top: var(--s-3); }
 .m-plan-tip { font-size: var(--t-11); color: var(--faint); }
+
+/* 添加入口按钮：虚线描边 + 强调浅底，悬停转实心 */
+.m-add-focus {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 34px; padding: 0 16px 0 11px;
+  border: 1px dashed var(--accent-line); border-radius: var(--r-pill);
+  background: var(--accent-soft); color: var(--accent);
+  font-family: inherit;
+  font-size: var(--t-12); font-weight: 600; letter-spacing: .01em;
+  cursor: pointer; white-space: nowrap; flex: none;
+  transition: background-color var(--dur-1) var(--ease-soft),
+              border-color var(--dur-1) var(--ease-soft),
+              color var(--dur-1) var(--ease-soft),
+              transform var(--dur-1) var(--ease-soft),
+              box-shadow var(--dur-1) var(--ease-soft);
+}
+.m-add-focus-ico {
+  width: 18px; height: 18px; flex: none; border-radius: var(--r-pill);
+  display: inline-flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  transition: background-color var(--dur-1) var(--ease-soft);
+}
+.m-add-focus-ico svg { width: 10px; height: 10px; }
+.m-add-focus:hover {
+  background: var(--accent); border-color: var(--accent); color: var(--on-accent);
+  transform: translateY(-1px); box-shadow: var(--shadow-2);
+}
+.m-add-focus:hover .m-add-focus-ico {
+  background: color-mix(in srgb, var(--on-accent) 26%, transparent);
+}
+.m-add-focus:active { transform: none; box-shadow: var(--shadow-1); }
+html[data-theme="dark"] .m-add-focus {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  color: color-mix(in srgb, var(--accent) 82%, #FFFFFF);
+}
+html[data-theme="dark"] .m-add-focus:hover {
+  background: var(--accent); border-color: var(--accent); color: var(--on-accent);
+}
 
 /* 本月目标 */
 .m-link {
