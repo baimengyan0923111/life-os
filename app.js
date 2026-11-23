@@ -9254,13 +9254,25 @@
     var g = (state.goals || []).filter(function (x) { return x.id === goalId; })[0];
     if (!g) return;
 
+    /* 里程碑区块：新增/删除时只重建这一块，不动整个弹窗 */
+    function msBlock() {
+      return ((g.milestones || []).length ? '<ul class="gd-ms">' + g.milestones.map(function (m) {
+        return '<li class="' + (m.done ? 'on' : '') + '"><button class="gd-ms-dot" type="button" data-ms="' + esc(m.id) + '" aria-label="切换完成">' +
+          (m.done ? icon('check') : '') + '</button><span>' + esc(m.title) + '</span>' +
+          (m.date ? '<em>' + esc(m.date) + '</em>' : '') +
+          '<button class="gd-ms-x" type="button" data-ms-del="' + esc(m.id) + '" aria-label="删除里程碑">×</button></li>';
+      }).join('') + '</ul>' : '<p class="dim">还没有里程碑，可以按季度拆 2 – 3 个节点。</p>') +
+        '<div class="gd-ms-add"><input class="field" data-ms-title placeholder="新增里程碑，例如：完成第一版方法论" maxlength="60">' +
+        '<input class="field date" type="date" data-ms-date><button class="ghost-btn tiny" type="button" data-ms-add>加入</button></div>';
+    }
+
     function html() {
       var pct = v13GoalPct(g);
       var st = v13GoalSt(g.status);
       var linked = v13GoalTasks(g.id);
       var hist = (g.history || []).slice().reverse();
       return '<h3>' + esc(g.title) + '</h3>' +
-        '<p class="sub">' + esc(g.domain) + ' · ' + esc(st.label) + ' · 进度 ' + pct + '% · 最近更新 ' + esc(g.updatedAt) + '</p>' +
+        '<p class="sub" data-gd-sub>' + esc(g.domain) + ' · ' + esc(st.label) + ' · 进度 ' + pct + '% · 最近更新 ' + esc(g.updatedAt) + '</p>' +
         '<div class="gd-body">' +
         (g.why ? '<p class="gd-why">' + esc(g.why) + '</p>' : '') +
         (g.note ? '<p class="gd-note">' + esc(g.note) + '</p>' : '') +
@@ -9277,16 +9289,7 @@
             '</span></li>';
         }).join('') + '</ul>' : '<p class="dim">还没有关键结果。</p>') +
         '</div>' +
-        '<div class="gd-sec"><h4>阶段里程碑</h4>' +
-        ((g.milestones || []).length ? '<ul class="gd-ms">' + g.milestones.map(function (m) {
-          return '<li class="' + (m.done ? 'on' : '') + '"><button class="gd-ms-dot" type="button" data-ms="' + esc(m.id) + '" aria-label="切换完成">' +
-            (m.done ? icon('check') : '') + '</button><span>' + esc(m.title) + '</span>' +
-            (m.date ? '<em>' + esc(m.date) + '</em>' : '') +
-            '<button class="gd-ms-x" type="button" data-ms-del="' + esc(m.id) + '" aria-label="删除里程碑">×</button></li>';
-        }).join('') + '</ul>' : '<p class="dim">还没有里程碑，可以按季度拆 2 – 3 个节点。</p>') +
-        '<div class="gd-ms-add"><input class="field" data-ms-title placeholder="新增里程碑，例如：完成第一版方法论" maxlength="60">' +
-        '<input class="field date" type="date" data-ms-date><button class="ghost-btn tiny" type="button" data-ms-add>加入</button></div>' +
-        '</div>' +
+        '<div class="gd-sec"><h4>阶段里程碑</h4><div data-gd-ms>' + msBlock() + '</div></div>' +
         '<div class="gd-sec"><h4>关联周计划 <small>' + linked.length + ' 项</small></h4>' +
         (linked.length ? '<ul class="gd-tasks">' + linked.slice(0, 8).map(function (x) {
           return '<li><span class="gd-wk">' + esc(x.week.slice(5).replace('-', '/')) + ' 周</span><span>' + esc(x.task.title) + '</span>' +
@@ -9306,52 +9309,84 @@
     }
 
     openDialog(html(), function (sheet, close) {
-      function repaint() {
-        var box = sheet.querySelector('.v13-dialog-body') || sheet;
-        box.innerHTML = html();
-        mountAll();
+      function paintSub() {
+        var el = $('[data-gd-sub]', sheet);
+        if (!el) return;
+        el.textContent = g.domain + ' · ' + v13GoalSt(g.status).label + ' · 进度 ' + v13GoalPct(g) + '% · 最近更新 ' + (g.updatedAt || '');
       }
-      function mountAll() {
+      function paintKrRow(li, k) {
+        if (!li || !k) return;
+        var kp = k.target > 0 ? Math.round(clamp(k.cur / k.target * 100, 0, 100)) : 0;
+        var v = $('.gd-kr-v', li);
+        if (v) v.textContent = String(k.cur) + '/' + String(k.target) + (k.unit || '');
+        var bar = $('.gd-kr-bar i', li);
+        if (bar) bar.style.width = kp + '%';
+      }
+      function mountKr() {
         $$('[data-kr-step]', sheet).forEach(function (b) {
-          b.addEventListener('click', function () {
-            var k = (g.krs || []).filter(function (x) { return x.id === b.dataset.krStep; })[0];
-            if (!k) return;
-            var step = k.target >= 50 ? 5 : (k.target >= 20 ? 2 : 1);
-            k.cur = clamp(Math.round(k.cur + Number(b.dataset.d) * step), 0, k.target * 3);
-            v13GoalTouch(g, '调整关键结果');
-            save(); repaint(); renderPage();
+          var k = (g.krs || []).filter(function (x) { return x.id === b.dataset.krStep; })[0];
+          if (!k) return;
+          var dir = Number(b.dataset.d) || 0;
+          var li = b.closest('li');
+          bindStepHold(b, function () {
+            k.cur = clamp(Math.round(k.cur + dir), 0, Math.max(Number(k.target) || 0, 1) * 3);
+            paintKrRow(li, k);
+          }, {
+            commit: function () { v13GoalTouch(g, '调整关键结果'); save(); paintSub(); }
           });
         });
-        $$('[data-ms]', sheet).forEach(function (b) {
+      }
+      function mountMs() {
+        var wrap = $('[data-gd-ms]', sheet);
+        if (!wrap) return;
+        $$('[data-ms]', wrap).forEach(function (b) {
           b.addEventListener('click', function () {
             var m = (g.milestones || []).filter(function (x) { return x.id === b.dataset.ms; })[0];
             if (!m) return;
             m.done = !m.done;
             v13GoalTouch(g, m.done ? '完成里程碑：' + m.title : '重开里程碑：' + m.title);
-            save(); repaint(); renderPage();
+            save();
+            var li = b.closest('li');
+            if (li) li.classList.toggle('on', m.done);
+            b.innerHTML = m.done ? icon('check') : '';
+            paintSub();
           });
         });
-        $$('[data-ms-del]', sheet).forEach(function (b) {
+        function rebuild() {
+          wrap.innerHTML = msBlock();
+          mountMs();
+        }
+        $$('[data-ms-del]', wrap).forEach(function (b) {
           b.addEventListener('click', function () {
             g.milestones = (g.milestones || []).filter(function (x) { return x.id !== b.dataset.msDel; });
-            save(); repaint(); renderPage();
+            v13GoalTouch(g, '删除里程碑');
+            save();
+            rebuild();
+            paintSub();
           });
         });
-        var addBtn = $('[data-ms-add]', sheet);
+        var addBtn = $('[data-ms-add]', wrap);
         if (addBtn) addBtn.addEventListener('click', function () {
-          var t = ($('[data-ms-title]', sheet).value || '').trim();
-          if (!t) { $('[data-ms-title]', sheet).focus(); return; }
+          var t = ($('[data-ms-title]', wrap).value || '').trim();
+          if (!t) { $('[data-ms-title]', wrap).focus(); return; }
           g.milestones = g.milestones || [];
-          g.milestones.push({ id: uid('ms'), title: t, date: $('[data-ms-date]', sheet).value || '', done: false });
+          g.milestones.push({ id: uid('ms'), title: t, date: $('[data-ms-date]', wrap).value || '', done: false });
           v13GoalTouch(g, '新增里程碑');
-          save(); repaint(); renderPage();
+          save();
+          rebuild();
+          paintSub();
         });
-        var edit = $('[data-edit]', sheet);
-        if (edit) edit.addEventListener('click', function () { close(); v13GoalDialog(g.id); });
-        var cl = $('[data-close]', sheet);
-        if (cl) cl.addEventListener('click', close);
       }
-      mountAll();
+      mountKr();
+      mountMs();
+      var edit = $('[data-edit]', sheet);
+      if (edit) edit.addEventListener('click', function () { close(); renderPage(); v13GoalDialog(g.id); });
+      var cl = $('[data-close]', sheet);
+      if (cl) cl.addEventListener('click', function () { close(); renderPage(); });
+      sheet.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { close(); renderPage(); }
+      }, true);
+      overlay.onclick = function (e) { if (e.target === overlay) { close(); renderPage(); } };
     });
   }
 
