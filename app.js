@@ -592,12 +592,13 @@
 
   /* 系统页顺序：概览 → 年度目标 → 月度规划 → 每日日程 → 八大模块 → 决策复盘
      按「年 → 月 → 日」的时间粒度收窄；这里就是唯一配置源，侧栏 / 顶部页签 / ⌘K / 数字快捷键都读它 */
-  var PAGE_ORDER = ['overview', 'yearly', 'monthly', 'daily', 'life8', 'review'];
+  var PAGE_ORDER = ['overview', 'yearly', 'monthplan', 'monthly', 'daily', 'life8', 'review'];
 
   function basePages() {
     return [
       { id: 'overview', name: '概览', icon: 'compass', builtin: 'overview', modules: [] },
       { id: 'yearly', name: '年度目标', icon: 'flag', builtin: 'yearly', modules: [] },
+      { id: 'monthplan', name: '月度计划', icon: 'target', builtin: 'monthplan', modules: [] },
       { id: 'monthly', name: '周计划', icon: 'calendar', builtin: 'monthly', modules: [] },
       { id: 'daily', name: '每日打卡', icon: 'sun', builtin: 'daily', modules: [] },
       { id: 'life8', name: '八大模块', icon: 'layers', builtin: 'life8', modules: [] },
@@ -669,6 +670,12 @@
       });
     }
     s.life8.forEach(function (d) { if (d) d.color = normColor(d.color); });
+    /* V20：老数据补齐「月度计划」系统页，顺序固定在年度目标之后 */
+    if (!s.pages.some(function (p) { return p && p.builtin === 'monthplan'; })) {
+      var mpAt = -1;
+      s.pages.forEach(function (p, i) { if (p && p.builtin === 'yearly' && mpAt < 0) mpAt = i; });
+      s.pages.splice(mpAt < 0 ? s.pages.length : mpAt + 1, 0, { id: 'monthplan', name: '月度计划', icon: 'target', builtin: 'monthplan', modules: [] });
+    }
     s.pages = s.pages.map(function (p) {
       p.id = p.id || uid('p');
       p.name = p.name || '未命名页签';
@@ -1420,8 +1427,9 @@
       canvas.appendChild(kpisBlock());
     }
     /* V13：年度目标 / 周计划 / 每日打卡 三页按新结构渲染 */
-    var v13Page = page.builtin === 'yearly' || page.builtin === 'monthly' || page.builtin === 'daily';
+    var v13Page = page.builtin === 'yearly' || page.builtin === 'monthplan' || page.builtin === 'monthly' || page.builtin === 'daily';
     if (page.builtin === 'yearly') canvas.appendChild(yearlyBoardBlock());
+    if (page.builtin === 'monthplan') canvas.appendChild(monthBoardBlock());
     if (page.builtin === 'monthly') {
       canvas.appendChild(weeklyBoardBlock());
       if (state.settings.weekMode === 'month') canvas.appendChild(agendaBlock());
@@ -9222,7 +9230,8 @@
     sec.id = 'yearly-board';
 
     function paints() {
-      var year = state.settings.yearView || new Date().getFullYear();
+      var nowYear = new Date().getFullYear();
+      var year = state.settings.yearView || nowYear;
       var all = v13YearGoals();
       /* 筛选态兜底：settings.y13f 缺失或字段非法时回落到「全部」，避免读属性抛错把整页渲染打断 */
       if (!state.settings.y13f || typeof state.settings.y13f !== 'object') {
@@ -9292,8 +9301,13 @@
       sec.innerHTML =
         '<div class="y13-top">' +
         '<div class="y13-head">' +
-        '<div class="y13-year"><b>' + year + '</b><span>年度目标</span></div>' +
-        '<p class="y13-lede">今年最重要的方向是什么，目前走到哪里了。</p>' +
+        '<div class="y13-year">' +
+        '<button class="icon-btn year-nav" type="button" data-year="-1" aria-label="上一年" title="上一年">' + icon('chevronLeft') + '</button>' +
+        '<b>' + year + '</b><span>年度目标</span>' +
+        '<button class="icon-btn year-nav" type="button" data-year="1" aria-label="下一年" title="下一年">' + icon('chevronRight') + '</button>' +
+        (year === nowYear ? '' : '<button class="ghost-btn tiny" type="button" data-year-now>回到今年</button>') +
+        '</div>' +
+        '<p class="y13-lede">' + (year === nowYear ? '今年最重要的方向是什么，目前走到哪里了。' : '这一年最重要的方向是什么，目前走到哪里了。') + '</p>' +
         '</div>' +
         '<button class="solid-btn y13-new" type="button" data-new-goal>＋ 新建年度目标</button>' +
         '</div>' +
@@ -9311,7 +9325,10 @@
         '<div class="v13-chips" role="group" aria-label="按领域筛选">' + domChips + '</div>' +
         '</div>' +
         (all.length > 5 ? '<p class="y13-hint">' + icon('bulb') + '现在是 ' + all.length + ' 个目标。目标一多，注意力会被摊薄 —— 建议每年只留 3 – 5 个真正重要的，其余的可以先置为「已暂停」。</p>' : '') +
-        '<div class="y13-grid">' + (cards || '<div class="v13-empty"><b>这个筛选下还没有目标</b><span>换个领域 / 状态看看，或者新建一个。</span><button class="solid-btn tiny" type="button" data-new-goal>＋ 新建年度目标</button></div>') + '</div>';
+        '<div class="y13-grid">' + (cards || ('<div class="v13-empty"><b>' +
+          (f.domain || f.status ? '这个筛选下没有目标' : year + ' 年还没有目标') + '</b><span>' +
+          (f.domain || f.status ? '换个领域 / 状态，或切到别的年份看看。' : '先把最重要的 1 – 3 个方向写下来，剩下的交给执行。') +
+          '</span><button class="solid-btn tiny" type="button" data-new-goal>＋ 新建年度目标</button></div>')) + '</div>';
 
       $$('[data-fst]', sec).forEach(function (b) {
         b.addEventListener('click', function () {
@@ -9327,6 +9344,22 @@
       });
       $$('[data-new-goal]', sec).forEach(function (b) {
         b.addEventListener('click', function () { v13GoalDialog(null); });
+      });
+      /* 年份切换：上一年 / 下一年 / 回到今年 */
+      $$('[data-year]', sec).forEach(function (b) {
+        b.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var cur = state.settings.yearView || new Date().getFullYear();
+          state.settings.yearView = clamp(cur + Number(b.dataset.year), 2000, 2100);
+          save(); paints();
+        });
+      });
+      $$('[data-year-now]', sec).forEach(function (b) {
+        b.addEventListener('click', function (e) {
+          e.stopPropagation();
+          state.settings.yearView = new Date().getFullYear();
+          save(); paints();
+        });
       });
       $$('[data-goal-open]', sec).forEach(function (b) {
         b.addEventListener('click', function () { v13GoalDetail(b.dataset.goalOpen); });
@@ -9571,6 +9604,343 @@
   /* =========================================================
      二、周计划
      ========================================================= */
+  /* =========================================================
+     V20：月度计划（年度目标 → 月度计划 → 周计划 → 每日打卡）
+     ========================================================= */
+  function monthKeyNow() {
+    var s = state.settings.monthView;
+    return isMonthStr(s) ? s : monthKey(new Date());
+  }
+
+  function monthShiftKey(mk, n) {
+    var y = Number(mk.slice(0, 4)), m = Number(mk.slice(5, 7)) - 1 + n;
+    var d = new Date(y, m, 1);
+    return d.getFullYear() + '-' + (d.getMonth() < 9 ? '0' : '') + (d.getMonth() + 1);
+  }
+
+  function monthLabel(mk) {
+    return mk.slice(0, 4) + ' 年 ' + Number(mk.slice(5, 7)) + ' 月';
+  }
+
+  function monthRange(mk) {
+    var y = Number(mk.slice(0, 4)), m = Number(mk.slice(5, 7));
+    return { start: iso(new Date(y, m - 1, 1)), end: iso(new Date(y, m, 0)) };
+  }
+
+  function monthWeekList(mk) {
+    var r = monthRange(mk);
+    var cur = weekStartISO(r.start);
+    var out = [];
+    while (cur <= r.end && out.length < 6) { out.push(cur); cur = shiftISO(cur, 7); }
+    return out;
+  }
+
+  function v13Month(mk, create) {
+    if (!isPlainObj(state.months)) state.months = {};
+    if (!state.months[mk]) {
+      if (!create) return null;
+      state.months[mk] = { theme: '', priorities: [], links: [], review: {} };
+    }
+    var m = state.months[mk];
+    if (!isPlainObj(m)) m = state.months[mk] = { theme: '', priorities: [], links: [], review: {} };
+    m.theme = typeof m.theme === 'string' ? m.theme : '';
+    m.priorities = (Array.isArray(m.priorities) ? m.priorities : []).filter(Boolean).map(function (p) {
+      return {
+        id: typeof p.id === 'string' && p.id ? p.id : uid('mp'),
+        text: typeof p.text === 'string' ? p.text : '',
+        done: !!p.done
+      };
+    }).slice(0, 4);
+    m.links = (Array.isArray(m.links) ? m.links : []).filter(Boolean).map(function (l) {
+      return {
+        id: typeof l.id === 'string' && l.id ? l.id : uid('ml'),
+        goalId: typeof l.goalId === 'string' ? l.goalId : '',
+        krIndex: clamp(Number(l.krIndex) || 0, 0, 30),
+        target: Math.max(0, Number(l.target) || 0),
+        note: typeof l.note === 'string' ? l.note : ''
+      };
+    });
+    if (!isPlainObj(m.review)) m.review = {};
+    ['win', 'stuck', 'next'].forEach(function (k) {
+      if (typeof m.review[k] !== 'string') m.review[k] = '';
+    });
+    return m;
+  }
+
+  function monthWeekStats(ws) {
+    var w = state.weekPlans && state.weekPlans[ws];
+    var tasks = (w && Array.isArray(w.tasks)) ? w.tasks : [];
+    var done = tasks.filter(function (t) { return t && t.status === 'done'; }).length;
+    return { total: tasks.length, done: done, theme: (w && w.theme) || '' };
+  }
+
+  function monthStats(mk) {
+    var r = monthRange(mk);
+    var seen = {}, total = 0, done = 0, activeDays = {};
+    Object.keys(state.weekPlans || {}).forEach(function (k) {
+      var w = state.weekPlans[k];
+      if (!w || !Array.isArray(w.tasks)) return;
+      w.tasks.forEach(function (t) {
+        if (!t || !t.id || seen[t.id]) return;
+        seen[t.id] = 1;
+        var d = t.date || t.deadline || k;
+        if (!(typeof d === 'string' && d >= r.start && d <= r.end)) return;
+        total++;
+        activeDays[d] = 1;
+        if (t.status === 'done') done++;
+      });
+    });
+    var checkDays = {}, checks = 0;
+    allModules().forEach(function (m) {
+      if (!m || m.type !== 'habit') return;
+      ((m.data && m.data.habits) || []).forEach(function (h) {
+        Object.keys((h && h.checks) || {}).forEach(function (d) {
+          if (!(d >= r.start && d <= r.end)) return;
+          checkDays[d] = 1; checks++;
+        });
+      });
+    });
+    return {
+      total: total, done: done,
+      checkDays: Object.keys(checkDays).length,
+      checks: checks,
+      activeDays: Object.keys(activeDays).length
+    };
+  }
+
+  /* 从年度目标的关键结果里挑一条，作为本月要推进的目标 */
+  function mplanLinkDialog(mk) {
+    var goals = (state.goals || []).filter(function (g) { return g && Array.isArray(g.krs) && g.krs.length; });
+    if (!goals.length) { toast('先到「年度目标」里加一条关键结果'); return; }
+    var opts = [];
+    goals.forEach(function (g) {
+      g.krs.forEach(function (k, i) {
+        opts.push('<option value="' + esc(g.id) + '|' + i + '">' + esc(g.title) + ' · ' + esc(k.text) +
+          '（当前 ' + esc(String(k.cur || 0)) + '/目标 ' + esc(String(k.target || 0)) + (k.unit ? ' ' + esc(k.unit) : '') + '）</option>');
+      });
+    });
+    openDialog(
+      '<h3>添加本月目标</h3>' +
+      '<p class="sub">从年度目标里挑一条关键结果，只承诺这个月要做到哪儿。</p>' +
+      '<label class="v13-field"><span>年度目标 · 关键结果</span><select class="field" data-f="ref">' + opts.join('') + '</select></label>' +
+      '<label class="v13-field"><span>本月目标值（这个月结束时希望达到的数）</span><input class="field" type="number" min="0" step="1" data-f="target" placeholder="例如：2"></label>' +
+      '<label class="v13-field"><span>备注（可选）</span><input class="field" data-f="note" maxlength="60" placeholder="例如：先完成第一批"></label>' +
+      '<div class="sheet-actions"><button class="ghost-btn" type="button" data-close>取消</button><button class="solid-btn" type="button" data-ok>添加</button></div>',
+      function (sheet, close) {
+        $('[data-ok]', sheet).addEventListener('click', function () {
+          var ref = ($('[data-f="ref"]', sheet).value || '').split('|');
+          var m = v13Month(mk, true);
+          var target = Math.max(0, Number($('[data-f="target"]', sheet).value) || 0);
+          var g = (state.goals || []).filter(function (x) { return x.id === ref[0]; })[0];
+          var kr = g && (g.krs || [])[Number(ref[1])];
+          if (!target && kr) target = Number(kr.target) || 0;
+          m.links.push({
+            id: uid('ml'), goalId: ref[0], krIndex: Number(ref[1]) || 0,
+            target: target, note: $('[data-f="note"]', sheet).value || ''
+          });
+          save(); close(); renderPage(); toast('已添加本月目标');
+        });
+      }
+    );
+  }
+
+  function monthBoardBlock() {
+    var sec = document.createElement('section');
+    sec.className = 'v13 mplan';
+    sec.id = 'month-board';
+
+    function paints() {
+      var mk = monthKeyNow();
+      var m = v13Month(mk, true);
+      var isThis = mk === monthKey(new Date());
+      var r = monthRange(mk);
+      var weeks = monthWeekList(mk);
+      var thisWeek = weekStartISO(today());
+      var st = monthStats(mk);
+      var goals = state.goals || [];
+
+      /* 本月聚焦 */
+      var doneP = m.priorities.filter(function (p) { return p.done; }).length;
+      var prioPct = m.priorities.length ? Math.round(doneP / m.priorities.length * 100) : 0;
+      var prioHtml = m.priorities.map(function (p) {
+        return '<div class="m-plan-row' + (p.done ? ' done' : '') + '">' +
+          '<button class="m-tick' + (p.done ? ' on' : '') + '" type="button" data-mp-tick="' + esc(p.id) + '" aria-label="完成">' + (p.done ? icon('check') : '') + '</button>' +
+          '<input class="m-in" data-mp-text="' + esc(p.id) + '" maxlength="80" value="' + esc(p.text) + '" placeholder="这一件事，做完就值得">' +
+          '<button class="m-x" type="button" data-mp-del="' + esc(p.id) + '" aria-label="删除">×</button>' +
+          '</div>';
+      }).join('') || '<div class="v13-empty sm"><b>还没定本月的重点</b><span>写下 1 – 3 件非做不可的事，比排满计划更有用。</span></div>';
+
+      /* 本月目标（承接年度目标） */
+      var linkHtml = m.links.map(function (l) {
+        var g = goals.filter(function (x) { return x.id === l.goalId; })[0];
+        if (!g) return '';
+        var kr = (g.krs || [])[l.krIndex] || null;
+        var cur = kr ? Number(kr.cur) || 0 : 0;
+        var tgt = l.target || (kr ? Number(kr.target) || 0 : 0);
+        var unit = kr && kr.unit ? ' ' + kr.unit : '';
+        var pct = tgt > 0 ? Math.min(100, Math.round(cur / tgt * 100)) : 0;
+        return '<div class="m-link">' +
+          '<div class="m-link-h">' + icon('flag') + '<span>' + esc(g.title) + '</span>' +
+          '<button class="m-x" type="button" data-ml-del="' + esc(l.id) + '" aria-label="移除">×</button></div>' +
+          '<div class="m-link-t">' + esc(kr ? kr.text : '（关键结果已删除）') + '</div>' +
+          '<div class="mplan-bar"><i style="width:' + pct + '%"></i></div>' +
+          '<div class="m-link-meta"><span>当前 ' + cur + unit + ' / 本月目标 ' + tgt + unit + '</span><span>' + pct + '%</span></div>' +
+          (l.note ? '<div class="m-link-note">' + esc(l.note) + '</div>' : '') +
+          '</div>';
+      }).join('') || '<div class="v13-empty sm"><b>还没有承接的年度目标</b><span>从年度目标里挑 1 – 2 条，落到这个月。</span></div>';
+
+      /* 本月各周（跳转周计划） */
+      var weekHtml = weeks.map(function (ws, i) {
+        var s = monthWeekStats(ws);
+        var a = ws < r.start ? r.start : ws;
+        var e0 = shiftISO(ws, 6);
+        var b = e0 > r.end ? r.end : e0;
+        return '<button class="m-week' + (ws === thisWeek ? ' now' : '') + '" type="button" data-mweek="' + esc(ws) + '">' +
+          '<span class="m-week-no">第 ' + (i + 1) + ' 周</span>' +
+          '<span class="m-week-date">' + esc(v13Md(a)) + ' – ' + esc(v13Md(b)) + '</span>' +
+          '<span class="m-week-theme">' + esc(s.theme || '未设主题') + '</span>' +
+          '<span class="m-week-task">' + s.done + '/' + s.total + '</span>' +
+          '</button>';
+      }).join('');
+
+      var rate = st.total ? Math.round(st.done / st.total * 100) : 0;
+
+      sec.innerHTML =
+        '<div class="mplan-top">' +
+        '<div class="mplan-nav">' +
+        '<button class="icon-btn" type="button" data-mstep="-1" aria-label="上一月">' + icon('chevronLeft') + '</button>' +
+        '<span class="mplan-lab">' + esc(monthLabel(mk)) + (isThis ? '<i>本月</i>' : '') + '</span>' +
+        '<button class="icon-btn" type="button" data-mstep="1" aria-label="下一月">' + icon('chevronRight') + '</button>' +
+        (isThis ? '' : '<button class="ghost-btn tiny" type="button" data-mtoday>回到本月</button>') +
+        '</div>' +
+        '<div class="mplan-sum"><span>' + esc(monthLabel(mk)) + ' · ' + weeks.length + ' 周</span>' +
+        '<span>任务完成 ' + st.done + '/' + st.total + '</span></div>' +
+        '</div>' +
+        '<div class="mplan-grid">' +
+
+        '<div class="mplan-card full">' +
+        '<div class="mplan-h"><div><h2>本月聚焦</h2><p>给这个月定一句话主题，再挑最多 3 件最重要的事</p></div>' +
+        '<div class="mplan-side"><span class="mplan-pctnum">' + doneP + '/' + m.priorities.length + '</span></div></div>' +
+        '<input class="field mplan-theme" data-mtheme maxlength="120" value="' + esc(m.theme) + '" placeholder="例如：把身体拉回正轨，同时交付第一版方案">' +
+        '<div class="m-plan-list">' + prioHtml + '</div>' +
+        '<div class="m-plan-add"><button class="ghost-btn tiny" type="button" data-mp-add>' + icon('plus') + ' 添加重点</button>' +
+        '<span class="m-plan-tip">建议 3 条以内</span>' +
+        '<div class="mplan-bar mplan-bar-mini"><i style="width:' + prioPct + '%"></i></div></div>' +
+        '</div>' +
+
+        '<div class="mplan-card">' +
+        '<div class="mplan-h"><div><h2>本月目标</h2><p>从年度目标的关键结果里拆下来</p></div>' +
+        '<button class="ghost-btn tiny" type="button" data-ml-add>' + icon('plus') + ' 添加</button></div>' +
+        '<div class="m-link-list">' + linkHtml + '</div>' +
+        '</div>' +
+
+        '<div class="mplan-card">' +
+        '<div class="mplan-h"><div><h2>本月各周</h2><p>点一周直接进入周计划</p></div></div>' +
+        '<div class="m-week-list">' + weekHtml + '</div>' +
+        '<div class="m-kpis">' +
+        '<div class="m-kpi"><b>' + rate + '%</b><span>任务完成率</span></div>' +
+        '<div class="m-kpi"><b>' + st.checkDays + '</b><span>打卡天数</span></div>' +
+        '<div class="m-kpi"><b>' + st.activeDays + '</b><span>有安排的天数</span></div>' +
+        '</div>' +
+        '</div>' +
+
+        '<div class="mplan-card full">' +
+        '<div class="mplan-h"><div><h2>月度复盘</h2><p>月末花 5 分钟写三行，比多做一个计划有用</p></div></div>' +
+        '<div class="m-rev">' +
+        '<label><span class="m-q">这个月最大的收获</span><textarea data-mr="win" maxlength="600" placeholder="做成了什么，哪件事值得保留">' + esc(m.review.win) + '</textarea></label>' +
+        '<label><span class="m-q">卡在哪儿</span><textarea data-mr="stuck" maxlength="600" placeholder="哪个环节反复拖住你">' + esc(m.review.stuck) + '</textarea></label>' +
+        '<label><span class="m-q">下个月调整一件事</span><textarea data-mr="next" maxlength="600" placeholder="只写一条，能真正执行的">' + esc(m.review.next) + '</textarea></label>' +
+        '</div>' +
+        '</div>' +
+
+        '</div>';
+
+      /* ---------- 事件 ---------- */
+      $$('[data-mstep]', sec).forEach(function (b) {
+        b.addEventListener('click', function () {
+          state.settings.monthView = monthShiftKey(mk, Number(b.dataset.mstep));
+          save(); paints();
+        });
+      });
+      var mt = $('[data-mtoday]', sec);
+      if (mt) mt.addEventListener('click', function () {
+        state.settings.monthView = monthKey(new Date());
+        save(); paints();
+      });
+      var themeIn = $('[data-mtheme]', sec);
+      if (themeIn) {
+        themeIn.addEventListener('input', function () { v13Month(mk, true).theme = themeIn.value; debounce(save, 300)(); });
+        themeIn.addEventListener('blur', function () { v13Month(mk, true).theme = themeIn.value; save(); });
+      }
+      $$('[data-mp-text]', sec).forEach(function (inp) {
+        inp.addEventListener('input', function () {
+          var mm = v13Month(mk, true);
+          mm.priorities.forEach(function (p) { if (p.id === inp.dataset.mpText) p.text = inp.value; });
+          debounce(save, 300)();
+        });
+        inp.addEventListener('blur', function () {
+          var mm = v13Month(mk, true);
+          mm.priorities.forEach(function (p) { if (p.id === inp.dataset.mpText) p.text = inp.value; });
+          save();
+        });
+      });
+      $$('[data-mp-tick]', sec).forEach(function (b) {
+        b.addEventListener('click', function () {
+          var mm = v13Month(mk, true);
+          mm.priorities.forEach(function (p) { if (p.id === b.dataset.mpTick) p.done = !p.done; });
+          save(); paints();
+        });
+      });
+      $$('[data-mp-del]', sec).forEach(function (b) {
+        b.addEventListener('click', function () {
+          var mm = v13Month(mk, true);
+          mm.priorities = mm.priorities.filter(function (p) { return p.id !== b.dataset.mpDel; });
+          save(); paints();
+        });
+      });
+      var addP = $('[data-mp-add]', sec);
+      if (addP) addP.addEventListener('click', function () {
+        var mm = v13Month(mk, true);
+        if (mm.priorities.length >= 4) { toast('最多 4 条，先聚焦'); return; }
+        var item = { id: uid('mp'), text: '', done: false };
+        mm.priorities.push(item);
+        save(); paints();
+        var target = $('[data-mp-text="' + item.id + '"]', sec);
+        if (target) target.focus();
+      });
+      var addL = $('[data-ml-add]', sec);
+      if (addL) addL.addEventListener('click', function () { mplanLinkDialog(mk); });
+      $$('[data-ml-del]', sec).forEach(function (b) {
+        b.addEventListener('click', function () {
+          var mm = v13Month(mk, true);
+          mm.links = mm.links.filter(function (l) { return l.id !== b.dataset.mlDel; });
+          save(); paints(); toast('已移除');
+        });
+      });
+      $$('[data-mr]', sec).forEach(function (ta) {
+        ta.addEventListener('input', function () {
+          v13Month(mk, true).review[ta.dataset.mr] = ta.value;
+          debounce(save, 300)();
+        });
+        ta.addEventListener('blur', function () {
+          v13Month(mk, true).review[ta.dataset.mr] = ta.value;
+          save();
+        });
+      });
+      $$('[data-mweek]', sec).forEach(function (b) {
+        b.addEventListener('click', function () {
+          var pg = state.pages.filter(function (p) { return p.builtin === 'monthly'; })[0];
+          state.settings.planWeek = b.dataset.mweek;
+          if (pg) state.current = pg.id;
+          save(); renderNav(); renderPage();
+        });
+      });
+    }
+
+    paints();
+    return sec;
+  }
+
   function weeklyBoardBlock() {
     var sec = document.createElement('section');
     sec.className = 'v13 w13';
