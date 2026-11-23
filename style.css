@@ -3959,3 +3959,13 @@ html[data-theme="dark"] .w-st.st-done { color: #7fd6a8; }
   .gd-body { max-height: 62vh; -webkit-overflow-scrolling: touch; }
   .v13-empty { padding: 22px 16px; }
 }
+
+/* V13.2 细节：手机端添加任务区两列压缩、日记框加高 */
+.d-memo .field { min-height: 74px; line-height: 1.65; }
+@media (max-width: 640px) {
+  .w-add-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+  .w-add-row .field.slim { width: 100%; min-width: 0; flex: none; }
+  .w-add-row [data-nt-goal] { grid-column: 1 / -1; }
+  .w-add-row [data-nt-add] { grid-column: 1 / -1; width: 100%; margin-left: 0; }
+  .d-memo .field { min-height: 84px; }
+}
