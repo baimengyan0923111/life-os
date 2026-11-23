@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#fbfbfd" id="theme-color" />
 <meta name="description" content="Life OS · 人生管理系统：把生活拆成可执行的模块，记录、推进、复盘。数据只保存在本机浏览器。" />
 <title>Life OS · 人生管理系统</title>
-<link rel="stylesheet" href="style.css?v=20261123p" />
+<link rel="stylesheet" href="style.css?v=20261123q" />
 <script>
 /* 强制 HTTPS：仅在 http 且非本地地址时跳转，file:// 与 localhost 预览不受影响 */
 (function () {
@@ -74,7 +74,7 @@
           </div>
         </div>
         <button class="solid-btn auth-submit" id="auth-submit" type="submit">登录</button>
-        <p class="auth-hint" id="auth-hint">邮箱与密码由云端校验，登录后数据自动同步到所有设备。</p>
+        <p class="auth-hint" id="auth-hint">邮箱与密码由云端校验，登录后数据仍只存在本机，需要在「云同步」面板手动点按钮才会与云端交互。</p>
       </form>
 
       <div class="auth-local" id="auth-local">
@@ -190,6 +190,6 @@
   <input type="file" id="file-import" accept="application/json,.json" hidden />
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-  <script src="app.js?v=20261123p"></script>
+  <script src="app.js?v=20261123q"></script>
 </body>
 </html>
