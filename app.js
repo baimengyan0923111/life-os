@@ -2453,7 +2453,8 @@
   renderers.habit = {
     html: function (m) {
       var d = m.data;
-      var parts = (d.month || monthKey(new Date())).split('-');
+      var monthStr = d.month || monthKey(new Date());
+      var parts = monthStr.split('-');
       var y = Number(parts[0]), mo = Number(parts[1]);
       var days = new Date(y, mo, 0).getDate();
       var now = new Date();
@@ -2497,13 +2498,27 @@
             '<span class="cell-d">' + info2.num + '</span></button>';
         }
         return '<div class="habit-name" data-h="' + h.id + '"><b title="' + esc(h.name) + '">' + esc(h.name) + '</b>' +
-          '<span>' + count + '</span></div>' + cells;
+          '<span class="hn-meta" data-meta="' + h.id + '">' + habitMetaText(h, monthStr) + '</span></div>' + cells;
       }).join('');
+
+      /* V8：热度改为与网格列对齐的一行细刻度，替代原先占满整卡的大方格热力图 */
+      var heat = heatLevel(d, monthStr);
+      var heatCells = '';
+      for (var c3 = 0; c3 < cols; c3++) {
+        var info3 = dayInfo(c3);
+        if (!info3.inMonth) { heatCells += '<span class="heat-bar blank"></span>'; continue; }
+        var hv = null;
+        for (var q = 0; q < heat.length; q++) { if (heat[q].key === info3.key) { hv = heat[q]; break; } }
+        heatCells += '<span class="heat-bar l' + (hv ? hv.level : 0) + '" data-heat="' + info3.key + '" title="' +
+          esc(info3.key) + ' · 完成 ' + (hv ? hv.count : 0) + ' 个习惯"></span>';
+      }
 
       var total = 0;
       (d.habits || []).forEach(function (h) {
         Object.keys(h.checks || {}).forEach(function (k) { if (k.indexOf(y + '-' + pad(mo)) === 0) total++; });
       });
+      var totalGoal = (d.habits || []).length * days;
+      var totalPct = totalGoal ? Math.round(total / totalGoal * 100) : 0;
 
       return '<div class="habit-head">' +
         '<div class="habit-month">' +
@@ -2511,11 +2526,12 @@
         '<span>' + y + ' 年 ' + mo + ' 月</span>' +
         '<button type="button" data-mv="1" aria-label="下个月">' + icon('chevronRight') + '</button>' +
         '</div>' +
-        '<span style="font-size:11.5px;color:var(--faint)">共 ' + total + ' 次</span>' +
+        '<span class="habit-sum" data-hsum>' + total + '/' + totalGoal + ' · ' + totalPct + '%</span>' +
         '</div>' +
         (d.habits && d.habits.length
           ? '<div class="habit-scroll"><div class="habit-table" style="grid-template-columns:minmax(var(--hname-min),var(--hname-max)) repeat(' + cols + ',minmax(var(--cell-min),1fr))">' +
-          '<div class="habit-name habit-name-head" aria-hidden="true"></div>' + cellsHead + rows + '</div></div>'
+          '<div class="habit-name habit-name-head" aria-hidden="true"></div>' + cellsHead + rows +
+          '<div class="habit-name habit-heat-label">每日热度</div>' + heatCells + '</div></div>'
           : '<p class="empty-line">还没有习惯，先加一个：</p>') +
         '<div class="habit-add">' +
         '<input class="field" data-new placeholder="例如：早起后喝一杯水" maxlength="30">' +
@@ -2584,12 +2600,8 @@
             c.classList.add('poped');
             setTimeout(function () { c.classList.remove('poped'); }, 260);
           }
-          var wrap = c.closest('.habit-table');
-          var nameEl = wrap ? $('.habit-name[data-h="' + c.dataset.h + '"] span', wrap) : null;
-          if (nameEl) {
-            var rowCells = $$('.cell', wrap).filter(function (x) { return x.dataset.h === c.dataset.h; });
-            nameEl.textContent = rowCells.filter(function (x) { return x.classList.contains('on'); }).length;
-          }
+          /* V8：打卡后统一刷新左侧小字（连续天数 / 本月完成）与热度刻度 */
+          paintHabitStats(body, m);
         });
       });
     }
@@ -7509,10 +7521,17 @@
       if (k <= tKey) elapsed++;
       if ((h.checks || {})[k]) done++;
     }
-    var goal = clamp(Number(h.goal && h.goal.times) || 3, 1, 7);
-    var expect = Math.max(1, Math.round(goal * Math.max(elapsed, 1) / 7));
+    /* V8：本月目标次数直接与当月天数联动（11 月 = 30，12 月 = 31，2 月 = 28/29） */
+    var expect = days;
     var rate = Math.min(100, Math.round(done / expect * 100));
     return { days: days, elapsed: elapsed, done: done, expect: expect, rate: rate };
+  }
+
+  /* 网格每行左侧的一行小字：连续天数 · 本月完成 / 当月天数 */
+  function habitMetaText(h, month) {
+    var st = habitStreak(h);
+    var ms = habitMonthStats(h, month);
+    return '连续 ' + st + ' 天 · ' + ms.done + '/' + ms.expect;
   }
 
   function heatLevel(d, month) {
@@ -7531,46 +7550,10 @@
 
   function habitExtraHtml(m) {
     var d = m.data || {};
-    var month = d.month || monthKey(new Date());
-    var habits = d.habits || [];
-    var tKey = today();
-    if (!habits.length) return '';
-
-    var rows = habits.map(function (h) {
-      var st = habitStreak(h);
-      var lg = habitLongest(h);
-      var wk = habitWeekCount(h, tKey);
-      var goal = clamp(Number(h.goal && h.goal.times) || 3, 1, 7);
-      var ms = habitMonthStats(h, month);
-      return '<div class="hb-row" data-h="' + h.id + '">' +
-        '<span class="hb-name" title="' + esc(h.name) + '">' + esc(h.name) + '</span>' +
-        '<span class="hb-chip" data-chip="streak"><b>' + st + '</b> 天连续<small>最长 ' + lg + '</small></span>' +
-        '<button class="hb-goal' + (wk >= goal ? ' ok' : '') + '" type="button" data-goal="' + h.id +
-        '" title="点击修改每周目标频次">每周 ' + goal + ' 次 · 本周 ' + wk + '</button>' +
-        '<span class="hb-rate" data-chip="rate">本月 ' + ms.done + '/' + ms.expect + ' · ' + ms.rate + '%</span>' +
-        '</div>';
-    }).join('');
-
-    var cells = heatLevel(d, month);
-    var parts = month.split('-'), y = Number(parts[0]), mo = Number(parts[1]);
-    var lead = new Date(y, mo - 1, 1).getDay();
-    var blanks = '';
-    for (var b = 0; b < lead; b++) blanks += '<span class="heat-cell blank"></span>';
-    var cellHtml = cells.map(function (c) {
-      return '<span class="heat-cell l' + c.level + '" data-heat="' + c.key + '" title="' +
-        esc(c.key) + ' · 完成 ' + c.count + ' 个习惯">' + c.num + '</span>';
-    }).join('');
-
-    return '<div class="hb-extra" data-hb>' +
-      '<div class="hb-rows">' + rows + '</div>' +
-      '<div class="hb-heat">' +
-      '<div class="hb-heat-head"><span>' + mo + ' 月热力图</span><span>颜色越深，当天完成的习惯越多</span></div>' +
-      '<div class="hb-heat-grid">' + blanks + cellHtml + '</div>' +
-      '<div class="hb-legend"><span>少</span><i class="heat-cell l1"></i><i class="heat-cell l2"></i><i class="heat-cell l3"></i><i class="heat-cell l4"></i><span>多</span></div>' +
-      '</div>' +
-      '<div class="hb-tools">' +
+    if (!(d.habits || []).length) return '';
+    /* V8：统计与热力图已并入打卡网格，这里只保留补打卡入口 */
+    return '<div class="hb-tools" data-hb>' +
       '<button class="ghost-btn tiny" type="button" data-backfill>补打卡（过去 7 天）</button>' +
-      '</div>' +
       '</div>';
   }
 
@@ -7578,28 +7561,26 @@
     var d = m.data || {};
     var month = d.month || monthKey(new Date());
     (d.habits || []).forEach(function (h) {
-      var row = $('.hb-row[data-h="' + h.id + '"]', body);
-      if (!row) return;
-      var st = habitStreak(h), lg = habitLongest(h), wk = habitWeekCount(h, today());
-      var goal = clamp(Number(h.goal && h.goal.times) || 3, 1, 7);
-      var ms = habitMonthStats(h, month);
-      var cs = $('[data-chip="streak"]', row);
-      if (cs) cs.innerHTML = '<b>' + st + '</b> 天连续<small>最长 ' + lg + '</small>';
-      var gb = $('[data-goal]', row);
-      if (gb) {
-        gb.textContent = '每周 ' + goal + ' 次 · 本周 ' + wk;
-        gb.classList.toggle('ok', wk >= goal);
-      }
-      var rt = $('[data-chip="rate"]', row);
-      if (rt) rt.textContent = '本月 ' + ms.done + '/' + ms.expect + ' · ' + ms.rate + '%';
+      var el = $('[data-meta="' + h.id + '"]', body);
+      if (el) el.textContent = habitMetaText(h, month);
     });
-    var cells = heatLevel(d, month);
-    cells.forEach(function (c) {
+    heatLevel(d, month).forEach(function (c) {
       var el = $('[data-heat="' + c.key + '"]', body);
       if (!el) return;
-      el.className = 'heat-cell l' + c.level;
+      el.className = 'heat-bar l' + c.level;
       el.title = c.key + ' · 完成 ' + c.count + ' 个习惯';
     });
+    var sum = $('[data-hsum]', body);
+    if (sum) {
+      var parts = month.split('-'), y = Number(parts[0]), mo = Number(parts[1]);
+      var days = new Date(y, mo, 0).getDate();
+      var total = 0;
+      (d.habits || []).forEach(function (h) {
+        Object.keys(h.checks || {}).forEach(function (k) { if (k.indexOf(y + '-' + pad(mo)) === 0) total++; });
+      });
+      var goalAll = (d.habits || []).length * days;
+      sum.textContent = total + '/' + goalAll + ' · ' + (goalAll ? Math.round(total / goalAll * 100) : 0) + '%';
+    }
   }
 
   function openHabitGoal(m, habit, after) {
