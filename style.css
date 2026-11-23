@@ -2494,12 +2494,12 @@ html[data-theme="dark"] .card-type { background: var(--bg-subtle); color: var(--
   background: var(--m-color); flex: none;
 }
 
-/* 卡片内小按钮：中性化，hover 才提示可点 */
-.card .add-btn, .card .ghost-btn {
+/* 卡片内小按钮：中性化，hover 才提示可点（添加入口保留统一强调样式，不参与中性化） */
+.card .ghost-btn {
   background: var(--bg-subtle) !important;
   color: var(--text-sub) !important;
 }
-.card .add-btn:hover, .card .ghost-btn:hover { color: var(--text-main) !important; }
+.card .ghost-btn:hover { color: var(--text-main) !important; }
 
 /* ④ 进度条填充：模块卡（含八个抽屉）用自定义色；概览 KPI 走中性灰阶（进度条本体仍用 --accent） */
 .ovcard { --tone: var(--m-3) !important; --tint: color-mix(in srgb, var(--m-3) 10%, transparent) !important; }
@@ -3723,18 +3723,52 @@ html[data-theme="dark"] .ag-chip { background: var(--elev-2); color: var(--ink);
 }
 .w13-cal-h { margin-bottom: var(--s-3); }
 .w13-cal-h h2 { font-size: var(--t-17); color: var(--ink); }
-.w-days { display: flex; flex-direction: column; gap: 4px; }
-.w-day { border: 1px solid transparent; border-radius: var(--r-md); padding: 6px 8px; transition: all var(--dur-1) var(--ease); }
+.w-days { display: flex; flex-direction: column; gap: 6px; }
+/* 本周日历：三列网格（日期 / 内容 / 统计），行高统一、基线对齐 */
+.w-day {
+  display: grid; grid-template-columns: 54px minmax(0, 1fr) auto;
+  align-items: start; column-gap: 12px;
+  padding: 10px 12px; min-height: 48px;
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  background: var(--bg-soft);
+  position: relative;
+  transition: border-color var(--dur-1) var(--ease-soft),
+              background-color var(--dur-1) var(--ease-soft),
+              box-shadow var(--dur-1) var(--ease-soft);
+}
+.w-day:hover { border-color: var(--line-2); box-shadow: var(--shadow-1); }
 .w-day.is-today { background: var(--accent-soft); border-color: var(--accent-line); }
 .w-day.drop-on { border-color: var(--accent); background: var(--accent-soft); }
-.w-day-head { display: flex; align-items: center; gap: 6px; }
-.w-day-chip { font-size: var(--t-12); font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; }
+.w-day-lead { display: flex; flex-direction: column; gap: 1px; min-width: 0; padding-top: 2px; }
+.w-day-chip { font-size: var(--t-12); font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: .01em; }
 .w-day-wd { font-size: var(--t-11); color: var(--muted); }
-.w-day-tag { font-size: var(--t-11); color: var(--accent); background: var(--elev); border-radius: var(--r-xs); padding: 0 5px; }
-.w-day-meta { margin-left: auto; font-size: var(--t-11); color: var(--faint); }
-.w-day-body { margin-top: 3px; display: flex; flex-direction: column; gap: 2px; }
-.w-day-empty { font-size: var(--t-11); color: var(--faint); padding-left: 12px; }
-.w-mini { display: flex; align-items: center; gap: 5px; font-size: var(--t-12); color: var(--ink-2); }
+.w-day.is-today::before {
+  content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px;
+  border-radius: var(--r-pill); background: var(--accent);
+}
+.w-day.is-today .w-day-chip { color: var(--accent); }
+.w-day.is-today .w-day-wd { color: var(--accent); font-weight: 600; }
+.w-day-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.w-day-none { font-size: var(--t-12); color: var(--faint); }
+.w-day-stat { display: flex; align-items: center; gap: 6px; flex: none; padding-top: 1px; }
+.w-day-kpi {
+  font-size: var(--t-11); line-height: 17px; color: var(--muted);
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-pill);
+  padding: 0 7px; white-space: nowrap; font-variant-numeric: tabular-nums; flex: none;
+}
+.w-day-kpi.is-idle { color: var(--faint); background: transparent; border-style: dashed; }
+.w-day.is-today .w-day-kpi { color: var(--accent); border-color: var(--accent-line); }
+html[data-theme="dark"] .w-day { background: color-mix(in srgb, var(--elev) 62%, transparent); }
+html[data-theme="dark"] .w-day.is-today {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 48%, transparent);
+}
+html[data-theme="dark"] .w-day-kpi { background: color-mix(in srgb, var(--card) 70%, transparent); }
+@media (max-width: 640px) {
+  .w-day { grid-template-columns: 46px minmax(0, 1fr) auto; column-gap: 8px; padding: 8px 10px; }
+  .w-day-kpi { padding: 0 6px; font-size: 10px; }
+}
+.w-mini { display: flex; align-items: center; gap: 6px; font-size: var(--t-12); color: var(--ink-2); line-height: 1.45; min-width: 0; }
 .w-mini.done .w-mini-t { color: var(--faint); text-decoration: line-through; }
 .w-mini-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .w-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--accent-2); flex: none; }
@@ -4427,3 +4461,55 @@ html[data-theme="dark"] .m-add-focus:hover {
   .m-kpi b { font-size: 16px; }
   .m-kpi span { font-size: 10px; }
 }
+
+/* =========================================================
+   统一「添加 / 加入 / 记录」类按钮语言
+   ----------------------------------------
+   三种尺寸，同一视觉：强调色浅底 + 细描边 + pill 圆角，悬停转实心。
+   .add-mini  28px  卡片头部、紧邻标题的小入口
+   .add-pill  34px  与输入框同行的主操作
+   .add-btn   32px  旧模块内联添加入口（全局覆写，兼容既有结构）
+   ========================================================= */
+.add-mini, .add-pill, .add-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  font-family: inherit; font-weight: 600; letter-spacing: .01em;
+  border-radius: var(--r-pill); cursor: pointer; flex: none; white-space: nowrap;
+  background: var(--accent-soft); color: var(--accent);
+  border: 1px solid var(--accent-line);
+  transition: background-color var(--dur-1) var(--ease-soft),
+              border-color var(--dur-1) var(--ease-soft),
+              color var(--dur-1) var(--ease-soft),
+              transform var(--dur-1) var(--ease-soft),
+              box-shadow var(--dur-1) var(--ease-soft);
+}
+.add-mini { height: 28px; padding: 0 12px; font-size: var(--t-12); }
+.add-pill { height: 34px; padding: 0 16px; font-size: var(--t-13); }
+.add-btn { height: 32px; padding: 0 14px; font-size: var(--t-12); }
+.add-mini svg { width: 12px; height: 12px; flex: none; }
+.add-pill svg, .add-btn svg { width: 13px; height: 13px; flex: none; }
+.add-mini:hover, .add-pill:hover, .add-btn:hover {
+  background: var(--accent); border-color: var(--accent); color: var(--on-accent);
+  transform: translateY(-1px); box-shadow: var(--shadow-2);
+}
+.add-mini:active, .add-pill:active, .add-btn:active {
+  transform: none; box-shadow: none;
+  background: var(--accent); border-color: var(--accent); color: var(--on-accent);
+}
+.add-mini:focus-visible, .add-pill:focus-visible, .add-btn:focus-visible {
+  outline: none; box-shadow: 0 0 0 3px var(--ring);
+}
+html[data-theme="dark"] .add-mini,
+html[data-theme="dark"] .add-pill,
+html[data-theme="dark"] .add-btn {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 52%, transparent);
+  color: color-mix(in srgb, var(--accent) 84%, #FFFFFF);
+}
+html[data-theme="dark"] .add-mini:hover,
+html[data-theme="dark"] .add-pill:hover,
+html[data-theme="dark"] .add-btn:hover {
+  background: var(--accent); border-color: var(--accent); color: var(--on-accent);
+}
+/* 与输入框同行时，主按钮不再拉伸占满 */
+.w-add-main .w-add-btn { min-width: 88px; }
+.w-add-row .add-pill { margin-left: auto; }
