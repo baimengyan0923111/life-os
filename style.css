@@ -3595,7 +3595,9 @@ html[data-theme="dark"] .g-st.st-done { color: #7fd6a8; }
 .gd-kr-step button {
   width: 22px; height: 22px; border-radius: var(--r-xs); border: 1px solid var(--line);
   background: var(--elev); color: var(--accent); font-size: var(--t-13); line-height: 1; cursor: pointer;
+  touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
 }
+.gd-kr-step button.holding { background: var(--accent-soft); border-color: var(--accent); }
 .gd-kr-step button:hover { background: var(--accent-soft); }
 .gd-ms { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .gd-ms li { display: flex; align-items: center; gap: 8px; font-size: var(--t-13); color: var(--ink-2); }
