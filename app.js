@@ -667,6 +667,13 @@
       });
       return p;
     });
+    /* 旧备份 / 早期版本（只有自定义页、没有 builtin 页）补齐六个系统页，
+       否则升级后侧栏只剩旧自定义页，概览 / 年度目标 / 周计划等入口全部消失 */
+    var haveBuiltin = {};
+    s.pages.forEach(function (p) { if (p && p.builtin) haveBuiltin[p.builtin] = true; });
+    basePages().forEach(function (bp) {
+      if (!haveBuiltin[bp.builtin]) s.pages.push(bp);
+    });
     s.pages.forEach(function (pg) { normalizeOkrPage(pg); });
     /* 旧数据兼容：为每日日程里的每条任务补稳定唯一 id 与所属日期，供月度计划引用 */
     s.pages.forEach(function (pg) { migrateDailyTasks(pg, s); });
@@ -1591,7 +1598,7 @@
     var mt = moodOf(key) || {};
     cards.push(ovCard({
       title: '心情曲线', icon: 'smile', color: '#d9a13d', go: 'overview', anchor: '#mood-block',
-      meta: mt.mood ? '今日 <b>' + mt.mood + '/10</b>' : '今日未记',
+      meta: mt.mood ? '今日 <b>' + mt.mood + '/5</b>' : '今日未记',
       body: moodSpark()
     }));
 
@@ -4440,6 +4447,30 @@
     );
   }
 
+  /* -------- 重命名模块 -------- */
+  function dialogRename(m) {
+    openDialog(
+      '<h3>重命名</h3><p class="sub">名字显示在卡片顶部，最长 40 个字；回车即可保存。</p>' +
+      '<input class="field" style="width:100%" data-title maxlength="40" value="' + esc(m.title) + '" placeholder="例如：每周复盘">' +
+      '<div class="sheet-actions"><button class="ghost-btn" data-close>取消</button>' +
+      '<button class="solid-btn" data-ok>保存</button></div>',
+      function (sheet, close) {
+        var inp = $('[data-title]', sheet);
+        function commit() {
+          var v = (inp.value || '').trim();
+          if (!v) { inp.focus(); toast('名字不能为空'); return; }
+          m.title = v.slice(0, 40);
+          save(); close(); refreshCard(m);
+          toast('已重命名');
+        }
+        $('[data-ok]', sheet).addEventListener('click', commit);
+        inp.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        });
+      }
+    );
+  }
+
   /* -------- 图标与配色（同一套选择器） -------- */
   function dialogStyle(m) {
     var sel = { icon: m.icon, color: m.color };
@@ -4756,6 +4787,40 @@
       })
     ];
 
+    /* ---- V13 数据模型：年度目标 / 本周计划 / 今日打卡 ----
+       V13 起三页改读 state.goals / state.weekPlans / state.dayMeta，
+       示例数据必须一并生成，否则载入示例后这三页是空的（只有刷新才会补目标） */
+    v13SeedGoals(s);            /* 用年度目标页的 OKR 模块生成 state.goals */
+    var wk0 = weekStartISO(t);
+    var gAll = s.goals || [];
+    var gid = function (i) { return (gAll[i] || gAll[0] || {}).id || ''; };
+    s.weekPlans = {};
+    s.weekPlans[wk0] = {
+      theme: '把系统跑通，把交付清干净',
+      tasks: [
+        { id: uid('wt'), title: '写完年度目标的取值口径', goalId: gid(1), domain: '事业', priority: 'p0', est: 4, deadline: shiftISO(wk0, 2), date: shiftISO(wk0, 1), status: 'doing', createdAt: t },
+        { id: uid('wt'), title: '力量训练 3 次', goalId: gid(0), domain: '健康', priority: 'p1', est: 3, deadline: '', date: shiftISO(wk0, 1), status: 'todo', createdAt: t },
+        { id: uid('wt'), title: '对一次账，把 11 月支出归档', goalId: gid(2), domain: '财务', priority: 'p1', est: 1, deadline: shiftISO(wk0, 4), date: shiftISO(wk0, 3), status: 'todo', createdAt: t },
+        { id: uid('wt'), title: '回访两个付费用户', goalId: gid(1), domain: '事业', priority: 'p2', est: 2, deadline: '', date: shiftISO(wk0, 3), status: 'todo', createdAt: t },
+        { id: uid('wt'), title: '给家里打一次长电话', goalId: '', domain: '关系', priority: 'p2', est: 1, deadline: '', date: shiftISO(wk0, 5), status: 'todo', createdAt: t },
+        { id: uid('wt'), title: '整理本周复盘要点', goalId: gid(0), domain: '成长', priority: 'p2', est: 1, deadline: '', date: shiftISO(wk0, 0), status: 'done', createdAt: t }
+      ]
+    };
+    var wTasks = s.weekPlans[wk0].tasks;
+    s.weekPlans[wk0].focus = [wTasks[0].id, wTasks[1].id, wTasks[2].id];
+
+    s.dayMeta = {};
+    s.dayMeta[t] = {
+      theme: '先写完再优化',
+      energy: 3,
+      mood: 4,
+      focus: 4,
+      memo: '上午写文档最清醒；下午三点后适合回人，不适合做判断。',
+      checkedIn: true,
+      checkedAt: '22:10',
+      defers: [{ title: '回访两个付费用户', from: shiftISO(t, -1) }]
+    };
+    v13Normalize(s);            /* 统一走一遍正规化，并置 v13Seeded */
     return s;
   }
 
