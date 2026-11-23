@@ -3969,3 +3969,19 @@ html[data-theme="dark"] .w-st.st-done { color: #7fd6a8; }
   .w-add-row [data-nt-add] { grid-column: 1 / -1; width: 100%; margin-left: 0; }
   .d-memo .field { min-height: 84px; }
 }
+
+/* V13.3 周计划添加区：主输入 + 添加按钮并排，其余选项在手机上折叠 */
+.w-add-main { display: flex; gap: 8px; align-items: center; }
+.w-add-main .field { flex: 1; min-width: 0; }
+.w-add-main .w-add-btn { flex: none; min-width: 76px; }
+.w-add-more {
+  display: none; width: 100%; margin-top: 8px; padding: 7px 10px;
+  border: 1px dashed var(--line-2); border-radius: var(--r-md); background: transparent;
+  color: var(--muted); font-size: var(--t-12); font-family: inherit; cursor: pointer; text-align: left;
+}
+.w-add-more:hover { color: var(--accent); border-color: var(--accent-line); }
+@media (max-width: 640px) {
+  .w-add-more { display: block; }
+  .w-add .w-add-row { display: none; }
+  .w-add.open .w-add-row { display: grid; }
+}
