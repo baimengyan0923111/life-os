@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#fbfbfd" id="theme-color" />
 <meta name="description" content="Life OS · 人生管理系统：把生活拆成可执行的模块，记录、推进、复盘。数据只保存在本机浏览器。" />
 <title>Life OS · 人生管理系统</title>
-<link rel="stylesheet" href="style.css?v=20261124a" />
+<link rel="stylesheet" href="style.css?v=20261124b" />
 <script>
 /* 强制 HTTPS：仅在 http 且非本地地址时跳转，file:// 与 localhost 预览不受影响 */
 (function () {
@@ -122,7 +122,7 @@
         <div class="foot-actions">
           <button class="foot-btn" type="button" data-act="export">导出备份</button>
           <button class="foot-btn" type="button" data-act="import">导入</button>
-          <button class="foot-btn" type="button" data-act="reset">清空</button>
+          <button class="foot-btn is-danger" type="button" data-act="reset" aria-label="清空全部数据（危险操作）">清空</button>
         </div>
         <div class="user-box">
           <button class="user-mail" id="user-mail" type="button" title="点击修改用户名">未登录</button>
@@ -187,6 +187,6 @@
   <input type="file" id="file-import" accept="application/json,.json" hidden />
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-  <script src="app.js?v=20261124a"></script>
+  <script src="app.js?v=20261124b"></script>
 </body>
 </html>
