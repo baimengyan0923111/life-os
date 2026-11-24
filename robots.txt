@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /data/
+Disallow: /backup/
+
+# Life OS 为纯静态本地应用，无服务端接口，此处仅声明可抓取范围。
