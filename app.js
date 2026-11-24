@@ -1438,11 +1438,12 @@
     }
     /* V13：年度目标 / 周计划 / 每日打卡 三页按新结构渲染 */
     if (page.builtin === 'yearly') canvas.appendChild(yearlyBoardBlock());
-    if (page.builtin === 'monthplan') canvas.appendChild(monthBoardBlock());
-    if (page.builtin === 'monthly') {
-      canvas.appendChild(weeklyBoardBlock());
-      if (state.settings.weekMode === 'month') canvas.appendChild(agendaBlock());
+    if (page.builtin === 'monthplan') {
+      canvas.appendChild(monthBoardBlock());
+      /* 本月日程任务：归属月度计划，跟随月度视图月份 */
+      canvas.appendChild(agendaBlock(state.settings.monthView));
     }
+    if (page.builtin === 'monthly') canvas.appendChild(weeklyBoardBlock());
     if (page.builtin === 'daily') canvas.appendChild(dailyCheckinBlock());
     if (page.builtin === 'life8') canvas.appendChild(boardBlock());
     /* 人生轮盘：八大领域雷达图 + 季度快照对比 */
@@ -2029,16 +2030,17 @@
   }
 
   /* 月度计划：本月日程任务聚合 + 计划清单（引用） */
-  function agendaBlock() {
+  function agendaBlock(monthOverride) {
     var sec = document.createElement('section');
     sec.className = 'agenda reveal';
     sec.id = 'agenda-block';
-    fillAgenda(sec);
+    fillAgenda(sec, monthOverride);
     return sec;
   }
 
-  function fillAgenda(sec) {
-    var month = isMonthStr(state.settings.planMonth) ? state.settings.planMonth : monthKey(new Date());
+  function fillAgenda(sec, monthOverride) {
+    var month = isMonthStr(monthOverride) ? monthOverride
+      : (isMonthStr(state.settings.planMonth) ? state.settings.planMonth : monthKey(new Date()));
     var tasks = collectDayTasks(month);
     var byKey = {};
     tasks.forEach(function (t) { byKey[t.key] = t; });
@@ -2126,15 +2128,20 @@
     } else {
       html +=
         '<div class="ag-prog">' +
-        '<div class="ag-prog-track"><i style="width:' + rate + '%"></i></div>' +
+        '<div class="ag-prog-head">' +
+        '<span class="ag-prog-lab">本月完成率</span>' +
         '<span class="ag-prog-num">' + rate + '<em>%</em></span>' +
+        '<span class="ag-prog-split">' + doneN + ' / ' + tasks.length + ' 项</span>' +
         '<div class="ag-tools">' +
         '<button class="ag-hide' + (hideDone ? ' on' : '') + '" type="button" data-hide-done title="' +
         (hideDone ? '显示已完成任务' : '隐藏已完成任务') + '">' + icon(hideDone ? 'eyeOff' : 'eye') +
         '<span>' + (hideDone ? '显示已完成' : '隐藏已完成') + '</span></button>' +
-        (pickLeft ? '<button class="ghost-btn tiny" type="button" data-pick-all title="把本月所有未完成任务加入计划">' +
+        (pickLeft ? '<button class="add-mini" type="button" data-pick-all title="把本月所有未完成任务加入计划">' +
           icon('plus') + '<span>全部加入</span></button>' : '') +
         '</div>' +
+        '</div>' +
+        '<div class="ag-prog-track' + (rate >= 100 ? ' is-full' : '') + '" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + rate + '" aria-label="本月任务完成率 ' + rate + '%">' +
+        '<i style="width:' + rate + '%"></i></div>' +
         '</div>' +
         '<div class="ag-heat" role="group" aria-label="本月每日任务分布">' + heatHtml + '</div>' +
         '<div class="ag-groups">' + groups.map(function (g) {
@@ -2165,7 +2172,8 @@
                   : '') +
                 '<button class="pick-btn' + (inPlan ? ' on' : '') + '" type="button" data-pick title="' +
                 (inPlan ? '点击移出本月计划' : '加入本月计划（引用，不复制）') + '">' +
-                icon(inPlan ? 'check' : 'plus') + '<span class="pk-txt">' + (inPlan ? '已加入' : '加入计划') + '</span></button>' +
+                '<i class="pk-ico" aria-hidden="true">' + icon(inPlan ? 'check' : 'plus') + '</i>' +
+                '<span class="pk-txt">' + (inPlan ? '已加入' : '加入计划') + '</span></button>' +
                 '</div>';
             }).join('') +
             '</div>';
@@ -2192,20 +2200,24 @@
 
     sec.innerHTML = html;
 
-    function refresh() { fillAgenda(sec); }
+    function refresh() { fillAgenda(sec, monthOverride); }
+
+    /* 月份切换：日程聚合与月度计划视图保持同一个月 */
+    function setMonth(mk) {
+      state.settings.planMonth = mk;
+      state.settings.monthView = mk;
+      save();
+      renderPage();   /* 整页重绘：页头月份与聚合结果一起刷新 */
+    }
 
     $$('[data-month]', sec).forEach(function (b) {
       b.addEventListener('click', function () {
-        state.settings.planMonth = shiftMonth(month, Number(b.dataset.month));
-        save();
-        renderPage();   /* 整页重绘：页头月份与聚合结果一起刷新 */
+        setMonth(shiftMonth(month, Number(b.dataset.month)));
       });
     });
     var nowBtn = $('[data-month-now]', sec);
     if (nowBtn) nowBtn.addEventListener('click', function () {
-      state.settings.planMonth = monthKey(new Date());
-      save();
-      renderPage();
+      setMonth(monthKey(new Date()));
     });
     var hideBtn = $('[data-hide-done]', sec);
     if (hideBtn) hideBtn.addEventListener('click', function () {
@@ -10006,8 +10018,6 @@
         '<button class="icon-btn" type="button" data-wk="1" aria-label="下一周">' + icon('chevronRight') + '</button>' +
         (ws === thisWeek ? '' : '<button class="ghost-btn tiny" type="button" data-wk="0">回到本周</button>') +
         '</div>' +
-        '<div class="w13-mode"><button class="v13-chip' + (state.settings.weekMode !== 'month' ? ' on' : '') + '" type="button" data-wmode="week">本周</button>' +
-        '<button class="v13-chip' + (state.settings.weekMode === 'month' ? ' on' : '') + '" type="button" data-wmode="month">本月总览</button></div>' +
         '</div>' +
         (isPast ? '<div class="w13-note">' + icon('bulb') + '<span>这一周已经结束，去完成复盘，把想留下的经验写下来。</span>' +
           '<button class="ghost-btn tiny" type="button" data-goto-review>去复盘</button></div>' : '') +
@@ -10037,7 +10047,7 @@
         }).join('') + '</select>' +
         '</div></div>' +
         '<div class="w-list">' + (taskRows || '<div class="v13-empty sm"><b>这一周还没有任务</b><span>先加 1 – 3 件真正重要的事，不必排满。</span></div>') + '</div>' +
-        '<div class="w-from-goal"><button class="ghost-btn tiny" type="button" data-from-goal>' + icon('flag') + ' 从年度目标添加任务</button></div>' +
+        '<div class="w-from-goal"><button class="add-mini w-goal-btn" type="button" data-from-goal>' + icon('flag') + '<span>从年度目标添加任务</span></button></div>' +
         '</div>' +
         '</div>';
 
@@ -10047,14 +10057,6 @@
           var n = Number(b.dataset.wk);
           state.settings.planWeek = n === 0 ? thisWeek : shiftISO(ws, 7 * n);
           save(); paints();
-        });
-      });
-      $$('[data-wmode]', sec).forEach(function (b) {
-        b.addEventListener('click', function () {
-          state.settings.weekMode = b.dataset.wmode;
-          save();
-          if (b.dataset.wmode === 'month') { renderPage(); return; }
-          renderPage();
         });
       });
       var rev = $('[data-goto-review]', sec);
