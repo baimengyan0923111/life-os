@@ -4,10 +4,35 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="color-scheme" content="light dark" />
-<meta name="theme-color" content="#fbfbfd" id="theme-color" />
+<meta name="theme-color" content="#F6F4EF" id="theme-color" />
 <meta name="description" content="Life OS · 人生管理系统：把生活拆成可执行的模块，记录、推进、复盘。数据只保存在本机浏览器。" />
 <title>Life OS · 人生管理系统</title>
-<link rel="stylesheet" href="style.css?v=20261124b" />
+
+<!-- P2-1 产品化资源：图标 / 可安装 / 分享预览 -->
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="favicon.ico" sizes="32x32" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" sizes="180x180" />
+<link rel="manifest" href="site.webmanifest" />
+<!-- 上线到正式域名后，把下面 canonical 与 og:image / og:url 换成绝对地址（分享卡片才生效） -->
+<link rel="canonical" href="./" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Life OS" />
+<meta property="og:title" content="Life OS · 人生管理系统" />
+<meta property="og:description" content="八大抽屉、年度目标、月度计划与周复盘；纯静态、本地存储、无账号也可用。" />
+<meta property="og:image" content="./og.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="Life OS 界面示意：八大抽屉、年度目标与周复盘卡片" />
+<meta property="og:locale" content="zh_CN" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Life OS · 人生管理系统" />
+<meta name="twitter:description" content="八大抽屉、年度目标、月度计划与周复盘；纯静态、本地存储、无账号也可用。" />
+<meta name="twitter:image" content="./og.png" />
+
+<link rel="stylesheet" href="style.css?v=20261124c" />
+<!-- P2-2 说明：样式与脚本未拆包（拆分属大重构，本轮不做）。app.js 为单文件、置于 body 末尾，
+     不阻塞 HTML 解析；此处只加 preload 让脚本下载与首屏解析并行，不改执行时序（仍为 DOM 就绪后同步执行） -->
+<link rel="preload" href="app.js?v=20261124c" as="script" />
 <script>
 /* 强制 HTTPS：仅在 http 且非本地地址时跳转，file:// 与 localhost 预览不受影响 */
 (function () {
@@ -187,6 +212,6 @@
   <input type="file" id="file-import" accept="application/json,.json" hidden />
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-  <script src="app.js?v=20261124b"></script>
+  <script src="app.js?v=20261124c"></script>
 </body>
 </html>
