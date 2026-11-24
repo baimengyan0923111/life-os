@@ -1656,10 +1656,10 @@
       case 'overview':
         return {
           eyebrow: cnDate(now) + ' · 周' + WEEK[now.getDay()],
-          h1: greeting() + '，' + esc(name) + '。',
+          h1: (name ? greeting() + '，' + esc(name) + '。' : greeting() + '。'),
           lede: '把生活拆成一个个可执行的模块 —— 记录、推进、复盘。所有数据都留在你自己的浏览器里，刷新不丢。',
-          /* 引导按钮已收进顶栏（载入示例 / 空白搭建），这里只留一句轻提示 */
-          actions: ''
+          /* 无称呼名额时给一个轻量设置入口，不再拿邮箱前缀顶替 */
+          actions: name ? '' : '<button class="name-ask" type="button" data-set-name>告诉我怎么称呼你</button>'
         };
       case 'yearly':
         return {
@@ -2819,7 +2819,7 @@
         '<span>' + y + ' 年 ' + mo + ' 月</span>' +
         '<button type="button" data-mv="1" aria-label="下个月">' + icon('chevronRight') + '</button>' +
         '</div>' +
-        '<span class="habit-sum" data-hsum>' + total + '/' + totalGoal + ' · ' + totalPct + '%</span>' +
+        '<span class="habit-sum" data-hsum>' + scoreHtml(total, totalGoal) + ' · ' + totalPct + '%</span>' +
         '</div>' +
         (d.habits && d.habits.length
           ? '<div class="habit-scroll"><div class="habit-table" style="grid-template-columns:minmax(var(--hname-min),var(--hname-max)) repeat(' + cols + ',minmax(var(--cell-min),1fr))">' +
@@ -4486,14 +4486,41 @@
     reader.readAsText(file);
   }
 
+  /* 统一分数组件：完成 / 总数（分子重、分母轻，等宽数字） */
+  function scoreHtml(done, total) {
+    var d = (done == null || done === '') ? 0 : done;
+    var t = (total == null || total === '') ? 0 : total;
+    return '<span class="score"><b>' + esc(String(d)) + '</b><i>/ ' + esc(String(t)) + '</i></span>';
+  }
+
   function resetAll() {
     openDialog(
       '<h3>清空全部数据？</h3>' +
-      '<p class="sub">所有页签和模块都会被删除，仅保留系统页的空画布。建议先导出备份。</p>' +
+      '<p class="sub">所有页签和模块都会被删除，仅保留系统页的空画布。<b>此操作不可撤销</b>，建议先导出备份。</p>' +
+      '<p class="sub" style="margin-top:10px">请输入「清空」两个字以确认：</p>' +
+      '<input class="field" id="reset-confirm" autocomplete="off" placeholder="清空" style="width:100%;margin-top:4px" aria-label="输入清空以确认">' +
+      '<p class="sub" id="reset-err" style="margin:8px 0 0;color:var(--danger)" hidden></p>' +
       '<div class="sheet-actions"><button class="ghost-btn" data-close>取消</button>' +
-      '<button class="solid-btn" data-ok style="background:var(--danger)">确认清空</button></div>',
+      '<button class="solid-btn danger-btn" data-ok disabled>确认清空</button></div>',
       function (sheet, close) {
-        $('[data-ok]', sheet).addEventListener('click', function () {
+        var rc = $('#reset-confirm', sheet);
+        var rerr = $('#reset-err', sheet);
+        var rok = $('[data-ok]', sheet);
+        function syncGuard() {
+          var ok = String(rc.value || '').trim() === '清空';
+          rok.disabled = !ok;
+          rok.style.opacity = ok ? '1' : '.5';
+          rok.style.cursor = ok ? 'pointer' : 'not-allowed';
+        }
+        rc.addEventListener('input', syncGuard);
+        syncGuard();
+        rok.addEventListener('click', function () {
+          if (String(rc.value || '').trim() !== '清空') {
+            rerr.textContent = '请先输入「清空」两个字。';
+            rerr.hidden = false;
+            rc.focus();
+            return;
+          }
           try { localStorage.removeItem(activeKey); } catch (e) { }
           state = initialState();
           save();
@@ -4547,7 +4574,7 @@
   function buildSample() {
     var s = initialState();
     s.seeded = true;
-    s.settings.name = emailPrefix() || '北辰';
+    s.settings.name = '';   /* 不拿邮箱前缀冒充称呼，等用户自己填 */
     s.current = 'overview';
 
     var mk = monthKey(new Date());
@@ -6944,6 +6971,8 @@
     });
 
     document.addEventListener('click', function (e) {
+      var nameAsk = e.target.closest('[data-set-name]');
+      if (nameAsk) { openAccountDialog(); return; }
       var act = e.target.closest('[data-act]');
       if (act) {
         var a = act.dataset.act;
@@ -7114,14 +7143,18 @@
 
   function userName() {
     var n = (state && state.settings && typeof state.settings.name === 'string') ? state.settings.name.trim() : '';
-    if (n) return n;
-    return emailPrefix() || '朋友';
+    return n;
+  }
+
+  /* 是否已由用户主动设置过称呼（决定首页是否显示设置入口） */
+  function hasUserName() {
+    return !!userName();
   }
 
   function setUserName(raw) {
     var v = String(raw || '').replace(/[\u0000-\u001f\u007f]/g, '').trim();
     if (v.length > 16) v = v.slice(0, 16);
-    state.settings.name = v || emailPrefix();
+    state.settings.name = v;
     save();
     renderPage();
     return state.settings.name;
@@ -7132,11 +7165,11 @@
     var cur = (state.settings && state.settings.name) || '';
     openDialog(
       '<h3>账户设置</h3>' +
-      '<p class="sub">用户名用于首页问候语，默认取邮箱 @ 前的前缀。修改只影响当前账号（' + esc(email) + '）。</p>' +
+      '<p class="sub">称呼只用于首页问候语，不再自动取邮箱前缀。修改只影响当前账号（' + esc(email) + '）。</p>' +
       '<input class="field" id="acc-name" maxlength="16" style="width:100%;margin-top:4px"' +
-      ' value="' + esc(cur) + '" placeholder="' + esc(emailPrefix(email) || '你的名字') + '"' +
+      ' value="' + esc(cur) + '" placeholder="怎么称呼你？"' +
       ' aria-label="用户名">' +
-      '<p class="sub" style="margin:8px 0 0">1 – 16 个字；留空则恢复为邮箱前缀。</p>' +
+      '<p class="sub" style="margin:8px 0 0">1 – 16 个字；留空则首页不再拼接称呼。</p>' +
       '<p class="sub" id="acc-err" style="margin:8px 0 0;color:var(--danger)" hidden></p>' +
       '<div class="sheet-actions"><button class="ghost-btn" data-close>取消</button>' +
       '<button class="solid-btn" data-ok>保存</button></div>',
@@ -7156,8 +7189,8 @@
           }
           var next = setUserName(v);
           close();
-          $('#user-mail').title = '当前账号：' + currentEmail() + ' · 点击修改用户名（' + next + '）';
-          toast('用户名已更新为「' + next + '」');
+          $('#user-mail').title = '当前账号：' + currentEmail() + ' · 点击设置称呼' + (next ? '（' + next + '）' : '');
+          toast(next ? '称呼已更新为「' + next + '」' : '已清空称呼');
         }
         $('[data-ok]', sheet).addEventListener('click', submit);
         inp.addEventListener('keydown', function (e) {
@@ -7255,10 +7288,6 @@
     var sysPages = state.pages.filter(function (p) { return p.builtin; });
     if (!sysPages.some(function (p) { return p.id === state.current; })) {
       state.current = (sysPages[0] || state.pages[0]).id;
-      save();
-    }
-    if (!String(state.settings.name || '').trim()) {
-      state.settings.name = emailPrefix(email);
       save();
     }
     $('#auth').hidden = true;
@@ -7939,7 +7968,7 @@
         Object.keys(h.checks || {}).forEach(function (k) { if (k.indexOf(y + '-' + pad(mo)) === 0) total++; });
       });
       var goalAll = (d.habits || []).length * days;
-      sum.textContent = total + '/' + goalAll + ' · ' + (goalAll ? Math.round(total / goalAll * 100) : 0) + '%';
+      sum.innerHTML = scoreHtml(total, goalAll) + ' · ' + (goalAll ? Math.round(total / goalAll * 100) : 0) + '%';
     }
   }
 
@@ -8362,9 +8391,9 @@
       '<button class="icon-btn" type="button" data-wk-nav="1" aria-label="下一周"' + (isNow ? ' disabled' : '') + '>' + icon('chevronRight') + '</button>' +
       '</div>' +
       '<div class="wk-auto">' +
-      '<div class="wk-stat"><span>任务完成</span><b>' + st.taskDone + '<small>/' + st.taskTotal + '</small></b><i><em style="width:' + st.taskRate + '%"></em></i><u>' + st.taskRate + '%</u></div>' +
-      '<div class="wk-stat"><span>习惯达成</span><b>' + st.habitDone + '<small>/' + st.habitGoal + '</small></b><i><em style="width:' + st.habitRate + '%"></em></i><u>' + st.habitRate + '%</u></div>' +
-      '<div class="wk-stat"><span>三件事</span><b>' + st.mitDone + '<small>/' + st.mitTotal + '</small></b><i><em style="width:' +
+      '<div class="wk-stat"><span>任务完成</span>scoreHtml(st.taskDone, st.taskTotal)<i><em style="width:' + st.taskRate + '%"></em></i><u>' + st.taskRate + '%</u></div>' +
+      '<div class="wk-stat"><span>习惯达成</span>scoreHtml(st.habitDone, st.habitGoal)<i><em style="width:' + st.habitRate + '%"></em></i><u>' + st.habitRate + '%</u></div>' +
+      '<div class="wk-stat"><span>三件事</span>scoreHtml(st.mitDone, st.mitTotal)<i><em style="width:' +
       (st.mitTotal ? Math.round(st.mitDone / st.mitTotal * 100) : 0) + '%"></em></i><u>' +
       (st.mitTotal ? Math.round(st.mitDone / st.mitTotal * 100) : 0) + '%</u></div>' +
       '<div class="wk-stat"><span>OKR 进度</span><b>' + st.okrPct + '<small>%</small></b><i><em style="width:' + st.okrPct + '%"></em></i><u>' +
@@ -9155,7 +9184,7 @@
         var krRows = (g.krs || []).slice(0, 3).map(function (k) {
           var kp = k.target > 0 ? Math.round(clamp(k.cur / k.target * 100, 0, 100)) : 0;
           return '<li><span class="g-kr-t" title="' + esc(k.text) + '">' + esc(k.text) + '</span>' +
-            '<span class="g-kr-n">' + esc(String(k.cur)) + '/' + esc(String(k.target)) + esc(k.unit || '') + '</span>' +
+            '<span class="g-kr-n">' + scoreHtml(k.cur, k.target) + esc(k.unit || '') + '</span>' +
             '<span class="g-kr-bar"><i style="width:' + kp + '%"></i></span></li>';
         }).join('');
         return '<article class="g-card reveal' + (g.status === 'paused' ? ' is-paused' : '') + '" data-goal="' + esc(g.id) + '">' +
@@ -9175,7 +9204,7 @@
           '<span><em>最近更新</em>' + esc(v13Md(g.updatedAt)) + '</span>' +
           '</div>' +
           (krRows ? '<ul class="g-krs">' + krRows + '</ul>' : '<p class="g-nokr">还没有关键结果，点开详情补上更能量化推进。</p>') +
-          (msRows ? '<div class="g-ms"><span class="g-ms-l">阶段里程碑<em>' + msDone + '/' + msAll.length + '</em></span>' +
+          (msRows ? '<div class="g-ms"><span class="g-ms-l">阶段里程碑' + scoreHtml(msDone, msAll.length) + '</span>' +
             '<div class="g-ms-list">' + msRows + '</div></div>' : '') +
           '<footer class="g-foot">' +
           '<button class="ghost-btn tiny" type="button" data-goal-open="' + esc(g.id) + '">查看详情</button>' +
@@ -9198,9 +9227,12 @@
         '<button class="solid-btn y13-new" type="button" data-new-goal>＋ 新建年度目标</button>' +
         '</div>' +
         '<div class="y13-stats">' +
-        '<div class="y13-stat"><span>全年进度</span><b>' + pct + '<small>%</small></b>' +
-        '<span class="y13-mini"><i style="width:' + v13YearTimePct() + '%"></i></span>' +
-        '<em>时间已过 ' + v13YearTimePct() + '%</em></div>' +
+        '<div class="y13-stat y13-stat-prog"><span>全年进度</span><b>' + pct + '<small>%</small></b>' +
+        '<span class="y13-bars">' +
+        '<span class="y13-bars-goal" title="目标进度 ' + pct + '%"><i style="width:' + pct + '%"></i></span>' +
+        '<span class="y13-bars-time" title="今年已过 ' + v13YearTimePct() + '%"><i style="width:' + v13YearTimePct() + '%"></i></span>' +
+        '</span>' +
+        '<em class="y13-legend"><span class="lg-item"><i class="lg-dot lg-goal"></i>目标 ' + pct + '%</span><span class="lg-item"><i class="lg-dot lg-time"></i>今年已过 ' + v13YearTimePct() + '%</span></em></div>' +
         '<div class="y13-stat"><span>目标数量</span><b>' + all.length + '</b><em>建议 3 – 5 个核心目标</em></div>' +
         '<div class="y13-stat"><span>已完成</span><b>' + doneN + '</b><em>含进度 100% 的目标</em></div>' +
         '<div class="y13-stat' + (risk ? ' is-risk' : '') + '"><span>风险目标</span><b>' + risk + '</b><em>状态为「需要关注」</em></div>' +
@@ -9378,7 +9410,7 @@
           return '<li data-kr="' + esc(k.id) + '">' +
             '<span class="gd-kr-t">' + esc(k.text) + '</span>' +
             '<span class="gd-kr-bar"><i style="width:' + kp + '%"></i></span>' +
-            '<span class="gd-kr-v">' + esc(String(k.cur)) + '/' + esc(String(k.target)) + esc(k.unit || '') + '</span>' +
+            '<span class="gd-kr-v">' + scoreHtml(k.cur, k.target) + esc(k.unit || '') + '</span>' +
             '<span class="gd-kr-step">' +
             '<button type="button" data-kr-step="' + esc(k.id) + '" data-d="-1" aria-label="减少">−</button>' +
             '<button type="button" data-kr-step="' + esc(k.id) + '" data-d="1" aria-label="增加">+</button>' +
@@ -9414,7 +9446,7 @@
         if (!li || !k) return;
         var kp = k.target > 0 ? Math.round(clamp(k.cur / k.target * 100, 0, 100)) : 0;
         var v = $('.gd-kr-v', li);
-        if (v) v.textContent = String(k.cur) + '/' + String(k.target) + (k.unit || '');
+        if (v) v.innerHTML = scoreHtml(k.cur, k.target) + esc(k.unit || '');
         var bar = $('.gd-kr-bar i', li);
         if (bar) bar.style.width = kp + '%';
       }
@@ -9760,7 +9792,7 @@
           '<span class="m-week-no">第 ' + (i + 1) + ' 周</span>' +
           '<span class="m-week-date">' + esc(v13Md(a)) + ' – ' + esc(v13Md(b)) + '</span>' +
           '<span class="m-week-theme">' + esc(s.theme || '未设主题') + '</span>' +
-          '<span class="m-week-task">' + s.done + '/' + s.total + '</span>' +
+          '<span class="m-week-task">' + scoreHtml(s.done, s.total) + '</span>' +
           '</button>';
       }).join('');
 
@@ -9775,13 +9807,13 @@
         (isThis ? '' : '<button class="ghost-btn tiny" type="button" data-mtoday>回到本月</button>') +
         '</div>' +
         '<div class="mplan-sum"><span>' + esc(monthLabel(mk)) + ' · ' + weeks.length + ' 周</span>' +
-        '<span>任务完成 ' + st.done + '/' + st.total + '</span></div>' +
+        '<span>任务完成 ' + scoreHtml(st.done, st.total) + '</span></div>' +
         '</div>' +
         '<div class="mplan-grid">' +
 
         '<div class="mplan-card full">' +
         '<div class="mplan-h"><div><h2>本月聚焦</h2><p>这个月只挑最多 3 件最重要的事，其余交给周计划</p></div>' +
-        '<div class="mplan-side"><span class="mplan-pctnum">' + doneP + '/' + m.priorities.length + '</span></div></div>' +
+        '<div class="mplan-side"><span class="mplan-pctnum">' + scoreHtml(doneP, m.priorities.length) + '</span></div></div>' +
         (m.theme ? '<input class="field mplan-theme" data-mtheme maxlength="120" value="' + esc(m.theme) + '" placeholder="给这个月定一句话主题">' : '') +
         '<div class="m-plan-list">' + prioHtml + '</div>' +
         '<div class="m-plan-add"><button class="m-add-focus" type="button" data-mp-add>'
@@ -9925,8 +9957,8 @@
         var doneN = info.filter(function (t) { return t.done; }).length;
         var isToday = d === today();
         var statBits = [];
-        if (info.length) statBits.push(doneN + '/' + info.length + ' 项');
-        if (habits.length) statBits.push('习惯 ' + hdone + '/' + habits.length);
+        if (info.length) statBits.push(scoreHtml(doneN, info.length) + ' 项');
+        if (habits.length) statBits.push('习惯 ' + scoreHtml(hdone, habits.length));
         return '<div class="w-day' + (isToday ? ' is-today' : '') + '" data-day="' + d + '">' +
           '<div class="w-day-lead">' +
           '<span class="w-day-chip">' + v13Md(d) + '</span>' +
@@ -10276,7 +10308,7 @@
         return '<div class="d-habit' + (on ? ' on' : '') + '">' +
           '<button class="d-hcheck' + (on ? ' on' : '') + '" type="button" data-habit="' + esc(h.id) + '" aria-label="打卡">' + icon('check') + '</button>' +
           '<div class="d-h-main"><span class="d-h-name">' + esc(h.name) + '</span>' +
-          '<span class="d-h-meta">本周 ' + wk + '/' + times + ' 次 · 连续 ' + st + ' 天</span>' +
+          '<span class="d-h-meta">本周 ' + scoreHtml(wk, times) + ' 次 · 连续 ' + st + ' 天</span>' +
           '<span class="d-h-week">' + [0, 1, 2, 3, 4, 5, 6].map(function (i) {
             var dd = shiftISO(ws, i);
             return '<i class="' + ((h.checks || {})[dd] ? 'on' : '') + (dd === key ? ' cur' : '') + '" title="' + dd + '"></i>';
@@ -10312,14 +10344,14 @@
         '<div class="d13-theme"><label>今日一句主题</label>' +
         '<input class="field" data-dtheme maxlength="80" value="' + esc(dm.theme) + '" placeholder="用一句话说清今天最重要的是什么"></div>' +
         '<div class="d13-body">' +
-        '<div class="d-card d-tasks"><div class="d-card-h"><h3>今日任务</h3><span>' + doneN + '/' + tasks.length + ' 完成</span></div>' +
+        '<div class="d-card d-tasks"><div class="d-card-h"><h3>今日任务</h3><span class="d-card-num">' + scoreHtml(doneN, tasks.length) + ' 完成</span></div>' +
         '<div class="d-task-list">' + (taskRows || '<p class="dim">这一天还没有任务。临时想到什么，直接写下来。</p>') + '</div>' +
         '<div class="d-add"><input class="field" data-dnew placeholder="临时加一件，回车确认" maxlength="120">' +
         '<button class="add-pill" type="button" data-dadd>加入</button></div>' +
         (defers.length ? '<div class="d-defer-log"><span>从别的日子顺延过来：</span>' +
           defers.map(function (x) { return '<em>' + esc(x.title) + (x.from ? '（' + esc(v13Md(x.from)) + '）' : '') + '</em>'; }).join('') + '</div>' : '') +
         '</div>' +
-        '<div class="d-card d-habits"><div class="d-card-h"><h3>习惯打卡</h3><span>' + habitDoneN + '/' + habits.length + ' 完成</span></div>' +
+        '<div class="d-card d-habits"><div class="d-card-h"><h3>习惯打卡</h3><span class="d-card-num">' + scoreHtml(habitDoneN, habits.length) + ' 完成</span></div>' +
         '<div class="d-habit-list">' + (habitRows || '<p class="dim">还没有习惯，先加一个最想坚持的。</p>') + '</div>' +
         '<div class="d-add"><input class="field" data-hnew placeholder="新增习惯，例如：运动 30 分钟" maxlength="30">' +
         '<button class="add-pill" type="button" data-hadd>加入</button></div>' +
