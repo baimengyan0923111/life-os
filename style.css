@@ -3373,21 +3373,36 @@ html[data-theme="dark"] .icon-groups { background: color-mix(in srgb, var(--text
 .jump-btn:active { transform: translateY(.5px); }
 
 /* --- 本月日程任务：完成率 + 每日密度 + 分组头 + 状态条 --- */
-.ag-prog { display: flex; align-items: center; gap: 8px; padding: 11px 2px 0; flex-wrap: wrap; }
+.ag-prog { display: grid; gap: 8px; padding: 12px 2px 2px; }
+.ag-prog-head { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; min-height: 26px; }
+.ag-prog-lab { font-size: var(--t-11); color: var(--faint); }
+.ag-prog-num {
+  display: inline-flex; align-items: baseline;
+  font-family: var(--font-mono); font-size: 16px; font-weight: 700;
+  color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+}
+.ag-prog-num em { font-style: normal; font-size: 10px; font-weight: 600; color: var(--faint); margin-left: 1px; }
+.ag-prog-split {
+  font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums;
+  padding-left: 7px; border-left: 1px solid var(--line);
+}
 .ag-prog-track {
-  flex: 1 1 96px; min-width: 72px; height: 5px; border-radius: var(--r-pill);
+  height: 9px; border-radius: var(--r-pill);
   background: var(--elev-2); overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .06);
 }
 .ag-prog-track i {
-  display: block; height: 100%; border-radius: inherit;
-  background: linear-gradient(90deg, var(--accent), var(--ok, var(--accent)));
+  position: relative; display: block; height: 100%; border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 62%, var(--ok, var(--accent))), var(--accent));
   transition: width var(--dur-2, .35s) var(--ease-soft, ease);
 }
-.ag-prog-num {
-  flex: none; font-family: var(--font-mono); font-size: 11px; color: var(--muted);
-  font-variant-numeric: tabular-nums;
+.ag-prog-track i::after {
+  content: ''; position: absolute; inset: 0 0 50% 0;
+  border-radius: inherit; background: rgba(255, 255, 255, .2);
 }
-.ag-prog-num em { font-style: normal; font-size: 9px; color: var(--faint); margin-left: 1px; }
+.ag-prog-track.is-full i {
+  background: linear-gradient(90deg, var(--ok, var(--accent)), color-mix(in srgb, var(--ok, var(--accent)) 70%, var(--accent)));
+}
 .ag-tools { display: flex; align-items: center; gap: 4px; flex: none; margin-left: auto; }
 .ag-hide {
   display: inline-flex; align-items: center; gap: 4px;
@@ -3442,11 +3457,44 @@ html[data-theme="dark"] .icon-groups { background: color-mix(in srgb, var(--text
 .agenda-item.in-plan::before { opacity: .85; }
 .agenda-item.done::before { opacity: .12; }
 .agenda-item:hover::before { opacity: .9; }
-.pick-btn.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
-.pick-btn.on svg { opacity: 1; }
-.pick-btn svg { flex: none; }
-.pick-btn { display: inline-flex; align-items: center; justify-content: center; gap: 3px; height: 24px; padding: 0 9px; }
-.pick-btn svg { width: 11px; height: 11px; }
+/* 「加入计划」按钮：浅底细描边 + 圆形图标底片，悬停转实心 */
+.pick-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  flex: none; height: 26px; padding: 0 10px 0 6px;
+  border: 1px solid var(--accent-line); border-radius: var(--r-pill);
+  background: var(--accent-soft); color: var(--accent);
+  font: inherit; font-size: 11px; font-weight: 600; white-space: nowrap; cursor: pointer;
+  transition: background-color var(--dur-1) var(--ease-soft, ease),
+              border-color var(--dur-1) var(--ease-soft, ease),
+              color var(--dur-1) var(--ease-soft, ease),
+              transform var(--dur-1) var(--ease-soft, ease),
+              box-shadow var(--dur-1) var(--ease-soft, ease);
+}
+.pick-btn .pk-ico {
+  flex: none; display: inline-grid; place-items: center;
+  width: 15px; height: 15px; border-radius: 50%;
+  background: var(--accent); color: var(--on-accent);
+  transition: background-color var(--dur-1), color var(--dur-1);
+}
+.pick-btn .pk-ico svg { width: 9px; height: 9px; display: block; }
+.pick-btn:hover {
+  background: var(--accent); border-color: var(--accent); color: var(--on-accent);
+  transform: translateY(-1px); box-shadow: var(--shadow-2);
+}
+.pick-btn:hover .pk-ico { background: var(--on-accent); color: var(--accent); }
+.pick-btn:active { transform: none; box-shadow: none; }
+.pick-btn.on { border-color: transparent; background: var(--accent); color: var(--on-accent); }
+.pick-btn.on .pk-ico { background: var(--on-accent); color: var(--accent); }
+
+html[data-theme="dark"] .pick-btn {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 52%, transparent);
+  color: color-mix(in srgb, var(--accent) 84%, #FFFFFF);
+}
+html[data-theme="dark"] .pick-btn:hover,
+html[data-theme="dark"] .pick-btn.on {
+  background: var(--accent); border-color: transparent; color: var(--on-accent);
+}
 .ag-meta { display: contents; }
 .agenda-empty { padding: 30px 12px 12px; gap: 9px; }
 .agenda-empty-sub { line-height: 1.7; }
@@ -3462,9 +3510,9 @@ html[data-theme="dark"] .icon-groups { background: color-mix(in srgb, var(--text
   .side-today { height: 28px; padding: 0 9px; font-size: 11px; }
   .jump-btn { height: 28px; padding: 0 9px 0 8px; font-size: 11px; }
   .agenda { padding: var(--s-3); }
-  .ag-tools .ghost-btn.tiny { padding: 0 7px; gap: 0; }
-  .ag-tools .ghost-btn.tiny span { display: none; }
-  .ag-tools .ghost-btn.tiny svg { width: 12px; height: 12px; }
+  .ag-tools .add-mini { height: 26px; padding: 0 8px; gap: 0; }
+  .ag-tools .add-mini span { display: none; }
+  .ag-tools .add-mini svg { width: 12px; height: 12px; }
   .ag-hide span { display: none; }
   .agenda-item {
     display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
@@ -3841,7 +3889,13 @@ html[data-theme="dark"] .w-day-kpi { background: color-mix(in srgb, var(--card) 
 .w-st.st-done { color: var(--done); border-color: transparent; background: var(--done-soft); }
 .w-st.st-doing { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
 .w-st.st-delay { color: var(--danger); background: var(--danger-soft); border-color: transparent; }
-.w-from-goal { margin-top: var(--s-3); }
+/* 周计划：从年度目标添加任务（沿用统一「添加」按钮语言） */
+.w-from-goal { margin-top: var(--s-3); display: flex; }
+.w-from-goal .w-goal-btn { padding: 0 13px; gap: 5px; }
+
+@media (max-width: 560px) {
+  .w-from-goal .w-goal-btn { width: 100%; justify-content: center; height: 32px; }
+}
 
 /* =========================================================
    三、每日打卡
