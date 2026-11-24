@@ -168,7 +168,11 @@
     rootEl.setAttribute('data-theme', real);
     rootEl.style.colorScheme = real;
     var meta = document.getElementById('theme-color');
-    if (meta) meta.setAttribute('content', real === 'dark' ? '#17171C' : '#F6F4EF');
+    if (meta) {
+      /* P2-3：theme-color 取自 token（--bg-page），不在 JS 里再硬编码色值 */
+      var pageToken = getComputedStyle(rootEl).getPropertyValue('--bg-page').trim();
+      if (pageToken) meta.setAttribute('content', pageToken);
+    }
 
     var btn = $('#btn-theme');
     if (btn) {
@@ -616,6 +620,8 @@
       life8: LIFE8.map(function (d) {
         return { id: d.id, name: d.name, icon: d.icon, color: d.color, score: 0, note: '' };
       }),
+      /* P1-2：自定义模块数组（首启即为空数组，避免首次创建时 push 报错） */
+      life8x: [],
       pages: basePages()
     };
   }
@@ -670,6 +676,20 @@
       });
     }
     s.life8.forEach(function (d) { if (d) d.color = normColor(d.color); });
+    /* P1-2：自定义模块（八大抽屉之外的补充格），存本机 localStorage */
+    if (!Array.isArray(s.life8x)) s.life8x = [];
+    s.life8x = s.life8x.filter(function (d) { return d && typeof d === 'object' && d.id; })
+      .map(function (d) {
+        return {
+          id: d.id,
+          name: String(d.name || '自定义模块').slice(0, 12),
+          icon: d.icon || 'layers',
+          color: normColor(d.color || 'var(--m-3)'),
+          score: clamp(Number(d.score) || 0, 0, 10),
+          note: String(d.note || ''),
+          custom: true
+        };
+      });
     /* V20：老数据补齐「月度计划」系统页，顺序固定在年度目标之后 */
     if (!s.pages.some(function (p) { return p && p.builtin === 'monthplan'; })) {
       var mpAt = -1;
@@ -1454,6 +1474,10 @@
 
 
     observeReveal(canvas);
+    // P1-4：区块标题右侧说明可能因 max-width 省略，把完整文字补进 title，悬停可看全文
+    $$('.section-head > p', canvas).forEach(function (el) {
+      if (!el.title) el.title = el.textContent.trim();
+    });
     // 卡片挂载到文档后再测量文本域高度（脱离文档时测不到高度）
     requestAnimationFrame(function () { autoGrow(canvas); });
     // 页面切换：淡入 + 轻微上移（移除后强制回流以便反复触发）
@@ -2380,6 +2404,100 @@
       '<div class="kpi-sub">' + esc(sub) + '</div></div>';
   }
 
+  /* P1-2：八大抽屉 + 自定义模块，统一走同一套卡片渲染（第 9 格为「＋ 自定义模块」入口） */
+  var pendingNewModId = '';   /* 刚创建的自定义模块 id：复现 .card.mod-new 高亮动画，仅本次渲染生效 */
+  function life8All() {
+    return (state.life8 || []).concat(state.life8x || []);
+  }
+
+  function boardCardEl(d, onRemove, isNew) {
+    var card = document.createElement('div');
+    card.className = 'board-card' + (d.custom ? ' is-custom' : '') + (isNew ? ' mod-new' : '');
+    card.innerHTML =
+      '<div class="board-top">' +
+      '<span class="board-icon" style="--m-color:' + d.color + '">' + icon(d.icon) + '</span>' +
+      '<span class="board-name">' + esc(d.name) + '</span>' +
+      '</div>' +
+      '<div class="board-score">' + d.score + '<small> / 10</small></div>' +
+      '<div class="board-bar"><i data-w="' + (d.score * 10) + '" style="width:0;--m-color:' + d.color + '"></i></div>' +
+      '<input class="board-range" type="range" min="0" max="10" step="1" value="' + d.score + '" aria-label="' + esc(d.name) + ' 评分">' +
+      '<input class="board-note" placeholder="一句话备注" value="' + esc(d.note || '') + '">' +
+      (d.custom ? '<button class="board-del" type="button" title="删除这个自定义模块" aria-label="删除 ' + esc(d.name) + '">' + icon('x') + '</button>' : '');
+    var range = $('.board-range', card);
+    var note = $('.board-note', card);
+    range.addEventListener('input', function () {
+      d.score = Number(range.value);
+      $('.board-score', card).innerHTML = d.score + '<small> / 10</small>';
+      var bar = $('.board-bar i', card);
+      bar.dataset.w = d.score * 10;
+      bar.style.width = (d.score * 10) + '%';
+      save();
+      /* 让同页的人生轮盘雷达图跟随分数即时重绘 */
+      try { document.dispatchEvent(new CustomEvent('life8:change')); } catch (e) { }
+    });
+    note.addEventListener('input', debounce(function () {
+      d.note = note.value;
+      save();
+    }, 300));
+    if (d.custom && onRemove) {
+      $('.board-del', card).addEventListener('click', function () { onRemove(d); });
+    }
+    return card;
+  }
+
+  function life8Remove(d) {
+    if (!confirm('删除自定义模块「' + d.name + '」？本机已记录的分数与备注会一起消失。')) return;
+    state.life8x = (state.life8x || []).filter(function (x) { return x.id !== d.id; });
+    save();
+    renderPage();
+    toast('已删除「' + d.name + '」');
+  }
+
+  function life8AddDialog() {
+    if ((state.life8x || []).length >= 7) { toast('自定义模块最多 7 个'); return; }
+    var picked = 'var(--m-3)';
+    var colors = ['var(--m-1)', 'var(--m-2)', 'var(--m-3)', 'var(--m-4)', 'var(--m-5)', 'var(--m-6)'];
+    openDialog(
+      '<div class="sheet-head"><h3>＋ 自定义模块</h3>' +
+      '<p class="sub">八个抽屉之外，再留一格给对你重要的生活面，比如「财务」「亲密关系」。</p></div>' +
+      '<div class="sheet-body">' +
+      '<label class="dlg-field"><span>名称</span>' +
+      '<input class="field" style="width:100%" data-f="name" maxlength="12" placeholder="例如：财务健康"></label>' +
+      '<div class="sheet-label">颜色</div>' +
+      '<div class="l8-color-row">' + colors.map(function (c) {
+        return '<button class="l8-color' + (c === picked ? ' on' : '') + '" type="button" data-c="' + c + '" style="--m-color:' + c + '" aria-label="选择颜色"></button>';
+      }).join('') + '</div>' +
+      '</div>' +
+      '<div class="sheet-actions sheet-foot">' +
+      '<button class="ghost-btn" type="button" data-close>取消</button>' +
+      '<button class="solid-btn" type="button" data-ok>创建</button>' +
+      '</div>',
+      function (sheet, close) {
+        var nameEl = $('[data-f="name"]', sheet);
+        if (nameEl) nameEl.focus();
+        $$('.l8-color', sheet).forEach(function (b) {
+          b.addEventListener('click', function () {
+            picked = b.dataset.c;
+            $$('.l8-color', sheet).forEach(function (x) { x.classList.toggle('on', x === b); });
+          });
+        });
+        $('[data-ok]', sheet).addEventListener('click', function () {
+          var name = String(nameEl.value || '').trim();
+          if (!name) { toast('先给这个模块起个名字'); nameEl.focus(); return; }
+          if (!Array.isArray(state.life8x)) state.life8x = [];
+          var newId = uid('l8');
+          state.life8x.push({
+            id: newId, name: name.slice(0, 12), icon: 'layers',
+            color: picked, score: 0, note: '', custom: true
+          });
+          pendingNewModId = newId;
+          save(); close(); renderPage();
+          toast('已添加自定义模块「' + name.slice(0, 12) + '」');
+        });
+      }
+    );
+  }
+
   function boardBlock() {
     var sec = document.createElement('section');
     sec.className = 'reveal';
@@ -2387,36 +2505,20 @@
     sec.innerHTML = '<div class="section-head"><h2>八个抽屉</h2><p>0 – 10 分，凭直觉给当下的自己打分</p></div>';
     var board = document.createElement('div');
     board.className = 'board';
-    state.life8.forEach(function (d) {
-      var card = document.createElement('div');
-      card.className = 'board-card';
-      card.innerHTML =
-        '<div class="board-top">' +
-        '<span class="board-icon" style="--m-color:' + d.color + '">' + icon(d.icon) + '</span>' +
-        '<span class="board-name">' + esc(d.name) + '</span>' +
-        '</div>' +
-        '<div class="board-score">' + d.score + '<small> / 10</small></div>' +
-        '<div class="board-bar"><i data-w="' + (d.score * 10) + '" style="width:0;--m-color:' + d.color + '"></i></div>' +
-        '<input class="board-range" type="range" min="0" max="10" step="1" value="' + d.score + '" aria-label="' + esc(d.name) + ' 评分">' +
-        '<input class="board-note" placeholder="一句话备注" value="' + esc(d.note || '') + '">';
-      var range = $('.board-range', card);
-      var note = $('.board-note', card);
-      range.addEventListener('input', function () {
-        d.score = Number(range.value);
-        $('.board-score', card).innerHTML = d.score + '<small> / 10</small>';
-        var bar = $('.board-bar i', card);
-        bar.dataset.w = d.score * 10;
-        bar.style.width = (d.score * 10) + '%';
-        save();
-        /* 让同页的人生轮盘雷达图跟随分数即时重绘 */
-        try { document.dispatchEvent(new CustomEvent('life8:change')); } catch (e) { }
-      });
-      note.addEventListener('input', debounce(function () {
-        d.note = note.value;
-        save();
-      }, 300));
-      board.appendChild(card);
+    life8All().forEach(function (d) {
+      board.appendChild(boardCardEl(d, life8Remove, d.id === pendingNewModId));
     });
+    pendingNewModId = '';   /* 高亮只在新增后的这一次渲染里播放 */
+    /* 第 9 格：自定义模块入口，保证 3×3 网格在 1280px 下不留空缺 */
+    var add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'board-card board-new';
+    add.innerHTML =
+      '<span class="bn-plus" aria-hidden="true">＋</span>' +
+      '<span class="bn-t">自定义模块</span>' +
+      '<span class="bn-s">再加一格，比如财务 / 亲密关系</span>';
+    add.addEventListener('click', life8AddDialog);
+    board.appendChild(add);
     sec.appendChild(board);
     foldSection(sec, 'board', '.section-head');
     requestAnimationFrame(function () { animateBars(sec, '.board-bar i'); });
@@ -9159,12 +9261,11 @@
         return '<button class="v13-chip' + (f.status === s.id ? ' on' : '') + '" type="button" data-fst="' +
           s.id + '">' + esc(s.label) + '<i>' + n + '</i></button>';
       }).join('');
-      var domChips = ['<button class="v13-chip' + (f.domain === '' ? ' on' : '') + '" type="button" data-fdom="">全部领域</button>']
-        .concat(V13_DOMAINS.map(function (d) {
+      var domChips = V13_DOMAINS.map(function (d) {
           var n = all.filter(function (g) { return g.domain === d; }).length;
           return '<button class="v13-chip' + (f.domain === d ? ' on' : '') + '" type="button" data-fdom="' + esc(d) + '">' +
             esc(d) + '<i>' + n + '</i></button>';
-        })).join('');
+        }).join('');
 
       var cards = list.map(function (g) {
         var gp = v13GoalPct(g);
@@ -9238,9 +9339,19 @@
         '<div class="y13-stat' + (risk ? ' is-risk' : '') + '"><span>风险目标</span><b>' + risk + '</b><em>状态为「需要关注」</em></div>' +
         '</div>' +
         '<div class="y13-filters">' +
-        '<div class="v13-chips" role="group" aria-label="按状态筛选">' + stChips +
-        '<button class="v13-chip' + (f.status === '' ? ' on' : '') + '" type="button" data-fst="">全部状态</button></div>' +
-        '<div class="v13-chips" role="group" aria-label="按领域筛选">' + domChips + '</div>' +
+        /* P1-3：两组各带 11–12px 弱标签，组间分隔并强制换行；「全部」统一置首 */
+        '<div class="y13-fgroup">' +
+        '<span class="y13-flabel">状态</span>' +
+        '<div class="v13-chips" role="group" aria-label="按状态筛选">' +
+        '<button class="v13-chip' + (f.status === '' ? ' on' : '') + '" type="button" data-fst="">全部</button>' +
+        stChips + '</div>' +
+        '</div>' +
+        '<div class="y13-fgroup">' +
+        '<span class="y13-flabel">领域</span>' +
+        '<div class="v13-chips" role="group" aria-label="按领域筛选">' +
+        '<button class="v13-chip' + (f.domain === '' ? ' on' : '') + '" type="button" data-fdom="">全部</button>' +
+        domChips + '</div>' +
+        '</div>' +
         '</div>' +
         (all.length > 5 ? '<p class="y13-hint">' + icon('bulb') + '现在是 ' + all.length + ' 个目标。目标一多，注意力会被摊薄 —— 建议每年只留 3 – 5 个真正重要的，其余的可以先置为「已暂停」。</p>' : '') +
         '<div class="y13-grid">' + (cards || ('<div class="v13-empty"><b>' +
