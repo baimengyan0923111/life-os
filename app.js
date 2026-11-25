@@ -270,6 +270,17 @@
     { id: 'family', name: '家人关系', icon: 'heart', color: 'var(--m-1)' }
   ];
 
+  /* P0-1：每格评分状态由 rated 显式表达，score 允许 null（未评）；
+     P2-7：hidden 只隐藏不删数据，数组顺序即卡片/轮盘顺序；
+     P0-2：雷达轴来源统一为 life8All()（内置 + 自定义，过滤隐藏），上限 12 轴。 */
+  var WHEEL_MAX_AXES = 12;
+  /* P1-5：LIFE8 → V13_DOMAINS 单向映射，仅在「去给这一格定个目标」时预填领域，不改任何存量数据 */
+  var LIFE_V13_MAP = {
+    career: '事业', workplace: '事业', solo: '事业', finance: '财务',
+    growth: '成长', fun: '生活', health: '健康', family: '关系'
+  };
+  function lifeV13Domain(id) { return LIFE_V13_MAP[id] || ''; }
+
   /* 图标选择器：分组 + 可搜索（共 80 个，全部内联 SVG 24×24 stroke 1.6） */
   var ICON_GROUPS = [
     { name: '常用', icons: ['check', 'list', 'grid', 'clock', 'calendar', 'timer', 'hourglass', 'flag', 'target', 'compass', 'pin', 'star'] },
@@ -615,10 +626,11 @@
       v: 1,
       seeded: false,
       current: 'overview',
-      settings: { name: '', fold: { sys: false, cus: false, blocks: {} } },
+      settings: { name: '', fold: { sys: false, cus: false, blocks: {} }, life8Compact: false, wheelMiniFold: false },
       lines: {},
       life8: LIFE8.map(function (d) {
-        return { id: d.id, name: d.name, icon: d.icon, color: d.color, score: 0, note: '' };
+        /* P0-1：首启即「未评分」——score 为 null、rated 为 false，不再用 0 冒充 */
+        return { id: d.id, name: d.name, icon: d.icon, color: d.color, score: null, rated: false, hidden: false, note: '' };
       }),
       /* P1-2：自定义模块数组（首启即为空数组，避免首次创建时 push 报错） */
       life8x: [],
@@ -658,6 +670,9 @@
     };
     /* 我的模块页分组已移除，折叠状态不再保留 cus 键 */
     if (s.settings.fold && 'cus' in s.settings.fold) delete s.settings.fold.cus;
+    /* P1-6 / P2-8：八大模块的紧凑视图与迷你雷达折叠状态，跟着账号持久化 */
+    s.settings.life8Compact = !!s.settings.life8Compact;
+    s.settings.wheelMiniFold = !!s.settings.wheelMiniFold;
     /* 每日日程当前查看的日期 / 月度计划当前查看的月份（跨刷新、跨月切换都靠这两项） */
     s.settings.dailyDate = isDateStr(s.settings.dailyDate) ? s.settings.dailyDate : today();
     s.settings.planMonth = isMonthStr(s.settings.planMonth) ? s.settings.planMonth : monthKey(new Date());
@@ -675,7 +690,36 @@
         return found ? Object.assign({}, d, found) : d;
       });
     }
-    s.life8.forEach(function (d) { if (d) d.color = normColor(d.color); });
+    /* P0-1 / P2-7：内置 8 格的字段归一 —— rated 显式表达是否评分，score 允许 null */
+    s.life8 = s.life8.map(function (d) {
+      var def = LIFE8.filter(function (x) { return x.id === d.id; })[0] || {};
+      var score = (d.score === null || d.score === undefined || d.score === '') ? null : clamp(Number(d.score) || 0, 0, 10);
+      /* rated 缺省时按旧数据推断：有分数即视为已评（0 分由下面的迁移单独处理） */
+      var rated = typeof d.rated === 'boolean' ? d.rated : (score != null);
+      return {
+        id: d.id,
+        name: String(d.name || def.name || '未命名').slice(0, 12),
+        icon: d.icon || def.icon || 'layers',
+        color: normColor(d.color || def.color),
+        score: rated ? score : null,
+        rated: rated && score != null,
+        hidden: !!d.hidden,
+        note: String(d.note || '')
+      };
+    });
+    /* P0-1 一次性迁移（幂等）：旧版本把「没评」也存成 0，这里把 score===0 且无备注的格子改判为未评，
+       并把版本标记写进 state.wheel.migrated，之后不再执行；用户重新拖动即视为已评。 */
+    s.wheel = (s.wheel && typeof s.wheel === 'object' && !Array.isArray(s.wheel)) ? s.wheel : {};
+    (s.wheel.history = Array.isArray(s.wheel.history) ? s.wheel.history : []);
+    if (s.wheel.scoreSemantics !== 2) {
+      s.life8.forEach(function (d) {
+        if (d.rated && d.score === 0 && !String(d.note || '').trim()) {
+          d.score = null;
+          d.rated = false;
+        }
+      });
+      s.wheel.scoreSemantics = 2;
+    }
     /* P1-2：自定义模块（八大抽屉之外的补充格），存本机 localStorage */
     if (!Array.isArray(s.life8x)) s.life8x = [];
     s.life8x = s.life8x.filter(function (d) { return d && typeof d === 'object' && d.id; })
@@ -685,7 +729,13 @@
           name: String(d.name || '自定义模块').slice(0, 12),
           icon: d.icon || 'layers',
           color: normColor(d.color || 'var(--m-3)'),
-          score: clamp(Number(d.score) || 0, 0, 10),
+          /* P0-1 / P2-7：自定义模块同样支持未评与隐藏 */
+          score: (d.rated === false || d.score === null || d.score === undefined || d.score === '')
+            ? null : clamp(Number(d.score) || 0, 0, 10),
+          rated: typeof d.rated === 'boolean'
+            ? (d.rated && d.score != null)
+            : !(d.score === null || d.score === undefined || d.score === ''),
+          hidden: !!d.hidden,
           note: String(d.note || ''),
           custom: true
         };
@@ -1467,7 +1517,12 @@
     if (page.builtin === 'daily') canvas.appendChild(dailyCheckinBlock());
     if (page.builtin === 'life8') canvas.appendChild(boardBlock());
     /* 人生轮盘：八大领域雷达图 + 季度快照对比 */
-    if (page.builtin === 'life8') canvas.appendChild(wheelBlock());
+    if (page.builtin === 'life8') {
+      canvas.appendChild(wheelBlock());
+      /* P1-4：跨季度自动补一次快照；P2-8：超 30 天没打分给一次可关闭的重评提醒 */
+      wheelAutoSnapshot();
+      wheelRateReminder();
+    }
     if (page.builtin === 'review') canvas.appendChild(loopBlock());
     /* 周复盘：自动汇总 + 四栏手填 + 历史 */
     if (page.builtin === 'review') canvas.appendChild(weeklyBlock());
@@ -2409,40 +2464,245 @@
   function life8All() {
     return (state.life8 || []).concat(state.life8x || []);
   }
+  /* P0-2 / P2-7：轮盘与卡片的统一轴来源 —— 内置 + 自定义，过滤隐藏项，上限 WHEEL_MAX_AXES */
+  function wheelAxes() {
+    return life8All().filter(function (d) { return d && d.id && !d.hidden; });
+  }
+  /* 已评统计：只数真正打过分的格子，用于「已评 N / 8」与空态判断 */
+  function wheelRateStat() {
+    var axes = wheelAxes();
+    var rated = axes.filter(function (d) { return d.rated && d.score != null; }).length;
+    return { rated: rated, total: axes.length };
+  }
 
-  function boardCardEl(d, onRemove, isNew) {
+  /* P0-1：单格卡片。未评分时显示「未评」而不是 0 / 10；拖动即视为已评；
+     P1-6：轨道上叠一条「上季分值」细刻度，右上角给 ±N 徽标；P2-8：0–10 刻度点 + 自动增高备注。 */
+  function boardCardEl(d, isNew) {
+    var prev = prevSnap();
+    var prevVal = null;
+    if (prev && isPlainObj(prev.scores) && prev.scores[d.id] != null) prevVal = clamp(Number(prev.scores[d.id]), 0, 10);
+
     var card = document.createElement('div');
     card.className = 'board-card' + (d.custom ? ' is-custom' : '') + (isNew ? ' mod-new' : '');
+    card.dataset.id = d.id;
+
+    var ticks = '';
+    for (var t = 0; t <= 10; t++) ticks += '<i></i>';
+
     card.innerHTML =
       '<div class="board-top">' +
       '<span class="board-icon" style="--m-color:' + d.color + '">' + icon(d.icon) + '</span>' +
-      '<span class="board-name">' + esc(d.name) + '</span>' +
+      '<span class="board-name" title="' + esc(d.name) + '">' + esc(d.name) + '</span>' +
+      '<button class="board-cfg" type="button" title="改名 / 隐藏 / 排序" aria-label="' + esc(d.name) + '：改名、隐藏或排序">⋯</button>' +
       '</div>' +
-      '<div class="board-score">' + d.score + '<small> / 10</small></div>' +
-      '<div class="board-bar"><i data-w="' + (d.score * 10) + '" style="width:0;--m-color:' + d.color + '"></i></div>' +
-      '<input class="board-range" type="range" min="0" max="10" step="1" value="' + d.score + '" aria-label="' + esc(d.name) + ' 评分">' +
-      '<input class="board-note" placeholder="一句话备注" value="' + esc(d.note || '') + '">' +
-      (d.custom ? '<button class="board-del" type="button" title="删除这个自定义模块" aria-label="删除 ' + esc(d.name) + '">' + icon('x') + '</button>' : '');
+      '<div class="board-score"></div>' +
+      '<div class="board-bar"><i style="--m-color:' + d.color + '"></i><span class="board-tick-prev" hidden></span></div>' +
+      '<div class="board-scale">' +
+      '<input class="board-range" type="range" min="0" max="10" step="1" aria-label="' + esc(d.name) + ' 评分">' +
+      '<span class="board-ticks" aria-hidden="true">' + ticks + '</span>' +
+      '</div>' +
+      '<textarea class="board-note" rows="1" maxlength="120" placeholder="一句话备注（可留空）"></textarea>';
+
     var range = $('.board-range', card);
     var note = $('.board-note', card);
-    range.addEventListener('input', function () {
-      d.score = Number(range.value);
-      $('.board-score', card).innerHTML = d.score + '<small> / 10</small>';
-      var bar = $('.board-bar i', card);
-      bar.dataset.w = d.score * 10;
-      bar.style.width = (d.score * 10) + '%';
-      save();
-      /* 让同页的人生轮盘雷达图跟随分数即时重绘 */
-      try { document.dispatchEvent(new CustomEvent('life8:change')); } catch (e) { }
-    });
-    note.addEventListener('input', debounce(function () {
-      d.note = note.value;
-      save();
-    }, 300));
-    if (d.custom && onRemove) {
-      $('.board-del', card).addEventListener('click', function () { onRemove(d); });
+    note.value = d.note || '';
+    note.title = d.note || '';
+
+    function rated() { return !!(d.rated && d.score != null); }
+    function fire() { try { document.dispatchEvent(new CustomEvent('life8:change')); } catch (e) { } }
+
+    function scoreHtml() {
+      var on = rated();
+      var delta = (on && prevVal != null) ? d.score - prevVal : null;
+      var cls = (delta == null || delta === 0) ? 'flat' : (delta > 0 ? 'up' : 'down');
+      return (on
+        ? '<b>' + d.score + '</b><small> / 10</small>'
+        : '<b class="is-empty">未评</b><small> · 拖动打分</small>') +
+        (delta == null ? '' : '<em class="board-delta ' + cls + '" title="对比 ' + esc(prev.quarter || '上季') + ' 快照 ' + prevVal + ' 分">' +
+          (delta > 0 ? '+' + delta : (delta < 0 ? String(delta) : '±0')) + '</em>') +
+        (on ? '<button class="board-clear" type="button" title="清除评分，恢复为未评">清除</button>' : '');
     }
+
+    function growNote() {
+      note.style.height = 'auto';
+      note.style.height = Math.max(30, note.scrollHeight) + 'px';
+    }
+
+    function sync() {
+      var on = rated();
+      card.classList.toggle('is-unrated', !on);
+      var box = $('.board-score', card);
+      box.innerHTML = scoreHtml();
+      var clr = $('.board-clear', box);
+      if (clr) clr.addEventListener('click', function (e) { e.preventDefault(); clearRate(); });
+      $('.board-bar i', card).style.width = (on ? d.score * 10 : 0) + '%';
+      range.value = on ? d.score : 0;
+      range.setAttribute('aria-valuetext', on ? (d.score + ' 分 / 10 分') : '未评分');
+      var tk = $('.board-tick-prev', card);
+      if (prevVal == null) {
+        tk.hidden = true;
+      } else {
+        tk.hidden = false;
+        tk.style.left = (prevVal * 10) + '%';
+        tk.title = '上季 ' + prevVal + ' 分';
+      }
+    }
+
+    function clearRate() {
+      d.rated = false;
+      d.score = null;
+      save();
+      sync();
+      fire();
+      toast('已清除「' + d.name + '」的评分');
+    }
+
+    range.addEventListener('input', function () {
+      d.rated = true;
+      d.score = Number(range.value);
+      if (!isPlainObj(state.wheel)) state.wheel = { history: [] };
+      state.wheel.lastRatedAt = today();
+      save();
+      sync();
+      fire();
+    });
+
+    note.addEventListener('input', function () {
+      d.note = note.value;
+      note.title = note.value;
+      growNote();
+      saveNoteSoon();
+    });
+    var saveNoteSoon = debounce(function () { save(); }, 280);
+
+    $('.board-cfg', card).addEventListener('click', function () { life8CellDialog(d); });
+
+    sync();
+    requestAnimationFrame(growNote);
     return card;
+  }
+
+  /* P2-7：单格管理 —— 改名 / 隐藏（不删数据）/ 上移下移 / 清除评分 / 删除自定义 */
+  function life8CellDialog(d) {
+    var list = d.custom ? (state.life8x || []) : (state.life8 || []);
+    var idx = list.indexOf(d);
+    openDialog(
+      '<div class="sheet-head"><h3>' + esc(d.name) + '</h3>' +
+      '<p class="sub">改名、隐藏或调整这一格在卡片与轮盘上的顺序；隐藏不会删除任何分数。</p></div>' +
+      '<div class="sheet-body">' +
+      '<label class="dlg-field"><span>名称</span>' +
+      '<input class="field" style="width:100%" data-f="name" maxlength="12" value="' + esc(d.name) + '"></label>' +
+      '<label class="l8-check"><input type="checkbox" data-f="hidden"' + (d.hidden ? ' checked' : '') + '>' +
+      '<span>隐藏这一格（分数与备注保留，随时可恢复）</span></label>' +
+      '<div class="l8-order">' +
+      '<button class="ghost-btn tiny" type="button" data-up' + (idx <= 0 ? ' disabled' : '') + '>上移</button>' +
+      '<button class="ghost-btn tiny" type="button" data-down' + (idx >= list.length - 1 ? ' disabled' : '') + '>下移</button>' +
+      '<span class="hint">当前第 ' + (idx + 1) + ' / ' + list.length + ' 位</span>' +
+      '</div>' +
+      (d.rated ? '<button class="ghost-btn tiny" type="button" data-clear>清除评分（回到未评）</button>'
+        : '<p class="hint">当前未评分</p>') +
+      '</div>' +
+      '<div class="sheet-actions sheet-foot">' +
+      (d.custom ? '<button class="ghost-btn danger" type="button" data-del>删除模块</button>' : '') +
+      '<button class="ghost-btn" type="button" data-close>取消</button>' +
+      '<button class="solid-btn" type="button" data-ok>保存</button>' +
+      '</div>',
+      function (sheet, close) {
+        function move(dir) {
+          var i = list.indexOf(d);
+          var j = i + dir;
+          if (i < 0 || j < 0 || j >= list.length) return;
+          list.splice(i, 1);
+          list.splice(j, 0, d);
+          save(); close(); renderPage();
+          toast('已调整「' + d.name + '」的顺序');
+        }
+        $('[data-up]', sheet).addEventListener('click', function () { move(-1); });
+        $('[data-down]', sheet).addEventListener('click', function () { move(1); });
+        var clr = $('[data-clear]', sheet);
+        if (clr) clr.addEventListener('click', function () {
+          d.rated = false; d.score = null;
+          save(); close(); renderPage();
+          try { document.dispatchEvent(new CustomEvent('life8:change')); } catch (e) { }
+          toast('已清除「' + d.name + '」的评分');
+        });
+        var del = $('[data-del]', sheet);
+        if (del) del.addEventListener('click', function () { close(); life8Remove(d); });
+        $('[data-ok]', sheet).addEventListener('click', function () {
+          var nm = String($('[data-f="name"]', sheet).value || '').trim();
+          d.name = (nm || d.name).slice(0, 12);
+          d.hidden = !!$('[data-f="hidden"]', sheet).checked;
+          save(); close(); renderPage();
+          try { document.dispatchEvent(new CustomEvent('life8:change')); } catch (e) { }
+          toast('已保存「' + d.name + '」');
+        });
+      }
+    );
+  }
+
+  /* 已隐藏的格子从这里恢复（卡片不渲染隐藏项，需要一个可见入口） */
+  function life8HiddenDialog() {
+    var hid = life8All().filter(function (d) { return d && d.hidden; });
+    if (!hid.length) { toast('当前没有被隐藏的格子'); return; }
+    openDialog(
+      '<div class="sheet-head"><h3>已隐藏 ' + hid.length + ' 格</h3>' +
+      '<p class="sub">隐藏只是不显示，分数与备注一直保留。</p></div>' +
+      '<div class="sheet-body"><div class="hist-list">' +
+      hid.map(function (d) {
+        return '<div class="hist-row"><span>' + esc(d.name) + '<small>' + (d.rated ? (d.score + ' 分') : '未评') + '</small></span>' +
+          '<button class="ghost-btn tiny" type="button" data-show="' + esc(d.id) + '">显示</button></div>';
+      }).join('') +
+      '</div></div>' +
+      '<div class="sheet-actions sheet-foot"><button class="ghost-btn" type="button" data-close>关闭</button></div>',
+      function (sheet, close) {
+        $$('[data-show]', sheet).forEach(function (b) {
+          b.addEventListener('click', function () {
+            var id = b.dataset.show;
+            life8All().forEach(function (d) { if (d.id === id) d.hidden = false; });
+            save(); close(); renderPage();
+            try { document.dispatchEvent(new CustomEvent('life8:change')); } catch (e) { }
+            toast('已恢复显示');
+          });
+        });
+      }
+    );
+  }
+
+  /* P2-7：恢复默认 —— 名称 / 隐藏状态 / 内置顺序全部回初始，分数与备注按 id 保留 */
+  function life8RestoreDefaults() {
+    openDialog(
+      '<div class="sheet-head"><h3>恢复默认样式</h3>' +
+      '<p class="sub">内置 8 格的名称、顺序与隐藏状态会回到初始；已打的分和备注不受影响。</p></div>' +
+      '<div class="sheet-actions sheet-foot">' +
+      '<button class="ghost-btn" type="button" data-close>取消</button>' +
+      '<button class="solid-btn" type="button" data-ok>恢复默认</button></div>',
+      function (sheet, close) {
+        $('[data-close]', sheet).addEventListener('click', close);
+        $('[data-ok]', sheet).addEventListener('click', function () { close(); doRestore(); });
+      }
+    );
+  }
+
+  function doRestore() {
+    var byId = {};
+    (state.life8 || []).forEach(function (d) { if (d) byId[d.id] = d; });
+    state.life8 = LIFE8.map(function (def) {
+      var old = byId[def.id] || {};
+      return {
+        id: def.id,
+        name: def.name,
+        icon: def.icon,
+        color: old.color || def.color,
+        score: old.rated ? old.score : null,
+        rated: !!old.rated,
+        hidden: false,
+        note: old.note || ''
+      };
+    });
+    (state.life8x || []).forEach(function (d) { if (d) d.hidden = false; });
+    save(); renderPage();
+    try { document.dispatchEvent(new CustomEvent('life8:change')); } catch (e) { }
+    toast('已恢复默认样式');
   }
 
   function life8Remove(d) {
@@ -2488,7 +2748,7 @@
           var newId = uid('l8');
           state.life8x.push({
             id: newId, name: name.slice(0, 12), icon: 'layers',
-            color: picked, score: 0, note: '', custom: true
+            color: picked, score: null, rated: false, hidden: false, note: '', custom: true
           });
           pendingNewModId = newId;
           save(); close(); renderPage();
@@ -2498,17 +2758,73 @@
     );
   }
 
+  /* P1-6：sticky 迷你雷达 —— 滚动打分时始终能看到形状变化（≤760px 可折叠） */
+  function miniWheel() {
+    var box = document.createElement('div');
+    var folded = !!state.settings.wheelMiniFold;
+    box.className = 'mini-wheel' + (folded ? ' fold' : '');
+    box.setAttribute('role', 'group');
+    box.setAttribute('aria-label', '本季轮盘速览');
+    box.innerHTML =
+      '<div class="mw-radar"></div>' +
+      '<div class="mw-meta"></div>' +
+      '<button class="mw-fold" type="button" aria-expanded="' + (folded ? 'false' : 'true') + '">' + (folded ? '展开' : '收起') + '</button>';
+
+    function paint() {
+      if (!isPlainObj(state.wheel)) return;
+      var cur = wheelScores();
+      var stat = wheelRateStat();
+      var avg = wheelAvg(cur);
+      var ins = wheelInsight(cur);
+      $('.mw-radar', box).innerHTML = radarSVG(cur, prevRatedScores(), { mini: true });
+      $('.mw-meta', box).innerHTML =
+        '<div class="mw-line"><b>' + (avg == null ? '—' : avg.toFixed(1)) + '</b>' +
+        '<small>' + (avg == null ? '尚无评分' : '/ 10 均值') + '</small>' +
+        '<em>已评 ' + stat.rated + ' / ' + stat.total + '</em></div>' +
+        '<div class="mw-sub">' + (ins.lo
+          ? '最需关注：' + esc(ins.lo.name) + ' ' + cur[ins.lo.id] + ' 分'
+          : '还没打分，先拖几格') + '</div>';
+    }
+
+    $('.mw-fold', box).addEventListener('click', function () {
+      var f = !state.settings.wheelMiniFold;
+      state.settings.wheelMiniFold = f;
+      save();
+      box.classList.toggle('fold', f);
+      this.textContent = f ? '展开' : '收起';
+      this.setAttribute('aria-expanded', f ? 'false' : 'true');
+    });
+
+    paint();
+    document.addEventListener('life8:change', function () { if (box.isConnected) paint(); });
+    return box;
+  }
+
   function boardBlock() {
     var sec = document.createElement('section');
-    sec.className = 'reveal';
+    sec.className = 'reveal board-sec';
     sec.style.marginBottom = '44px';
-    sec.innerHTML = '<div class="section-head"><h2>八个抽屉</h2><p>0 – 10 分，凭直觉给当下的自己打分</p></div>';
+    var compact = !!state.settings.life8Compact;
+    var hidN = life8All().filter(function (d) { return d && d.hidden; }).length;
+    sec.innerHTML =
+      '<div class="section-head"><h2>八个抽屉</h2>' +
+      '<p>0 – 10 分凭直觉打；没打过的格子记作「未评」，不会被算成 0 分</p>' +
+      '<div class="head-tools">' +
+      '<button class="ghost-btn tiny" type="button" data-compact' +
+      ' title="紧凑视图只保留图标、分值与滑块">' + (compact ? '标准视图' : '紧凑视图') + '</button>' +
+      '<button class="ghost-btn tiny" type="button" data-restore>恢复默认</button>' +
+      '</div></div>';
+
+    /* P1-6：迷你雷达放在卡片上方并 sticky，滚动打分时形状仍在视野里 */
+    sec.appendChild(miniWheel());
+
     var board = document.createElement('div');
-    board.className = 'board';
-    life8All().forEach(function (d) {
-      board.appendChild(boardCardEl(d, life8Remove, d.id === pendingNewModId));
+    board.className = 'board' + (compact ? ' compact' : '');
+    wheelAxes().forEach(function (d) {
+      board.appendChild(boardCardEl(d, d.id === pendingNewModId));
     });
     pendingNewModId = '';   /* 高亮只在新增后的这一次渲染里播放 */
+
     /* 第 9 格：自定义模块入口，保证 3×3 网格在 1280px 下不留空缺 */
     var add = document.createElement('button');
     add.type = 'button';
@@ -2519,7 +2835,24 @@
       '<span class="bn-s">再加一格，比如财务 / 亲密关系</span>';
     add.addEventListener('click', life8AddDialog);
     board.appendChild(add);
+
+    if (hidN) {
+      var chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'board-hidden-chip';
+      chip.innerHTML = '已隐藏 ' + hidN + ' 格 · 查看';
+      chip.addEventListener('click', life8HiddenDialog);
+      board.appendChild(chip);
+    }
+
     sec.appendChild(board);
+
+    $('[data-compact]', sec).addEventListener('click', function () {
+      state.settings.life8Compact = !state.settings.life8Compact;
+      save(); renderPage();
+    });
+    $('[data-restore]', sec).addEventListener('click', life8RestoreDefaults);
+
     foldSection(sec, 'board', '.section-head');
     requestAnimationFrame(function () { animateBars(sec, '.board-bar i'); });
     return sec;
@@ -4682,16 +5015,32 @@
     var mk = monthKey(new Date());
     var t = today();
 
+    /* P0-1：示例数据显式标 rated，避免「0 分」与「未评」再次混淆 */
     s.life8 = [
-      { id: 'career', name: '主业', icon: 'brief', color: 'var(--m-3)', score: 8, note: '做深一条主线' },
-      { id: 'workplace', name: '职场', icon: 'users', color: 'var(--m-1)', score: 7, note: '少说，多做，留痕' },
-      { id: 'solo', name: '一人公司', icon: 'sparkle', color: 'var(--m-10)', score: 6, note: '先跑通最小闭环' },
-      { id: 'finance', name: '财务管理', icon: 'wallet', color: 'var(--m-10)', score: 7, note: '每月 1 号对账' },
-      { id: 'growth', name: '个人提升', icon: 'book', color: 'var(--m-5)', score: 8, note: '每天 30 页' },
-      { id: 'fun', name: '休闲娱乐', icon: 'coffee', color: 'var(--m-2)', score: 5, note: '这格欠费了' },
-      { id: 'health', name: '身心健康', icon: 'dumbbell', color: 'var(--m-9)', score: 7, note: '一周三次力量' },
-      { id: 'family', name: '家人关系', icon: 'heart', color: 'var(--m-1)', score: 8, note: '周末一次长电话' }
+      { id: 'career', name: '主业', icon: 'brief', color: 'var(--m-3)', score: 8, rated: true, hidden: false, note: '做深一条主线' },
+      { id: 'workplace', name: '职场', icon: 'users', color: 'var(--m-1)', score: 7, rated: true, hidden: false, note: '少说，多做，留痕' },
+      { id: 'solo', name: '一人公司', icon: 'sparkle', color: 'var(--m-10)', score: 6, rated: true, hidden: false, note: '先跑通最小闭环' },
+      { id: 'finance', name: '财务管理', icon: 'wallet', color: 'var(--m-10)', score: 7, rated: true, hidden: false, note: '每月 1 号对账' },
+      { id: 'growth', name: '个人提升', icon: 'book', color: 'var(--m-5)', score: 8, rated: true, hidden: false, note: '每天 30 页' },
+      { id: 'fun', name: '休闲娱乐', icon: 'coffee', color: 'var(--m-2)', score: 5, rated: true, hidden: false, note: '这格欠费了' },
+      { id: 'health', name: '身心健康', icon: 'dumbbell', color: 'var(--m-9)', score: 7, rated: true, hidden: false, note: '一周三次力量' },
+      { id: 'family', name: '家人关系', icon: 'heart', color: 'var(--m-1)', score: 8, rated: true, hidden: false, note: '周末一次长电话' }
     ];
+    /* 上季快照：让「上季影子刻度 / ±N 徽标 / 雷达虚线层」在示例数据下就有东西可比 */
+    var qd = new Date();
+    qd.setMonth(qd.getMonth() - 3);
+    qd.setDate(1);
+    s.wheel = {
+      history: [{
+        id: uid('wh'),
+        at: iso(qd),
+        quarter: quarterKey(iso(qd)),
+        auto: false,
+        scores: { career: 7, workplace: 6, solo: 5, finance: 6, growth: 7, fun: 4, health: 6, family: 7 },
+        notes: { health: '上季长期熬夜，几乎没运动' }
+      }],
+      lastRatedAt: t
+    };
 
     /* ---- 概览 ---- */
     pageByIdIn(s, 'overview').modules = [
@@ -7715,19 +8064,37 @@
       r.note = typeof r.note === 'string' ? r.note : '';
     });
 
-    /* 人生轮盘：{ history: [{id, at, quarter, scores:{life8.id:0-10}}] } */
+    /* 人生轮盘：{ history: [{id, at, quarter, auto, scores:{axisId:0-10|null}, notes:{axisId:note}}] }
+       P0-1：scores 允许 null（未评），不再用 || 0 折叠；
+       P0-2：保留全部 key（含自定义模块与已删除模块的历史轴），不再按 LIFE8 裁剪；
+       P1-4：新增 notes，把当时的备注一起冻结。 */
     if (!isPlainObj(s.wheel)) s.wheel = {};
     s.wheel.history = Array.isArray(s.wheel.history) ? s.wheel.history.filter(Boolean).map(function (x) {
       var sc = isPlainObj(x.scores) ? x.scores : {};
       var out = {};
-      LIFE8.forEach(function (d) { out[d.id] = clamp(Number(sc[d.id]) || 0, 0, 10); });
+      Object.keys(sc).forEach(function (k) {
+        if (!k) return;
+        var v = sc[k];
+        out[k] = (v === null || v === undefined || v === '') ? null : clamp(Number(v) || 0, 0, 10);
+      });
+      var nt = {};
+      if (isPlainObj(x.notes)) Object.keys(x.notes).forEach(function (k) {
+        var t = String(x.notes[k] || '').trim();
+        if (t) nt[k] = t.slice(0, 200);
+      });
       return {
         id: x.id || uid('wh'),
         at: isDateStr(x.at) ? x.at : today(),
         quarter: typeof x.quarter === 'string' ? x.quarter : quarterKey(x.at || today()),
-        scores: out
+        auto: !!x.auto,
+        scores: out,
+        notes: nt
       };
     }) : [];
+    s.wheel.lastRatedAt = isDateStr(s.wheel.lastRatedAt) ? s.wheel.lastRatedAt : '';
+    s.wheel.noticeAt = isDateStr(s.wheel.noticeAt) ? s.wheel.noticeAt : '';
+    /* 老数据没有打分时间：已有评分就以今天为起点，避免一进页面就弹重评提醒 */
+    if (!s.wheel.lastRatedAt && s.life8.some(function (d) { return d.rated; })) s.wheel.lastRatedAt = today();
 
     /* 周复盘：{ '2026-W47': { fields:{...}, savedAt, okrPct } } */
     s.weekly = isPlainObj(s.weekly) ? s.weekly : {};
@@ -8201,56 +8568,227 @@
   /* =========================================================
      三、人生轮盘：八大领域雷达图 + 季度快照
      ========================================================= */
+  /* P0-2：轴来源统一为 wheelAxes()（内置 + 自定义，过滤隐藏，上限 12 轴）；
+     P0-1：未评分保留 null，不再折叠为 0。 */
   function wheelScores() {
     var out = {};
-    state.life8.forEach(function (d) { out[d.id] = clamp(Number(d.score) || 0, 0, 10); });
+    wheelAxes().forEach(function (d) {
+      out[d.id] = (d.rated && d.score != null) ? clamp(Number(d.score), 0, 10) : null;
+    });
     return out;
   }
 
-  function radarSVG(cur, prev) {
-    var n = LIFE8.length;
-    var cx = 170, cy = 148, R = 100;
+  function wheelNotes() {
+    var out = {};
+    wheelAxes().forEach(function (d) {
+      var n = String(d.note || '').trim();
+      if (n) out[d.id] = n.slice(0, 200);
+    });
+    return out;
+  }
+
+  /* 一组分值的统计量：只统计非 null（已评）项，空数组返回 null */
+  function scoreVals(scores) {
+    var v = [];
+    if (!isPlainObj(scores)) return v;
+    Object.keys(scores).forEach(function (k) {
+      var n = scores[k];
+      if (n == null || n === '' || !isFinite(Number(n))) return;
+      v.push(clamp(Number(n), 0, 10));
+    });
+    return v;
+  }
+
+  function wheelAvg(scores) {
+    var v = scoreVals(scores);
+    if (!v.length) return null;
+    return v.reduce(function (a, b) { return a + b; }, 0) / v.length;
+  }
+
+  /* 上一季快照：history 里最后一条「季度不等于当前季度」的记录（P1-6 的上季参照、雷达虚线层都用它） */
+  function prevSnap() {
+    var q = quarterKey(today());
+    var hist = (state.wheel && state.wheel.history) || [];
+    for (var i = hist.length - 1; i >= 0; i--) {
+      if (hist[i] && hist[i].quarter !== q) return hist[i];
+    }
+    return null;
+  }
+  function prevRatedScores() { var p = prevSnap(); return p ? p.scores : null; }
+  function quarterSnap() {
+    var q = quarterKey(today());
+    var hist = (state.wheel && state.wheel.history) || [];
+    for (var i = hist.length - 1; i >= 0; i--) {
+      if (hist[i] && hist[i].quarter === q) return hist[i];
+    }
+    return null;
+  }
+  function lastSnap() {
+    var hist = (state.wheel && state.wheel.history) || [];
+    return hist.length ? hist[hist.length - 1] : null;
+  }
+
+  /* P1-5：落差洞察 —— 最低格、与最高格的差距、平衡度（标准差） */
+  function wheelInsight(scores) {
+    var axes = wheelAxes();
+    var rated = axes.filter(function (d) { return scores[d.id] != null; });
+    var res = { lo: null, hi: null, gap: null, sd: null, rated: rated.length, total: axes.length };
+    if (!rated.length) return res;
+    var vals = rated.map(function (d) { return scores[d.id]; });
+    var sorted = rated.slice().sort(function (a, b) { return scores[a.id] - scores[b.id]; });
+    res.lo = sorted[0];
+    res.hi = sorted[sorted.length - 1];
+    var max = Math.max.apply(null, vals), min = Math.min.apply(null, vals);
+    res.gap = max - min;
+    var mean = vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
+    var sd = Math.sqrt(vals.reduce(function (a, b) { return a + Math.pow(b - mean, 2); }, 0) / vals.length);
+    res.sd = sd;
+    return res;
+  }
+
+  /* P0-1 / P0-2 / P1-6 的雷达：未评轴虚线 + 标签置灰，多边形只连已评顶点 */
+  function radarSVG(cur, prev, opts) {
+    opts = opts || {};
+    var mini = !!opts.mini;
+    var list = (opts.axes || wheelAxes()).slice();
+    if (list.length > WHEEL_MAX_AXES) list = list.slice(0, WHEEL_MAX_AXES);
+    var n = Math.max(3, list.length);
+    var W = mini ? 104 : 340, H = mini ? 104 : 300;
+    var cx = W / 2, cy = mini ? H / 2 : 148, R = mini ? 38 : 100;
+    var step = 360 / n;
+
+    function ang(i) { return (-90 + i * step) * Math.PI / 180; }
     function pt(i, v) {
-      var a = (-90 + i * (360 / n)) * Math.PI / 180;
-      var r = R * clamp(v, 0, 10) / 10;
+      var a = ang(i), r = R * clamp(Number(v) || 0, 0, 10) / 10;
       return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
     }
-    function poly(get) {
+    function ringPts(lv) {
       var p = [];
-      for (var i = 0; i < n; i++) { var q = pt(i, get(i)); p.push(q[0].toFixed(1) + ',' + q[1].toFixed(1)); }
+      for (var i = 0; i < n; i++) { var q = pt(i, lv); p.push(q[0].toFixed(1) + ',' + q[1].toFixed(1)); }
       return p.join(' ');
     }
+
     var rings = [2.5, 5, 7.5, 10].map(function (lv) {
-      return '<polygon class="radar-ring' + (lv === 10 ? ' outer' : '') + '" points="' + poly(function () { return lv; }) + '"></polygon>';
+      return '<polygon class="radar-ring' + (lv === 10 ? ' outer' : '') + '" points="' + ringPts(lv) + '"></polygon>';
     }).join('');
 
-    var axes = '', labels = '';
+    var axesSvg = '', labels = '', dots = '';
+    var ratedPts = [], prevPts = [];
     for (var i = 0; i < n; i++) {
-      var q = pt(i, 10);
-      axes += '<line class="radar-axis" x1="' + cx + '" y1="' + cy + '" x2="' + q[0].toFixed(1) + '" y2="' + q[1].toFixed(1) + '"></line>';
-      var a = (-90 + i * (360 / n)) * Math.PI / 180;
-      var lx = cx + (R + 17) * Math.cos(a), ly = cy + (R + 17) * Math.sin(a);
-      var cos = Math.cos(a);
-      var anchor = Math.abs(cos) < 0.28 ? 'middle' : (cos > 0 ? 'start' : 'end');
-      labels += '<text class="radar-label" x="' + lx.toFixed(1) + '" y="' + (ly + 3.6).toFixed(1) +
-        '" text-anchor="' + anchor + '">' + esc(LIFE8[i].name) + '</text>';
+      var d = list[i];
+      var a = ang(i);
+      var edge = pt(i, 10);
+      if (!d) {
+        axesSvg += '<line class="radar-axis off" x1="' + cx + '" y1="' + cy + '" x2="' + edge[0].toFixed(1) + '" y2="' + edge[1].toFixed(1) + '"></line>';
+        continue;
+      }
+      var now = cur ? cur[d.id] : null;
+      var on = now != null;
+      axesSvg += '<line class="radar-axis' + (on ? '' : ' off') + '" x1="' + cx + '" y1="' + cy + '" x2="' + edge[0].toFixed(1) + '" y2="' + edge[1].toFixed(1) + '"></line>';
+      if (on) {
+        var cp = pt(i, now);
+        ratedPts.push(cp);
+        dots += '<circle class="radar-dot" cx="' + cp[0].toFixed(1) + '" cy="' + cp[1].toFixed(1) + '" r="' + (mini ? 1.5 : 2.6) + '"></circle>';
+      }
+      if (prev && prev[d.id] != null) prevPts.push(pt(i, prev[d.id]));
+      if (!mini) {
+        var lx = cx + (R + 17) * Math.cos(a), ly = cy + (R + 17) * Math.sin(a);
+        var cos = Math.cos(a);
+        var anchor = Math.abs(cos) < 0.28 ? 'middle' : (cos > 0 ? 'start' : 'end');
+        labels += '<text class="radar-label' + (on ? '' : ' off') + '" x="' + lx.toFixed(1) + '" y="' + (ly + 3.6).toFixed(1) +
+          '" text-anchor="' + anchor + '">' + esc(d.name) + '</text>';
+      }
     }
 
-    var prevPoly = prev ? '<polygon class="radar-prev" points="' + poly(function (i) {
-      return clamp(Number(prev[LIFE8[i].id]) || 0, 0, 10);
-    }) + '"></polygon>' : '';
+    function layer(pts, cls) {
+      if (pts.length < 2) return '';
+      var s = pts.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ');
+      if (pts.length === 2) return '<polyline class="' + cls + ' open" points="' + s + '"></polyline>';
+      return '<polygon class="' + cls + '" points="' + s + '"></polygon>';
+    }
 
-    var dots = LIFE8.map(function (d, i) {
-      var q = pt(i, clamp(Number(cur[d.id]) || 0, 0, 10));
-      return '<circle class="radar-dot" cx="' + q[0].toFixed(1) + '" cy="' + q[1].toFixed(1) + '" r="2.6"></circle>';
-    }).join('');
+    var prevLayer = prev ? layer(prevPts, 'radar-prev') : '';
+    var curLayer = layer(ratedPts, 'radar-cur');
+    var aria = '人生轮盘雷达图，已评 ' + ratedPts.length + ' / ' + list.length + ' 格';
 
-    return '<svg class="radar" viewBox="0 0 340 300" role="img" aria-label="人生轮盘雷达图">' +
-      rings + axes + prevPoly +
-      '<polygon class="radar-cur" points="' + poly(function (i) {
-        return clamp(Number(cur[LIFE8[i].id]) || 0, 0, 10);
-      }) + '"></polygon>' +
-      dots + labels + '</svg>';
+    return '<svg class="radar' + (mini ? ' radar-mini' : '') + '" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(aria) + '">' +
+      rings + axesSvg + prevLayer +
+      (ratedPts.length ? '<g>' + curLayer + dots + '</g>' : '') +
+      labels + '</svg>';
+  }
+
+  /* 存快照：P1-4 结构含 notes；同季度重复记录则覆盖（避免本季堆多条） */
+  function wheelSaveSnapshot(opts) {
+    opts = opts || {};
+    if (!isPlainObj(state.wheel)) state.wheel = { history: [] };
+    var scores = wheelScores();
+    var notes = wheelNotes();
+    if (!opts.force && !scoreVals(scores).length) return false;
+    var q = quarterKey(today());
+    var cur = quarterSnap();
+    var item = {
+      id: (cur && cur.id) || uid('wh'),
+      at: today(),
+      quarter: q,
+      auto: !!opts.auto,
+      scores: scores,
+      notes: notes
+    };
+    if (cur) {
+      state.wheel.history = (state.wheel.history || []).map(function (h) { return h === cur ? item : h; });
+    } else {
+      state.wheel.history = (state.wheel.history || []).concat([item]);
+    }
+    save();
+    return true;
+  }
+
+  /* P1-4：跨季度进入页面时自动补一次快照 */
+  function wheelAutoSnapshot() {
+    if (!isPlainObj(state.wheel)) normalizeCoach(state);
+    var hist = state.wheel.history || [];
+    var last = hist.length ? hist[hist.length - 1] : null;
+    var q = quarterKey(today());
+    if (last && last.quarter === q) return false;
+    if (!wheelRateStat().rated) return false;
+    if (!wheelSaveSnapshot({ auto: true })) return false;
+    /* 登录后的欢迎提示会把 toast 覆盖掉，自动补快照的提示延后一点再弹 */
+    var autoMsg = '已自动记录 ' + q + ' 快照（同比 ' + (last ? last.quarter : '首个季度') + '）';
+    setTimeout(function () { toast(autoMsg, null, 3600); }, 1100);
+    return true;
+  }
+
+  /* P2-8：距上次打分超过 30 天给一次可关闭的重评提醒（同一天只提示一次） */
+  function wheelRateReminder() {
+    if (!isPlainObj(state.wheel)) return;
+    var lastAt = state.wheel.lastRatedAt || '';
+    if (!isDateStr(lastAt)) return;
+    var days = dayDiff(lastAt, today());
+    if (days < 30) return;
+    if (state.wheel.noticeAt === today()) return;
+    state.wheel.noticeAt = today();
+    save();
+    var bar = document.createElement('div');
+    bar.className = 'rate-nudge';
+    bar.setAttribute('role', 'status');
+    bar.innerHTML = '<span class="rn-txt">距上次给八大模块打分已经 <b>' + days + '</b> 天，重新评一次更能看出变化。</span>' +
+      '<button class="rn-close" type="button" aria-label="关闭提醒">' + icon('x') + '</button>';
+    bar.querySelector('.rn-close').addEventListener('click', function () {
+      bar.classList.remove('show');
+      setTimeout(function () { if (bar.parentNode) bar.parentNode.removeChild(bar); }, 260);
+    });
+    document.body.appendChild(bar);
+    requestAnimationFrame(function () { bar.classList.add('show'); });
+    setTimeout(function () {
+      if (bar.parentNode) bar.classList.remove('show');
+    }, 12000);
+  }
+
+  /* P1-5：最低格 → 新建年度目标并预填领域（单向映射，不改存量数据） */
+  function wheelGoalJump(axisId) {
+    var dom = lifeV13Domain(axisId);
+    ovGo('yearly');
+    setTimeout(function () { v13GoalDialog(null, { domain: dom }); }, 160);
   }
 
   function wheelBlock() {
@@ -8259,65 +8797,112 @@
     sec.className = 'wheel-card reveal';
 
     function paint() {
+      var axes = wheelAxes();
+      var capped = axes.length > WHEEL_MAX_AXES;
       var cur = wheelScores();
-      var last = (state.wheel.history || []).slice(-1)[0] || null;
-      var diff = LIFE8.map(function (d) {
-        var now = cur[d.id];
-        var old = last ? clamp(Number(last.scores[d.id]) || 0, 0, 10) : null;
-        return { name: d.name, color: d.color, now: now, old: old, delta: old == null ? null : now - old };
+      var prev = prevSnap();
+      var prevScores = prev ? prev.scores : null;
+      var stat = wheelRateStat();
+      var avgNow = wheelAvg(cur);
+      var avgOld = prev ? wheelAvg(prevScores) : null;
+      var ins = wheelInsight(cur);
+      var last = lastSnap();
+      var days = last && isDateStr(last.at) ? dayDiff(last.at, today()) : null;
+
+      var diff = axes.map(function (d) {
+        var now = cur[d.id] == null ? null : cur[d.id];
+        var old = (prevScores && prevScores[d.id] != null) ? clamp(Number(prevScores[d.id]), 0, 10) : null;
+        return {
+          id: d.id, name: d.name, color: d.color, now: now, old: old,
+          delta: (now == null || old == null) ? null : now - old
+        };
       });
-      var avgNow = LIFE8.reduce(function (a, d) { return a + cur[d.id]; }, 0) / LIFE8.length;
-      var avgOld = last ? LIFE8.reduce(function (a, d) { return a + (Number(last.scores[d.id]) || 0); }, 0) / LIFE8.length : null;
 
       sec.innerHTML =
-        '<div class="section-head"><h2>人生轮盘</h2><p>八个领域 1 – 10 打分，和上一季对比看偏科</p></div>' +
+        '<div class="section-head"><h2>人生轮盘</h2>' +
+        '<p>看形状而不是看总分：哪一格被过度投入、哪一格一直空着</p></div>' +
         '<div class="wheel-body">' +
-        '<div class="wheel-canvas">' + radarSVG(cur, last ? last.scores : null) + '</div>' +
+        '<div class="wheel-canvas">' + radarSVG(cur, prevScores) +
+        (stat.rated < 3
+          ? '<p class="radar-hint">' + (stat.rated === 0
+            ? '还没打分，轮盘暂时没有形状'
+            : '已评 ' + stat.rated + ' 格，连成形状至少要 3 格') + '</p>'
+          : '') +
+        '</div>' +
         '<div class="wheel-side">' +
         '<div class="wheel-sum">' +
-        '<span class="wheel-avg">' + avgNow.toFixed(1) + '<small> / 10 均值</small></span>' +
-        '<span class="wheel-when">' + (last
-          ? '对比 ' + esc(last.quarter) + ' 快照（' + avgOld.toFixed(1) + '，' +
-            (avgNow - avgOld >= 0 ? '+' : '') + (avgNow - avgOld).toFixed(1) + '）'
-          : '还没有季度快照，先记录一次') + '</span>' +
+        (avgNow == null
+          ? '<span class="wheel-avg is-empty">尚未评分</span>'
+          : '<span class="wheel-avg">' + avgNow.toFixed(1) + '<small> / 10 均值</small></span>') +
+        '<span class="wheel-rated">已评 ' + stat.rated + ' / ' + stat.total + '</span>' +
+        '<span class="wheel-when">' + (avgOld == null
+          ? (last ? '上次快照 ' + esc(last.quarter) + ' 无可比分数' : '还没有季度快照')
+          : '对比 ' + esc(prev.quarter) + ' 快照（' + avgOld.toFixed(1) + '，' +
+            (avgNow - avgOld >= 0 ? '+' : '') + (avgNow - avgOld).toFixed(1) + '）') + '</span>' +
         '</div>' +
+        (ins.lo
+          ? '<div class="wheel-insight">' +
+          '<p class="wi-main">最需关注：<b>' + esc(ins.lo.name) + ' ' + cur[ins.lo.id] + ' 分</b>' +
+          (ins.hi && ins.hi.id !== ins.lo.id && ins.gap > 0
+            ? '，与最高格 ' + esc(ins.hi.name) + ' ' + cur[ins.hi.id] + ' 分相差 ' + ins.gap + ' 分'
+            : '，各格目前持平') +
+          '</p>' +
+          '<p class="wi-sub">平衡度 ' + ins.sd.toFixed(1) + '（越低越均衡）· 已评 ' + ins.rated + ' / ' + ins.total + '</p>' +
+          '<button class="ghost-btn tiny" type="button" data-wheel-goal="' + esc(ins.lo.id) + '">→ 去给这一格定个目标</button>' +
+          '</div>'
+          : '<div class="wheel-insight"><p class="wi-main">先给几格打分，这里会告诉你是哪一格最需要关注。</p></div>') +
         '<ul class="wheel-diff">' + diff.map(function (x) {
-          return '<li><i style="background:' + x.color + '"></i><span>' + esc(x.name) + '</span>' +
-            '<b>' + x.now + '</b>' +
+          var lo = ins.lo && ins.lo.id === x.id;
+          return '<li' + (lo ? ' class="lo"' : '') + '><i style="background:' + x.color + '"></i><span>' + esc(x.name) +
+            (lo ? '<em class="lo-tag">最需关注</em>' : '') + '</span>' +
+            '<b>' + (x.now == null ? '<em class="is-empty">未评</em>' : x.now) + '</b>' +
             '<em class="' + (x.delta == null ? 'flat' : (x.delta > 0 ? 'up' : (x.delta < 0 ? 'down' : 'flat'))) + '">' +
             (x.delta == null ? '—' : (x.delta > 0 ? '+' + x.delta : String(x.delta))) + '</em></li>';
         }).join('') + '</ul>' +
+        (capped ? '<p class="wheel-tip">最多同时显示 ' + WHEEL_MAX_AXES + ' 轴，超出的格子请先隐藏。</p>' : '') +
         '<div class="wheel-actions">' +
-        '<button class="solid-btn tiny" type="button" data-wheel-save>记录本季快照</button>' +
-        '<button class="ghost-btn tiny" type="button" data-wheel-hist>历史快照 · ' + (state.wheel.history || []).length + '</button>' +
+        '<button class="solid-btn tiny" type="button" data-wheel-save>' + (quarterSnap() ? '更新本季快照' : '记录本季快照') + '</button>' +
+        '<button class="ghost-btn tiny" type="button" data-wheel-hist>历史快照 · ' + ((state.wheel.history || []).length) + '</button>' +
+        (days == null ? '' : '<span class="wheel-days">距上次快照 ' + days + ' 天</span>') +
         '</div>' +
         '</div>' +
         '</div>';
 
+      var goBtn = $('[data-wheel-goal]', sec);
+      if (goBtn) goBtn.addEventListener('click', function () { wheelGoalJump(goBtn.dataset.wheelGoal); });
+
       var saveBtn = $('[data-wheel-save]', sec);
       if (saveBtn) saveBtn.addEventListener('click', function () {
-        var q = quarterKey(today());
-        var scores = wheelScores();
-        if (!LIFE8.some(function (d) { return scores[d.id] > 0; })) { toast('先把下方八个抽屉的分数调一调'); return; }
-        state.wheel.history = state.wheel.history || [];
-        state.wheel.history.push({ id: uid('wh'), at: today(), quarter: q, scores: scores });
-        save();
+        if (!wheelRateStat().rated) { toast('先给至少一格打分，再记录快照'); return; }
+        var was = quarterSnap();
+        wheelSaveSnapshot({ force: true });
         paint();
-        toast('已记录 ' + q + ' 快照');
+        toast((was ? '已更新 ' : '已记录 ') + quarterKey(today()) + ' 快照');
       });
 
       var histBtn = $('[data-wheel-hist]', sec);
       if (histBtn) histBtn.addEventListener('click', function () {
         var list = (state.wheel.history || []).slice().reverse();
         openDialog(
-          '<h3>季度快照</h3>' +
-          '<p class="sub">每次记录都会存下八个领域的分值，用来和本季对比。</p>' +
+          '<div class="sheet-head"><h3>季度快照</h3>' +
+          '<p class="sub">每份快照冻结了当时的每格分数与备注，之后改备注也不会影响旧记录。</p></div>' +
+          '<div class="sheet-body">' +
           (list.length ? '<div class="hist-list">' + list.map(function (h) {
-            var avg = LIFE8.reduce(function (a, d) { return a + (Number(h.scores[d.id]) || 0); }, 0) / LIFE8.length;
-            return '<div class="hist-row"><span>' + esc(h.quarter) + '<small>' + esc(h.at) + '</small></span>' +
-              '<b>' + avg.toFixed(1) + ' 均值</b></div>';
+            var avg = wheelAvg(h.scores);
+            return '<div class="hist-card">' +
+              '<div class="hist-head"><b>' + esc(h.quarter) + '</b>' +
+              '<small>' + esc(h.at) + ' · ' + (avg == null ? '无分数' : avg.toFixed(1) + ' 均值') + '</small>' +
+              (h.auto ? '<em class="hist-auto">自动</em>' : '') + '</div>' +
+              '<ul class="hist-dom">' + life8All().filter(function (d) {
+                return d && (h.scores[d.id] != null || (h.notes && h.notes[d.id]));
+              }).map(function (d) {
+                return '<li><span>' + esc(d.name) + '</span>' +
+                  '<b>' + (h.scores[d.id] == null ? '未评' : h.scores[d.id]) + '</b>' +
+                  '<em>' + esc((h.notes && h.notes[d.id]) || '') + '</em></li>';
+              }).join('') + '</ul></div>';
           }).join('') + '</div>' : '<p class="empty-line">还没有快照。</p>') +
-          '<div class="sheet-actions"><button class="ghost-btn" data-close>关闭</button></div>',
+          '</div>' +
+          '<div class="sheet-actions sheet-foot"><button class="ghost-btn" type="button" data-close>关闭</button></div>',
           function (sheet, close) {
             $$('[data-close]', sheet).forEach(function (b) { b.addEventListener('click', close); });
           }
@@ -8493,9 +9078,9 @@
       '<button class="icon-btn" type="button" data-wk-nav="1" aria-label="下一周"' + (isNow ? ' disabled' : '') + '>' + icon('chevronRight') + '</button>' +
       '</div>' +
       '<div class="wk-auto">' +
-      '<div class="wk-stat"><span>任务完成</span>scoreHtml(st.taskDone, st.taskTotal)<i><em style="width:' + st.taskRate + '%"></em></i><u>' + st.taskRate + '%</u></div>' +
-      '<div class="wk-stat"><span>习惯达成</span>scoreHtml(st.habitDone, st.habitGoal)<i><em style="width:' + st.habitRate + '%"></em></i><u>' + st.habitRate + '%</u></div>' +
-      '<div class="wk-stat"><span>三件事</span>scoreHtml(st.mitDone, st.mitTotal)<i><em style="width:' +
+      '<div class="wk-stat"><span>任务完成</span>' + scoreHtml(st.taskDone, st.taskTotal) + '<i><em style="width:' + st.taskRate + '%"></em></i><u>' + st.taskRate + '%</u></div>' +
+      '<div class="wk-stat"><span>习惯达成</span>' + scoreHtml(st.habitDone, st.habitGoal) + '<i><em style="width:' + st.habitRate + '%"></em></i><u>' + st.habitRate + '%</u></div>' +
+      '<div class="wk-stat"><span>三件事</span>' + scoreHtml(st.mitDone, st.mitTotal) + '<i><em style="width:' +
       (st.mitTotal ? Math.round(st.mitDone / st.mitTotal * 100) : 0) + '%"></em></i><u>' +
       (st.mitTotal ? Math.round(st.mitDone / st.mitTotal * 100) : 0) + '%</u></div>' +
       '<div class="wk-stat"><span>OKR 进度</span><b>' + st.okrPct + '<small>%</small></b><i><em style="width:' + st.okrPct + '%"></em></i><u>' +
@@ -9415,15 +10000,19 @@
   }
 
   /* 新建 / 编辑目标 */
-  function v13GoalDialog(goalId) {
+  function v13GoalDialog(goalId, preset) {
     var year = state.settings.yearView || new Date().getFullYear();
     var g = goalId ? (state.goals || []).filter(function (x) { return x.id === goalId; })[0] : null;
     var isNew = !g;
-    var draft = g ? JSON.parse(JSON.stringify(g)) : v13NormGoal({ year: year, status: 'notstarted', domain: '事业' });
+    /* P1-5：预填领域（只落在这张表单的草稿上，不改任何存量目标） */
+    var preDomain = (preset && preset.domain && V13_DOMAINS.indexOf(preset.domain) >= 0) ? preset.domain : '事业';
+    var draft = g ? JSON.parse(JSON.stringify(g)) : v13NormGoal({ year: year, status: 'notstarted', domain: preDomain });
 
     function formHtml() {
       return '<h3>' + (isNew ? '新建年度目标' : '编辑年度目标') + '</h3>' +
-        '<p class="sub">一个目标只回答两件事：为什么重要，怎样算成功。</p>' +
+        '<p class="sub">一个目标只回答两件事：为什么重要，怎样算成功。' +
+        (isNew && preset && preset.domain && V13_DOMAINS.indexOf(preset.domain) >= 0
+          ? '领域已按轮盘最需关注的那一格预填为「' + esc(preset.domain) + '」。' : '') + '</p>' +
         '<label class="v13-field"><span>目标名称</span><input class="field" data-f="title" maxlength="80" value="' + esc(draft.title === '未命名目标' ? '' : draft.title) + '" placeholder="例如：把专业做成可复用的资产"></label>' +
         '<label class="v13-field"><span>一句话动机 / 成功标准</span><input class="field" data-f="why" maxlength="200" value="' + esc(draft.why) + '" placeholder="例如：年底能拿出 3 篇被同行引用的方法论"></label>' +
         '<div class="v13-row">' +
