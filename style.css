@@ -3212,35 +3212,94 @@ html[data-theme="dark"] .icon-groups { background: color-mix(in srgb, var(--text
 .jump-btn:active { transform: translateY(.5px); }
 
 /* --- 本月日程任务：完成率 + 每日密度 + 分组头 + 状态条 --- */
-.ag-prog { display: grid; gap: 8px; padding: 12px 2px 2px; }
-.ag-prog-head { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; min-height: 26px; }
+.ag-prog { display: grid; gap: 9px; padding: 12px 2px 2px; }
+.ag-prog-head { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; min-height: 30px; }
 .ag-prog-lab { font-size: var(--t-11); color: var(--faint); }
 .ag-prog-num {
   display: inline-flex; align-items: baseline;
-  font-family: var(--font-mono); font-size: 16px; font-weight: 700;
-  color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+  font-family: var(--font-mono); font-size: 19px; font-weight: 700; line-height: 1;
+  color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -.03em;
 }
-.ag-prog-num em { font-style: normal; font-size: 11px; font-weight: 600; color: var(--faint); margin-left: 1px; }
+.ag-prog-num em { font-style: normal; font-size: 11px; font-weight: 600; color: var(--faint); margin-left: 1px; letter-spacing: 0; }
 .ag-prog-split {
   font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums;
   padding-left: 7px; border-left: 1px solid var(--line);
 }
+/* 轨道：12px 胶囊 + 内阴影 + 极淡 20% 刻度；右端滑点头标出「完成到哪」 */
 .ag-prog-track {
-  height: 9px; border-radius: var(--r-pill);
-  background: var(--elev-2); overflow: hidden;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .06);
+  position: relative;
+  height: 12px;
+  border-radius: var(--r-pill);
+  background: var(--elev-2);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .07),
+              inset 0 0 0 1px color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.ag-prog-track::after { /* 每 20% 一条极淡刻度线，压在填充之上作为进度参照 */
+  content: ''; position: absolute; inset: 0; z-index: 2;
+  border-radius: inherit; pointer-events: none;
+  transition: opacity var(--dur-2) var(--ease-soft);
+  background: repeating-linear-gradient(90deg,
+    transparent 0 calc(20% - 1px),
+    color-mix(in srgb, var(--ink) 26%, transparent) calc(20% - 1px) 20%);
 }
 .ag-prog-track i {
   position: relative; display: block; height: 100%; border-radius: inherit;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 62%, var(--ok, var(--accent))), var(--accent));
-  transition: width var(--dur-2, .35s) var(--ease-soft, ease);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 84%, var(--bg-card)), var(--accent));
+  transition: width var(--dur-3) var(--ease-soft);
 }
-.ag-prog-track i::after {
+.ag-prog-track i::after { /* 顶部高光，保留原有通透感 */
   content: ''; position: absolute; inset: 0 0 50% 0;
   border-radius: inherit; background: rgba(255, 255, 255, .2);
 }
+/* 滑点头：14px 实心圆点 + 柔和外发光，居中压在填充右端点 */
+.ag-prog-knob {
+  position: absolute; top: 50%; right: 0; z-index: 3;
+  display: flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--on-accent);
+  color: var(--done);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent) 50%, var(--on-accent)),
+              0 1px 3px rgba(0, 0, 0, .2),
+              0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent);
+  transform: translate(50%, -50%);
+  transition: transform var(--dur-2) var(--ease-soft);
+}
+.ag-prog-knob svg { width: 9px; height: 9px; stroke-width: 2.6; }
+/* 0% 与极低百分比：滑点头贴住左端收进轨道内，空轨道保持清晰边界 */
+.ag-prog-track.is-start .ag-prog-knob {
+  left: 0; right: auto; transform: translate(0, -50%);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--ink) 20%, transparent),
+              0 1px 3px rgba(0, 0, 0, .18);
+}
+.ag-prog-track.is-full .ag-prog-knob { transform: translate(0, -50%); }
+/* 100%：转 --done 完成色，点内对勾 + 轻呼吸光晕（减少动效偏好下关闭） */
 .ag-prog-track.is-full i {
-  background: linear-gradient(90deg, var(--ok, var(--accent)), color-mix(in srgb, var(--ok, var(--accent)) 70%, var(--accent)));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--done) 76%, var(--bg-card)), var(--done));
+}
+.ag-prog-track.is-full::after { opacity: 0; }
+.ag-prog-track.is-full .ag-prog-knob {
+  animation: ag-prog-breath 2.8s var(--ease-soft) infinite;
+}
+@keyframes ag-prog-breath {
+  0%, 100% {
+    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--done) 55%, var(--on-accent)),
+                0 1px 3px rgba(0, 0, 0, .2),
+                0 0 0 3px color-mix(in srgb, var(--done) 14%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--done) 55%, var(--on-accent)),
+                0 1px 3px rgba(0, 0, 0, .2),
+                0 0 0 7px color-mix(in srgb, var(--done) 7%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ag-prog-track.is-full .ag-prog-knob { animation: none; }
+}
+/* 窄屏：数字收一档，仍不与「隐藏已完成 / 全部加入」抢行 */
+@media (max-width: 760px) {
+  .ag-prog { gap: 8px; }
+  .ag-prog-head { gap: 6px; min-height: 28px; }
+  .ag-prog-num { font-size: 17px; }
 }
 .ag-tools { display: flex; align-items: center; gap: 4px; flex: none; margin-left: auto; }
 .ag-hide {
@@ -3347,7 +3406,6 @@ html[data-theme="dark"] .pick-btn.on {
 html[data-theme="dark"] .jump-btn svg:last-of-type { color: var(--muted); }
 html[data-theme="dark"] .plan-head span,
 html[data-theme="dark"] .plan-empty,
-html[data-theme="dark"] .ag-prog-num,
 html[data-theme="dark"] .day-sub { color: var(--muted); }
 html[data-theme="dark"] .ag-hd .lv0 { opacity: .55; }
 html[data-theme="dark"] .ag-chip { background: var(--elev-2); color: var(--ink); }
