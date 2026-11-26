@@ -2219,8 +2219,10 @@
           icon('plus') + '<span>全部加入</span></button>' : '') +
         '</div>' +
         '</div>' +
-        '<div class="ag-prog-track' + (rate >= 100 ? ' is-full' : '') + '" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + rate + '" aria-label="本月任务完成率 ' + rate + '%">' +
-        '<i style="width:' + rate + '%"></i></div>' +
+        '<div class="ag-prog-track' + (rate >= 100 ? ' is-full' : (rate <= 6 ? ' is-start' : '')) + '" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + rate + '" aria-label="本月任务完成率 ' + rate + '%，已完成 ' + doneN + ' / ' + tasks.length + ' 项">' +
+        '<i style="width:' + rate + '%">' +
+        '<b class="ag-prog-knob" aria-hidden="true">' + (rate >= 100 ? icon('check') : '') + '</b>' +
+        '</i></div>' +
         '</div>' +
         '<div class="ag-heat" role="group" aria-label="本月每日任务分布">' + heatHtml + '</div>' +
         '<div class="ag-groups">' + groups.map(function (g) {
