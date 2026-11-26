@@ -29,10 +29,10 @@
 <meta name="twitter:description" content="八大抽屉、年度目标、月度计划与周复盘；纯静态、本地存储、无账号也可用。" />
 <meta name="twitter:image" content="./og.png" />
 
-<link rel="stylesheet" href="style.css?v=20261125b" />
+<link rel="stylesheet" href="style.css?v=20261126a" />
 <!-- P2-2 说明：样式与脚本未拆包（拆分属大重构，本轮不做）。app.js 为单文件、置于 body 末尾，
      不阻塞 HTML 解析；此处只加 preload 让脚本下载与首屏解析并行，不改执行时序（仍为 DOM 就绪后同步执行） -->
-<link rel="preload" href="app.js?v=20261125b" as="script" />
+<link rel="preload" href="app.js?v=20261126a" as="script" />
 <script>
 /* 强制 HTTPS：仅在 http 且非本地地址时跳转，file:// 与 localhost 预览不受影响 */
 (function () {
@@ -212,6 +212,6 @@
   <input type="file" id="file-import" accept="application/json,.json" hidden />
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-  <script src="app.js?v=20261125b"></script>
+  <script src="app.js?v=20261126a"></script>
 </body>
 </html>
