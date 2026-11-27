@@ -29,10 +29,10 @@
 <meta name="twitter:description" content="八大抽屉、年度目标、月度计划与周复盘；纯静态、本地存储、无账号也可用。" />
 <meta name="twitter:image" content="./og.png" />
 
-<link rel="stylesheet" href="style.css?v=20261126a" />
+<link rel="stylesheet" href="style.css?v=20261127a" />
 <!-- P2-2 说明：样式与脚本未拆包（拆分属大重构，本轮不做）。app.js 为单文件、置于 body 末尾，
      不阻塞 HTML 解析；此处只加 preload 让脚本下载与首屏解析并行，不改执行时序（仍为 DOM 就绪后同步执行） -->
-<link rel="preload" href="app.js?v=20261126a" as="script" />
+<link rel="preload" href="app.js?v=20261127a" as="script" />
 <script>
 /* 强制 HTTPS：仅在 http 且非本地地址时跳转，file:// 与 localhost 预览不受影响 */
 (function () {
@@ -99,7 +99,7 @@
           </div>
         </div>
         <button class="solid-btn auth-submit" id="auth-submit" type="submit">登录</button>
-        <p class="auth-hint" id="auth-hint">邮箱与密码由云端校验，登录后数据仍只存在本机，需要在「云同步」面板手动点按钮才会与云端交互。</p>
+        <p class="auth-hint" id="auth-hint">邮箱与密码由云端校验，登录后会自动同步：本机改动自动上传，其它设备打开即拿到最新。</p>
       </form>
 
       <div class="auth-local" id="auth-local">
@@ -212,6 +212,6 @@
   <input type="file" id="file-import" accept="application/json,.json" hidden />
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-  <script src="app.js?v=20261126a"></script>
+  <script src="app.js?v=20261127a"></script>
 </body>
 </html>
